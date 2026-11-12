@@ -118,8 +118,6 @@ export class UI {
           this.dragTarget = -1;
           this.scene.lift(i);
           this.buzz(25);
-          const g = $('ghost');
-          g.hidden = false;
           this.moveGhost(x0, y0);
           this.refresh(true);
         }, 380);
@@ -197,9 +195,8 @@ export class UI {
   private moveGhost(cx: number, cy: number): void {
     const rect = $('app').getBoundingClientRect();
     const x = cx - rect.left, y = cy - rect.top;
-    const g = $('ghost');
-    g.style.left = x + 'px';
-    g.style.top = y - 46 + 'px';
+    // Le pot entier suit le doigt, légèrement au-dessus pour rester visible.
+    this.scene.dragTo(x, y - 30);
     let best = -1, bestD = Infinity;
     this.s.slots.forEach((_, i) => {
       if (!this.s.zonesOpen[sim.zoneIndexOfSlot(i)]) return;

@@ -358,7 +358,20 @@ export class Scene3D {
 
   /** Soulève un pot pendant qu'on le déplace (-1 pour tout reposer). */
   lift(i: number): void {
+    if (this.lifted >= 0 && this.lifted !== i) this.slots[this.lifted].root.position.copy(this.slots[this.lifted].base);
     this.lifted = i;
+  }
+
+  /** Amène le pot soulevé sous le doigt : on projette le point de l'écran sur le plan où il flotte. */
+  dragTo(sx: number, sy: number): void {
+    if (this.lifted < 0) return;
+    const v = this.slots[this.lifted];
+    const y = v.base.y + 0.45;
+    const o = new THREE.Vector3((sx / this.w) * 2 - 1, -(sy / this.h) * 2 + 1, -1).unproject(this.camera);
+    const d = new THREE.Vector3();
+    this.camera.getWorldDirection(d);
+    const t = (y - o.y) / d.y;
+    v.root.position.set(o.x + d.x * t, y, o.z + d.z * t);
   }
 
   pop(i: number): void {
@@ -376,7 +389,7 @@ export class Scene3D {
       v.pop = Math.max(0, v.pop - dt * 2.6);
       const bounce = 1 + Math.sin(v.pop * Math.PI) * 0.22;
       v.root.scale.set(bounce, 1 + Math.sin(v.pop * Math.PI) * 0.3, bounce);
-      v.root.position.y += ((v.base.y + (this.lifted === i ? 0.45 : 0)) - v.root.position.y) * Math.min(1, dt * 12);
+      if (this.lifted !== i) v.root.position.y += (v.base.y - v.root.position.y) * Math.min(1, dt * 12);
       if (v.plant) {
         const g = (v.plant.userData.grow as number) ?? 1;
         v.plant.scale.setScalar(1.25 * g);
