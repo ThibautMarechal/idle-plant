@@ -195,3 +195,84 @@ button.ico { font-size: 25px; }
 .theme .sw { height: 34px; border-radius: 9px; }
 .theme b { font-size: 14px; }
 .theme small { font-size: 11px; opacity: .7; line-height: 1.25; }
+
+/* ======================= Habillages par direction artistique ======================= */
+
+/* --- Bande dessinée : traits encrés, ombres pleines, couleurs franches --- */
+body[data-style="bd"] {
+  --cream: #ffffff; --ink: #1f1a2b; --soft: #5b556b; --line: #1f1a2b;
+  --green: #2fc46f; --green-d: #15803f; --gold: #ffcf33; --red: #ff5a4d;
+  --shadow: 3px 4px 0 #1f1a2b;
+}
+body[data-style="bd"] :is(.pill, .navb, .tabs, #quest, .badge, .showb, .zinfo, .card, .btn, .rc, .sp, .mrow, .cond, .theme, .zlock, .sh-head .x, .chip, .fact, .packet, #toast) { border: 2.5px solid var(--ink); }
+body[data-style="bd"] #sheet { border-top: 3px solid var(--ink); border-radius: 22px 22px 0 0; }
+body[data-style="bd"] .btn { box-shadow: 0 4px 0 var(--ink); }
+body[data-style="bd"] .btn:not(.primary):not(.gold) { background: #fff; }
+body[data-style="bd"] .btn.primary { box-shadow: 0 4px 0 var(--ink); }
+body[data-style="bd"] .btn.gold { box-shadow: 0 4px 0 var(--ink); }
+body[data-style="bd"] .btn:active, body[data-style="bd"] .navb:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--ink); }
+body[data-style="bd"] :is(.tabs, .zinfo, .showb, .badge.price, .ticker) { background: #fff; }
+body[data-style="bd"] .tab.on { background: var(--gold); color: var(--ink); box-shadow: inset 0 0 0 2px var(--ink); }
+body[data-style="bd"] .badge.ready, body[data-style="bd"] .showb.can { background: var(--gold); }
+body[data-style="bd"] .badge.plus { color: var(--ink); }
+body[data-style="bd"] .badge.ghost { border-style: dashed; box-shadow: none; }
+body[data-style="bd"] .card .ico, body[data-style="bd"] .chip { background: #fff3c4; }
+body[data-style="bd"] .bar { height: 8px; background: #fff; border: 2px solid var(--ink); }
+body[data-style="bd"] .sh-head h2, body[data-style="bd"] .mtitle { font-style: italic; letter-spacing: 0.01em; }
+body[data-style="bd"] #modal { background: radial-gradient(circle at 50% 40%, #fff7c9 0 30%, #ffd84d 30.5% 100%); }
+body[data-style="bd"] #toast { background: var(--ink); box-shadow: 3px 4px 0 var(--gold); }
+body[data-style="bd"] .theme.on { border-color: var(--ink); box-shadow: 3px 4px 0 var(--green); }
+body[data-style="bd"] .dot { border: 2px solid var(--ink); }
+
+/* --- Argile : tout est rond, pastel et moelleux --- */
+body[data-style="argile"] {
+  --cream: #fdf6ef; --ink: #5b4b4f; --soft: #a3918f; --line: #f1e3d9;
+  --green: #8ccaa3; --green-d: #62a682; --gold: #f4d394; --red: #ee9f93;
+  --shadow: 0 10px 22px rgba(160, 120, 100, 0.22), inset 0 -4px 0 rgba(160, 120, 100, 0.08), inset 0 2px 0 rgba(255, 255, 255, 0.9);
+}
+body[data-style="argile"] :is(.pill, .navb, #quest, .tabs) { border-radius: 26px; }
+body[data-style="argile"] :is(.card, .mrow, .sp, .cond, .theme, .rc) { border: 0; border-radius: 24px; background: #fff; box-shadow: 0 6px 14px rgba(160, 120, 100, 0.14), inset 0 -3px 0 rgba(160, 120, 100, 0.07); }
+body[data-style="argile"] .btn { border-radius: 22px; background: #f6e9de; box-shadow: 0 5px 0 #e6d3c5, 0 10px 16px rgba(160, 120, 100, 0.18); }
+body[data-style="argile"] .btn.primary { background: var(--green); box-shadow: 0 5px 0 var(--green-d), 0 10px 16px rgba(98, 166, 130, 0.3); }
+body[data-style="argile"] .btn.gold { box-shadow: 0 5px 0 #dcb56c, 0 10px 16px rgba(220, 181, 108, 0.3); color: #6b5123; }
+body[data-style="argile"] .tab { border-radius: 20px; }
+body[data-style="argile"] .badge { border-radius: 18px; height: 34px; min-width: 34px; }
+body[data-style="argile"] .badge.ready, body[data-style="argile"] .showb.can { background: linear-gradient(180deg, #fdebc0, #f4d394); }
+body[data-style="argile"] #sheet { border-radius: 36px 36px 0 0; }
+body[data-style="argile"] .card .ico { border-radius: 18px; background: #f8ece2; }
+body[data-style="argile"] #modal { background: radial-gradient(circle at 50% 40%, rgba(253, 240, 228, 0.98), rgba(232, 214, 222, 0.98)); }
+body[data-style="argile"] #toast { background: #7a6468; border-radius: 22px; }
+body[data-style="argile"] #backdrop { background: rgba(120, 95, 95, 0.28); }
+body[data-style="argile"] .theme.on { box-shadow: 0 0 0 3px var(--green), 0 6px 14px rgba(160, 120, 100, 0.14); }
+
+/* --- Pixel : angles droits, police à chasse fixe, ombres en escalier --- */
+body[data-style="pixel"] {
+  --cream: #f6ecd0; --ink: #2a2138; --soft: #6a5f7a; --line: #2a2138;
+  --green: #4caf61; --green-d: #2e7d43; --gold: #f2c94c; --red: #e0503f;
+  --shadow: 4px 4px 0 rgba(42, 33, 56, 0.85);
+  font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Menlo, Consolas, monospace;
+  letter-spacing: -0.03em;
+}
+body[data-style="pixel"] * { border-radius: 0 !important; }
+body[data-style="pixel"] :is(.pill, .navb, .tabs, #quest, .badge, .showb, .zinfo, .card, .btn, .rc, .sp, .mrow, .cond, .theme, .zlock, .sh-head .x, .packet, #toast) { border: 2px solid var(--ink); }
+body[data-style="pixel"] #sheet { border-top: 4px solid var(--ink); box-shadow: none; }
+body[data-style="pixel"] .btn:not(.primary):not(.gold) { background: #e9dcb4; }
+body[data-style="pixel"] .btn { box-shadow: 4px 4px 0 var(--ink); text-transform: uppercase; font-size: 13px; }
+body[data-style="pixel"] .btn.small { font-size: 11.5px; }
+body[data-style="pixel"] .btn:active, body[data-style="pixel"] .navb:active { transform: translate(3px, 3px); box-shadow: 1px 1px 0 var(--ink); }
+body[data-style="pixel"] :is(.tabs, .zinfo, .showb, .badge.price, .ticker) { background: var(--cream); }
+body[data-style="pixel"] .tab { font-size: 10px; padding: 7px 0; }
+body[data-style="pixel"] .tab.on { background: var(--ink); color: var(--gold); }
+body[data-style="pixel"] .zinfo, body[data-style="pixel"] .showb { font-size: 10.5px; }
+body[data-style="pixel"] .navb { font-size: 10.5px; text-transform: uppercase; }
+body[data-style="pixel"] .pill { font-size: 16px; }
+body[data-style="pixel"] :is(.card, .mrow, .sp, .cond, .theme, .rc) { background: #fffbe9; }
+body[data-style="pixel"] .card .ico, body[data-style="pixel"] .chip { background: #e9dcb4; }
+body[data-style="pixel"] .badge.ready, body[data-style="pixel"] .showb.can { background: var(--gold); }
+body[data-style="pixel"] .badge.ghost { border-style: dashed; box-shadow: none; }
+body[data-style="pixel"] .bar { height: 8px; background: var(--cream); border: 2px solid var(--ink); }
+body[data-style="pixel"] .prog i, body[data-style="pixel"] .bar i { background: var(--green); }
+body[data-style="pixel"] #modal { background: repeating-conic-gradient(#f6ecd0 0 25%, #efe2bd 0 50%) 0 0 / 24px 24px; }
+body[data-style="pixel"] #toast { background: var(--ink); box-shadow: 4px 4px 0 var(--gold); }
+body[data-style="pixel"] .theme.on { box-shadow: 4px 4px 0 var(--green); }
+body[data-style="pixel"] .sh-head h2, body[data-style="pixel"] .mtitle { text-transform: uppercase; font-size: 17px; }

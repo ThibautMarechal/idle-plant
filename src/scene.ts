@@ -3,6 +3,11 @@ import { SLOT_COUNT, SLOTS_PER_ZONE, SPECIES_BY_ID, ZONES } from './data';
 import { buildPlant, buildPot, mat, POT_TOP } from './plants3d';
 import { fitOf, stageOf, zoneClimate, zoneOfSlot } from './sim';
 import type { State } from './sim';
+import { OutlineEffect } from 'three/examples/jsm/effects/OutlineEffect.js';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { RenderPixelatedPass } from 'three/examples/jsm/postprocessing/RenderPixelatedPass.js';
+import { artStyle, finish, setArtStyle } from './styles';
 import { box, themeOf } from './themes';
 import type { Theme, V3 } from './themes';
 
@@ -40,14 +45,36 @@ export class Scene3D {
   private bugs: THREE.Mesh[] = [];
   private fanBlades: THREE.Group | null = null;
   private lifted = -1;
+  private outline: OutlineEffect | null = null;
+  private composer: EffectComposer | null = null;
 
-  constructor(private canvas: HTMLCanvasElement, themeId?: string) {
+  constructor(private canvas: HTMLCanvasElement, themeId?: string, styleId?: string) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.setTheme(themeId);
+    this.theme = themeOf(themeId);
+    this.setStyle(styleId);
+  }
+
+  get styleId(): string {
+    return artStyle().id;
+  }
+
+  /** Change de direction artistique : tout est repeint et reconstruit. */
+  setStyle(id?: string): void {
+    const st = setArtStyle(id);
+    this.outline = st.outline ? new OutlineEffect(this.renderer, { defaultThickness: st.outline, defaultColor: [0.03, 0.02, 0.05], defaultAlpha: 1 }) : null;
+    this.composer?.dispose();
+    this.composer = null;
+    if (st.pixel) {
+      this.composer = new EffectComposer(this.renderer);
+      this.composer.addPass(new RenderPixelatedPass(st.pixel, this.scene, this.camera, { normalEdgeStrength: 0.25, depthEdgeStrength: 0.5 }));
+      this.composer.addPass(new OutputPass());
+    }
+    this.canvas.style.imageRendering = st.pixel ? 'pixelated' : '';
+    this.setTheme(this.theme.id);
   }
 
   get themeId(): string {
@@ -57,6 +84,7 @@ export class Scene3D {
   /** Reconstruit tout le décor. Les plantes sont replacées au prochain `sync`. */
   setTheme(id?: string): void {
     const t = themeOf(id);
+    const st = artStyle();
     this.theme = t;
     this.scene.remove(this.world);
     this.world = new THREE.Group();
@@ -71,15 +99,15 @@ export class Scene3D {
     this.lifted = -1;
     const add = (...o: THREE.Object3D[]) => { this.world.add(...o); };
 
-    add(new THREE.HemisphereLight(t.hemi[0], t.hemi[1], t.hemi[2]));
-    const sun = new THREE.DirectionalLight(t.sun[0], t.sun[1]);
+    add(new THREE.HemisphereLight(t.hemi[0], t.hemi[1], t.hemi[2] * st.hemi));
+    const sun = new THREE.DirectionalLight(t.sun[0], t.sun[1] * st.sun);
     sun.position.copy(v3(t.sun[2]));
     sun.castShadow = true;
     sun.shadow.mapSize.set(1024, 1024);
     const sc = sun.shadow.camera;
     sc.left = -7; sc.right = 7; sc.top = 7; sc.bottom = -7; sc.near = 1; sc.far = 34;
     sun.shadow.bias = -0.002;
-    sun.shadow.radius = 4;
+    sun.shadow.radius = st.shadowRadius;
     add(sun);
 
     t.build(add);
@@ -102,6 +130,7 @@ export class Scene3D {
     });
     for (let i = 0; i < SLOT_COUNT; i++) this.slots.push(this.buildSlot(i));
     this.buildGear();
+    finish(this.world);
 
     const dir = new THREE.Vector3(Math.sin(t.yaw) * Math.cos(t.pitch), Math.sin(t.pitch), Math.cos(t.yaw) * Math.cos(t.pitch));
     this.camera.position.copy(dir.multiplyScalar(30));
@@ -204,6 +233,8 @@ export class Scene3D {
     this.w = Math.max(1, rect.width);
     this.h = Math.max(1, rect.height);
     this.renderer.setSize(this.w, this.h, false);
+    this.composer?.setPixelRatio(this.renderer.getPixelRatio());
+    this.composer?.setSize(this.w, this.h);
     this.setView(this.zone);
     this.view = { ...this.goal };
     this.applyView();
@@ -253,7 +284,7 @@ export class Scene3D {
       const key = h ? `${h.sp}|${h.vr}` : '';
       if (key === v.key) return;
       if (v.plant) v.root.remove(v.plant);
-      v.plant = h ? buildPlant(SPECIES_BY_ID[h.sp], 4, 1, h.vr) : null;
+      v.plant = h ? finish(buildPlant(SPECIES_BY_ID[h.sp], 4, 1, h.vr)) : null;
       if (v.plant) {
         v.plant.position.y = POT_TOP;
         v.root.add(v.plant);
@@ -271,7 +302,7 @@ export class Scene3D {
         v.pot = null;
       }
       if (slot.pot && !v.pot) {
-        v.pot = buildPot(this.theme.pot[0], this.theme.pot[1]);
+        v.pot = finish(buildPot(this.theme.pot[0], this.theme.pot[1]));
         v.root.add(v.pot);
         if (v.key !== '') v.pop = 1;
       }
@@ -285,7 +316,7 @@ export class Scene3D {
         key = `${p.sp}|${st}|${Math.round(health * 5)}|${st >= 2 ? p.vr : 0}`;
         if (key !== v.key) {
           if (v.plant) v.root.remove(v.plant);
-          v.plant = buildPlant(sp, st, health, st >= 2 ? p.vr : 0);
+          v.plant = finish(buildPlant(sp, st, health, st >= 2 ? p.vr : 0));
           v.plant.position.y = POT_TOP;
           v.root.add(v.plant);
           if (v.key.split('|')[1] !== key.split('|')[1]) v.pop = 1;
@@ -358,7 +389,9 @@ export class Scene3D {
     });
     if (this.fanBlades) this.fanBlades.rotation.z = t * 9;
     this.shows.forEach((sv, n) => { if (sv.plant) sv.plant.rotation.z = Math.sin(t * 1.1 + n) * 0.03; });
-    this.renderer.render(this.scene, this.camera);
+    if (this.composer) this.composer.render(dt);
+    else if (this.outline) this.outline.render(this.scene, this.camera);
+    else this.renderer.render(this.scene, this.camera);
   }
 
   private screen(p: THREE.Vector3): { x: number; y: number } {

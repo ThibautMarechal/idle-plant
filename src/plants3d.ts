@@ -1,15 +1,8 @@
 import * as THREE from 'three';
 import type { Species } from './data';
 
-const matCache = new Map<number, THREE.MeshStandardMaterial>();
-export function mat(color: number): THREE.MeshStandardMaterial {
-  let m = matCache.get(color);
-  if (!m) {
-    m = new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.85, metalness: 0 });
-    matCache.set(color, m);
-  }
-  return m;
-}
+import { mat } from './styles';
+export { mat };
 
 const GEO = {
   blob: new THREE.IcosahedronGeometry(1, 1),

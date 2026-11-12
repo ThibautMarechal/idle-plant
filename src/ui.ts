@@ -1,6 +1,7 @@
 import { FAMILIES, FAMILY_IDS, LEVEL_WORDS, RARITIES, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, STAGES, ZONES } from './data';
 import type { Family, Species } from './data';
 import type { Scene3D } from './scene';
+import { STYLES } from './styles';
 import { THEMES, themeOf } from './themes';
 import * as sim from './sim';
 import type { State } from './sim';
@@ -206,6 +207,7 @@ export class UI {
 
   private applyTheme(): void {
     $('app').style.background = themeOf(this.scene.themeId).bg;
+    document.body.dataset.style = this.scene.styleId;
   }
 
   setState(s: State): void {
@@ -330,6 +332,13 @@ export class UI {
       case 'upgrade':
         if (sim.buyUpgrade(s, arg as 'water' | 'bugs' | 'mist' | 'stock')) { this.toast('Installé dans la serre !'); this.buzz(25); }
         else this.toast('Pas assez de pièces.');
+        break;
+      case 'style':
+        s.style = arg;
+        this.scene.setStyle(arg);
+        this.applyTheme();
+        this.close();
+        this.toast(`Style : ${STYLES.find((x) => x.id === arg)?.name ?? ''}`);
         break;
       case 'theme':
         s.theme = arg;
@@ -772,8 +781,11 @@ export class UI {
     const gear = (ico: string, nm: string, ds: string, k: sim.ClimateGear) => !s.upgrades[k] ? item(ico, nm, ds, sim.PRICES[k], 'upgrade', k)
       : `<div class="card"><div class="ico">${ico}</div><div class="mid"><div class="nm">${nm}</div><div class="ds">${ds}</div></div><button class="btn small ${s.off[k] ? '' : 'primary'}" data-act="gear" data-arg="${k}">${s.off[k] ? 'Éteint' : 'Allumé'}</button></div>`;
     return this.head('🛒 Boutique') + `<div class="sh-body">
+      <h3>Style graphique</h3>
+      <p class="sub">Quatre directions artistiques à comparer. Elles changent le rendu des plantes, la lumière et toute l'interface.</p>
+      <div class="themes">${STYLES.map((t) => `<button class="theme ${t.id === this.scene.styleId ? 'on' : ''}" data-act="style" data-arg="${t.id}"><span class="sw" style="background:${t.swatch}"></span><b>${esc(t.name)}</b><small>${esc(t.desc)}</small></button>`).join('')}</div>
       <h3>Décor</h3>
-      <p class="sub">Quatre ambiances à essayer, gratuites. Tes plantes et tes pots restent en place.</p>
+      <p class="sub">Trois lieux à essayer. Tes plantes et tes pots restent en place.</p>
       <div class="themes">${THEMES.map((t) => `<button class="theme ${t.id === this.scene.themeId ? 'on' : ''}" data-act="theme" data-arg="${t.id}"><span class="sw" style="background:${t.bg}"></span><b>${esc(t.name)}</b><small>${esc(t.desc)}</small></button>`).join('')}</div>
       <p class="sub">Tout le reste s'achète avec les pièces gagnées en vendant tes plantes.</p>
       <h3>Équipement</h3>

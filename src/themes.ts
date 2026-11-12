@@ -197,74 +197,6 @@ const appartement: Theme = {
   },
 };
 
-// ---------------------------------------------------------------- Îlot
-
-const R = 2.55;
-const ilot: Theme = {
-  id: 'ilot',
-  all: 'Îlot',
-  zones: ['Sous l\'arbre', 'Bord de la mare', 'Le portillon', 'La plage'],
-  name: 'L\'îlot',
-  desc: 'Un jardin rond qui flotte dans le ciel, autour d\'une mare.',
-  bg: 'linear-gradient(180deg, #7fc4ee 0%, #b9e2f7 45%, #e8f6fb 100%)',
-  yaw: 0.35,
-  pitch: 0.8,
-  slots: [
-    polar(R, 228), polar(R, 250), polar(R, 272),
-    polar(1.75, 150), polar(1.75, 180), polar(1.75, 210),
-    polar(R, -6), polar(R, 16), polar(R, 38),
-    polar(R, 74), polar(R, 96), polar(R, 118),
-  ],
-  shows: [300, 313, 326, 339].map((a) => polar(3.15, a, 0.55)),
-  bounds: [[-4, 0, 0], [4, 0, 0], [0, 0, -4], [0, 0, 4], [2.9, 0, 2.9], [-2.9, 0, 2.9], [2.9, 0, -2.9], [-2.9, 0, -2.9], [0, 4.4, -2.6], [0, -1.6, 2.4]],
-  pot: [0xd98a5a, 0xe9a070],
-  showPot: [0x9aa4a8, 0xdfe6e8],
-  hemi: [0xffffff, 0x8fcf7a, 1.25],
-  sun: [0xfff6d8, 2.2, [4, 9, 6]],
-  mist: [0, 0.3, 0],
-  mistDir: [-1.2, 1.2, 0],
-  gear: { mist: polar(3.2, 205, 0.9), lamp: polar(3.3, 50, 1.6), heat: polar(3.35, -18, 0), fan: polar(3.35, 132, 0) },
-  build(add) {
-    // L'île : herbe, terre et rochers qui pendent dessous.
-    add(cyl(3.9, 3.7, 0.5, 0x8fcf6a, 0, -0.25, 0, 20, false), cyl(3.7, 2.6, 0.9, 0x9a7b5a, 0, -0.95, 0, 14, false), cyl(2.6, 0.9, 1.1, 0x7f634a, 0, -1.95, 0, 10, false));
-    add(blob(0.5, 0x7f634a, 1.6, -1.6, 1.2), blob(0.4, 0x9a7b5a, -1.9, -1.4, 0.6));
-    // Mare centrale.
-    add(cyl(1.02, 1.08, 0.16, 0xb9b2a6, 0, 0.06, 0, 16), water(0.92, 0, 0.13, 0), blob(0.16, 0x9aa4a8, 0.75, 0.15, 0.5), blob(0.12, 0xb9b2a6, -0.6, 0.15, -0.7));
-    for (const a of [20, 200]) {
-      const [x, , z] = polar(0.5, a);
-      add(cyl(0.16, 0.16, 0.02, 0x4fae6a, x, 0.165, z, 8, false));
-    }
-    // Sable au soleil, mousse humide, dalles près du portillon.
-    const patch = (r: number, color: number, deg: number, dist: number, sx = 1.6) => {
-      const m = cyl(r, r, 0.02, color, ...polar(dist, deg, 0.012), 16, false);
-      m.scale.set(sx, 1, 1);
-      m.rotation.y = -((deg - 90) * Math.PI) / 180;
-      add(m);
-    };
-    patch(0.9, 0xf2d68a, 96, R);
-    patch(0.7, 0x5f9f6a, 180, 1.75, 1.2);
-    patch(0.9, 0xcfc6b4, 16, R);
-    patch(0.9, 0x5f8f6a, 250, R);
-    // Grand arbre : son feuillage fait l'ombre.
-    const [tx, , tz] = polar(3.25, 250);
-    add(cyl(0.2, 0.3, 2.2, 0x8a5f3c, tx, 1.1, tz, 7), blob(1.25, 0x3f9d5a, tx, 2.9, tz, 1), blob(0.8, 0x4fae6a, tx + 0.9, 2.5, tz + 0.3, 1), blob(0.75, 0x4fae6a, tx - 0.9, 2.45, tz + 0.35, 1));
-    // Portillon.
-    const [gx, , gz] = polar(3.45, 16);
-    for (const d of [-0.5, 0.5]) add(box(0.14, 1.5, 0.14, 0xa9794f, gx - d * 0.28, 0.75, gz + d));
-    add(box(0.16, 0.14, 1.3, 0xa9794f, gx, 1.5, gz), box(0.06, 0.7, 0.8, 0xc99a66, gx, 0.45, gz));
-    // Rochers de la vitrine.
-    for (const a of [300, 313, 326, 339]) add(cyl(0.32, 0.4, 0.55, 0xb9b2a6, ...polar(3.15, a, 0.27), 7));
-    // Nuages.
-    for (const [x, y, z, r] of [[-4.6, 1.2, -2, 0.5], [4.8, 2.2, -1, 0.6], [4.2, -1.2, 2.5, 0.45]] as [number, number, number, number][]) {
-      const c = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 1), new THREE.MeshBasicMaterial({ color: 0xffffff }));
-      c.position.set(x, y, z);
-      c.scale.set(1.8, 0.8, 1);
-      add(c);
-    }
-    add(wateringCan(...polar(3.2, 140), 2.2));
-  },
-};
-
 // ---------------------------------------------------------------- Balcon
 
 const BX = [-3.45, -1.15, 1.15, 3.45];
@@ -328,7 +260,7 @@ const balcon: Theme = {
   },
 };
 
-export const THEMES: Theme[] = [verriere, appartement, ilot, balcon];
+export const THEMES: Theme[] = [verriere, appartement, balcon];
 export function themeOf(id: string | undefined): Theme {
   return THEMES.find((t) => t.id === id) ?? THEMES[0];
 }

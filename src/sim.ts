@@ -37,6 +37,8 @@ export interface State {
   off: Partial<Record<ClimateGear, boolean>>;
   /** Décor choisi pour l'espace de culture (purement visuel). */
   theme?: string;
+  /** Direction artistique choisie (purement visuel). */
+  style?: string;
   market: Record<Family, MarketLine>;
   marketAcc: number;
   news: NewsItem[];
