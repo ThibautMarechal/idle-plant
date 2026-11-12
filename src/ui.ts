@@ -184,8 +184,8 @@ export class UI {
   private moveGhost(cx: number, cy: number): void {
     const rect = $('app').getBoundingClientRect();
     const x = cx - rect.left, y = cy - rect.top;
-    // Le pot entier suit le doigt, légèrement au-dessus pour rester visible.
-    this.scene.dragTo(x, y - 30);
+    // Le pot entier suit le doigt, centré dessous.
+    this.scene.dragTo(x, y);
     let best = -1, bestD = Infinity;
     this.s.slots.forEach((_, i) => {
       if (!this.s.zonesOpen[sim.zoneIndexOfSlot(i)]) return;

@@ -337,7 +337,7 @@ export class Scene3D {
     this.lifted = i;
   }
 
-  /** Amène le pot soulevé sous le doigt : on projette le point de l'écran sur le plan où il flotte. */
+  /** Amène le pot soulevé sous le doigt : on projette le point de l'écran sur le plan qui coupe le pot à mi-hauteur. */
   dragTo(sx: number, sy: number): void {
     if (this.lifted < 0) return;
     const v = this.slots[this.lifted];
@@ -345,7 +345,8 @@ export class Scene3D {
     const o = new THREE.Vector3((sx / this.w) * 2 - 1, -(sy / this.h) * 2 + 1, -1).unproject(this.camera);
     const d = new THREE.Vector3();
     this.camera.getWorldDirection(d);
-    const t = (y - o.y) / d.y;
+    // Le doigt tient le pot par son milieu, pas par son pied.
+    const t = (y + 0.26 - o.y) / d.y;
     v.root.position.set(o.x + d.x * t, y, o.z + d.z * t);
   }
 
