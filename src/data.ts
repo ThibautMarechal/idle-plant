@@ -1,6 +1,6 @@
-export type Family = 'succulentes' | 'aromatiques' | 'fougeres' | 'orchidees' | 'fleurs' | 'tropicales' | 'carnivores';
+export type Family = 'succulentes' | 'aromatiques' | 'fougeres' | 'orchidees' | 'fleurs' | 'tropicales' | 'carnivores' | 'arbustes';
 export type Rarity = 'commun' | 'rare' | 'exotique' | 'legendaire';
-export type Shape = 'rosette' | 'aloe' | 'bush' | 'fern' | 'orchid' | 'paradise' | 'cactus' | 'grass' | 'bigleaf' | 'coin' | 'trap' | 'pitcher' | 'stem' | 'nest';
+export type Shape = 'rosette' | 'aloe' | 'bush' | 'fern' | 'orchid' | 'paradise' | 'cactus' | 'grass' | 'bigleaf' | 'coin' | 'trap' | 'pitcher' | 'stem' | 'nest' | 'tree' | 'shrub' | 'rose';
 
 export interface Species {
   id: string;
@@ -25,16 +25,19 @@ export interface Species {
   height: string;
   /** Toxicité pour chats et chiens, quand elle est bien établie. */
   pets?: 'ok' | 'toxique';
+  /** Taille de pot minimale : 1 petit (par défaut), 2 moyen, 3 grand. */
+  size?: number;
 }
 
-export const FAMILIES: Record<Family, { name: string; icon: string; color: string }> = {
-  succulentes: { name: 'Succulentes', icon: '🌵', color: '#6fbf8f' },
-  aromatiques: { name: 'Aromatiques', icon: '🌿', color: '#8fc45a' },
-  fougeres: { name: 'Fougères', icon: '🍃', color: '#3f9d6b' },
-  orchidees: { name: 'Orchidées', icon: '🌸', color: '#d78ad0' },
-  fleurs: { name: 'Fleurs', icon: '🌼', color: '#f2b441' },
-  tropicales: { name: 'Tropicales', icon: '🌴', color: '#2f9e7a' },
-  carnivores: { name: 'Carnivores', icon: '🪰', color: '#c0504d' },
+export const FAMILIES: Record<Family, { name: string; icon: string; color: string; glaze: number }> = {
+  succulentes: { name: 'Succulentes', icon: '🌵', color: '#6fbf8f', glaze: 0 },
+  aromatiques: { name: 'Aromatiques', icon: '🌿', color: '#8fc45a', glaze: 1 },
+  fougeres: { name: 'Fougères', icon: '🍃', color: '#3f9d6b', glaze: 3 },
+  orchidees: { name: 'Orchidées', icon: '🌸', color: '#d78ad0', glaze: 6 },
+  fleurs: { name: 'Fleurs', icon: '🌼', color: '#f2b441', glaze: 4 },
+  tropicales: { name: 'Tropicales', icon: '🌴', color: '#2f9e7a', glaze: 5 },
+  carnivores: { name: 'Carnivores', icon: '🪰', color: '#c0504d', glaze: 2 },
+  arbustes: { name: 'Arbustes', icon: '🌳', color: '#7a9a4a', glaze: 7 },
 };
 export const FAMILY_IDS = Object.keys(FAMILIES) as Family[];
 
@@ -190,7 +193,55 @@ export const SPECIES: Species[] = [
     light: 3, temp: 1, hum: 3, grow: 460, value: 140, shape: 'pitcher', leaf: 0x8fae4a, flower: 0x9a2f4a,
     fact: 'Ses urnes remplies d\'eau de pluie abritent tout un petit monde de larves qui digèrent ses proies.',
     tip: 'Elle a besoin d\'un vrai hiver froid, dehors, pour repartir au printemps.', height: '20 à 30 cm' },
+  // ---- Arbustes : il leur faut un pot moyen ou grand, façonné à l'atelier.
+  { id: 'figuier', name: 'Figuier', latin: 'Ficus carica', family: 'arbustes', rarity: 'commun', origin: 'Asie occidentale', size: 3,
+    light: 3, temp: 3, hum: 1, grow: 420, value: 70, shape: 'tree', leaf: 0x5f9a4a, flower: 0x7a4a8a,
+    fact: 'La figue n\'est pas un fruit mais une fleur retournée sur elle-même.',
+    tip: 'En pot, rentre-le hors gel l\'hiver et taille court en fin d\'hiver pour le garder compact.', height: '1 à 3 m en pot', pets: 'toxique' },
+  { id: 'hortensia', name: 'Hortensia', latin: 'Hydrangea macrophylla', family: 'arbustes', rarity: 'commun', origin: 'Japon', size: 2,
+    light: 2, temp: 1, hum: 2, grow: 320, value: 48, shape: 'shrub', leaf: 0x4f9a55, flower: 0x7fa6e8,
+    fact: 'Ses fleurs virent au bleu en sol acide et au rose en sol calcaire.',
+    tip: 'Ne coupe pas les fleurs fanées avant la fin de l\'hiver : elles protègent les bourgeons du gel.', height: '1 à 1,5 m', pets: 'toxique' },
+  { id: 'olivier', name: 'Olivier', latin: 'Olea europaea', family: 'arbustes', rarity: 'rare', origin: 'Bassin méditerranéen', size: 3,
+    light: 3, temp: 3, hum: 1, grow: 600, value: 170, shape: 'tree', leaf: 0x93a98a, flower: 0x3f4a2a,
+    fact: 'Certains oliviers de Méditerranée ont plus de deux mille ans et donnent encore des fruits.',
+    tip: 'Il supporte la sécheresse mais pas l\'eau stagnante : un pot percé et un terreau caillouteux.', height: '1,5 à 2 m en pot', pets: 'ok' },
+  { id: 'citronnier', name: 'Citronnier', latin: 'Citrus limon', family: 'arbustes', rarity: 'rare', origin: 'Asie', size: 3,
+    light: 3, temp: 2, hum: 1, grow: 620, value: 180, shape: 'tree', leaf: 0x3f8f4a, flower: 0xf6d83a,
+    fact: 'Il porte en même temps des fleurs, des fruits verts et des fruits mûrs.',
+    tip: 'Sors-le au soleil dès mai et rentre-le dans une pièce fraîche et lumineuse avant les gelées.', height: '1 à 2 m en pot', pets: 'toxique' },
+  { id: 'camelia', name: 'Camélia', latin: 'Camellia japonica', family: 'arbustes', rarity: 'rare', origin: 'Japon', size: 2,
+    light: 2, temp: 1, hum: 2, grow: 540, value: 150, shape: 'shrub', leaf: 0x2f6f3f, flower: 0xe8607a,
+    fact: 'Il fleurit en plein hiver, quand presque rien d\'autre n\'ose le faire.',
+    tip: 'Terre de bruyère obligatoire, et jamais de soleil du matin sur des boutons gelés.', height: '1,5 à 3 m', pets: 'ok' },
+  { id: 'erable', name: 'Érable du Japon', latin: 'Acer palmatum', family: 'arbustes', rarity: 'exotique', origin: 'Japon', size: 3,
+    light: 1, temp: 2, hum: 2, grow: 900, value: 520, shape: 'tree', leaf: 0xc9483a, flower: 0xe86a3a,
+    fact: 'Son feuillage change de couleur trois fois dans l\'année.',
+    tip: 'À l\'abri du vent et du soleil brûlant : ses feuilles fines grillent en quelques heures.', height: '1 à 2 m en pot', pets: 'ok' },
+  { id: 'bonsai', name: 'Bonsaï de genévrier', latin: 'Juniperus chinensis', family: 'arbustes', rarity: 'legendaire', origin: 'Chine', size: 2,
+    light: 3, temp: 2, hum: 1, grow: 1500, value: 2600, shape: 'tree', leaf: 0x3f7f5f, flower: 0x8fcf9a,
+    fact: 'Certains bonsaïs se transmettent de génération en génération depuis plus de cinq siècles.',
+    tip: 'C\'est un arbre d\'extérieur : dedans, il dépérit en quelques semaines.', height: '30 à 60 cm', pets: 'toxique' },
+  // ---- Nouvelles fleurs
+  { id: 'dahlia', name: 'Dahlia', latin: 'Dahlia pinnata', family: 'fleurs', rarity: 'commun', origin: 'Mexique',
+    light: 3, temp: 3, hum: 1, grow: 150, value: 16, shape: 'rose', leaf: 0x4f9a4a, flower: 0xe8563a,
+    fact: 'Les Aztèques mangeaient ses tubercules bien avant qu\'on l\'admire pour ses fleurs.',
+    tip: 'Déterre les tubercules après les premières gelées et garde-les au sec jusqu\'au printemps.', height: '40 cm à 1,2 m', pets: 'toxique' },
+  { id: 'muguet', name: 'Muguet', latin: 'Convallaria majalis', family: 'fleurs', rarity: 'commun', origin: 'Europe',
+    light: 1, temp: 2, hum: 2, grow: 130, value: 14, shape: 'grass', leaf: 0x4fa85a, flower: 0xffffff,
+    fact: 'On l\'offre le premier mai depuis la Renaissance. Toute la plante est toxique.',
+    tip: 'Il aime l\'ombre des arbres et se propage tout seul par ses rhizomes.', height: '15 à 25 cm', pets: 'toxique' },
+  { id: 'rose', name: 'Rosier ancien', latin: 'Rosa gallica', family: 'fleurs', rarity: 'rare', origin: 'Europe', size: 2,
+    light: 3, temp: 2, hum: 1, grow: 380, value: 95, shape: 'rose', leaf: 0x3f8a4a, flower: 0xd8365a,
+    fact: 'Les croisés auraient rapporté ce rosier d\'Orient ; il a servi à parfumer l\'Europe pendant des siècles.',
+    tip: 'Taille-le en fin d\'hiver au-dessus d\'un œil tourné vers l\'extérieur.', height: '80 cm à 1,2 m', pets: 'ok' },
+  { id: 'pivoine', name: 'Pivoine', latin: 'Paeonia lactiflora', family: 'fleurs', rarity: 'exotique', origin: 'Chine', size: 2,
+    light: 2, temp: 1, hum: 2, grow: 700, value: 420, shape: 'rose', leaf: 0x3f7f4a, flower: 0xf2a6c4,
+    fact: 'Une pivoine peut vivre plus de cinquante ans au même endroit.',
+    tip: 'Ne l\'enterre pas trop profond et ne la déplace jamais : elle bouderait plusieurs années.', height: '70 cm à 1 m', pets: 'toxique' },
 ];
+const MEDIUM = ['monstera', 'strelitzia', 'tournesol', 'hibiscus', 'opuntia'];
+for (const sp of SPECIES) if (MEDIUM.includes(sp.id)) sp.size = 2;
 export const SPECIES_BY_ID: Record<string, Species> = Object.fromEntries(SPECIES.map((s) => [s.id, s]));
 
 export interface Zone { id: string; name: string; icon: string; light: number; temp: number; hum: number; desc: string }
@@ -229,3 +280,24 @@ export const NEWS: NewsTemplate[] = [
   { family: 'succulentes', dir: 1, text: 'Les succulentes font le buzz sur les réseaux : tout le monde en veut sur son bureau.' },
   { family: 'orchidees', dir: 1, text: 'Fête des mères en approche : l\'orchidée reste le cadeau préféré.' },
 ];
+
+/** Poterie : tailles de pots, émaux et motifs. */
+export const POT_SIZES = [
+  { name: 'Petit pot', short: 'petit', clay: 2, fire: 40, scale: 1 },
+  { name: 'Pot moyen', short: 'moyen', clay: 5, fire: 120, scale: 1.2 },
+  { name: 'Grand pot', short: 'grand', clay: 9, fire: 300, scale: 1.42 },
+];
+/** `stars` : étoiles d'almanach nécessaires pour débloquer l'émail. */
+export const GLAZES = [
+  { name: 'Terre cuite', color: 0xc9714a, rim: 0xd9825a, stars: 0 },
+  { name: 'Crème', color: 0xf1e8da, rim: 0xffffff, stars: 0 },
+  { name: 'Ardoise', color: 0x4f5d6b, rim: 0x6f7f8f, stars: 0 },
+  { name: 'Céladon', color: 0x9fcdb4, rim: 0xc4e6d4, stars: 5 },
+  { name: 'Bleu de Delft', color: 0x3f6fb5, rim: 0xf4f4f0, stars: 12 },
+  { name: 'Ocre', color: 0xd9a441, rim: 0xedc46a, stars: 20 },
+  { name: 'Rose poudré', color: 0xe8a8b4, rim: 0xf6cdd5, stars: 30 },
+  { name: 'Bleu nuit', color: 0x2a2f55, rim: 0xe8c26a, stars: 45 },
+  { name: 'Or', color: 0xe2b33c, rim: 0xfff0b0, stars: 70 },
+];
+export const PATTERNS = ['Uni', 'Bandes', 'Pois'];
+export const CLIENTS = ['Mme Rosier', 'M. Dubois', 'Léa la fleuriste', 'Le café du coin', 'Mamie Jeanne', 'L\'école du quartier', 'Dr Lambert', 'La mairie'];

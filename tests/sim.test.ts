@@ -132,4 +132,44 @@ describe('simulation', () => {
     const got = sim.buyPacket(s, rngOf(5), 'orchidees')!;
     expect(got.every((g) => SPECIES_BY_ID[g.id].family === 'orchidees')).toBe(true);
   });
+
+  it('atelier : façonner, défourner, poser, peindre', () => {
+    const s = sim.newState(0);
+    s.clay = 9;
+    expect(sim.startPot(s, 3)).toBe(true);
+    expect(sim.startPot(s, 1)).toBe(false);
+    expect(sim.collectKiln(s)).toBe(false);
+    sim.advance(s, 301_000, () => 0.5);
+    expect(sim.collectKiln(s)).toBe(true);
+    expect(s.shelf).toEqual([{ size: 3, glaze: 0, pat: 0 }]);
+    expect(sim.placePot(s, 0, 0)).toBe(false); // zone fermée
+    expect(sim.placePot(s, 6, 0)).toBe(true);
+    expect(sim.potSize(s.slots[6])).toBe(3);
+    s.coins = 100;
+    expect(sim.paintPot(s, 'slot', 6, 1, 2)).toBe(true);
+    expect(sim.paintPot(s, 'slot', 6, 8, 0)).toBe(false); // émail verrouillé
+    expect(s.coins).toBe(100 - sim.PAINT_PRICE);
+  });
+
+  it('un arbuste exige un pot à sa taille', () => {
+    const s = sim.newState(0);
+    s.seeds.figuier = 1;
+    expect(sim.plantSeed(s, 7, 'figuier', () => 0.5)).toBe(false);
+    s.slots[7].pd = { size: 3, glaze: 0, pat: 0 };
+    expect(sim.plantSeed(s, 7, 'figuier', () => 0.5)).toBe(true);
+  });
+
+  it('boutures et commandes', () => {
+    const s = sim.newState(0);
+    s.slots[7].plant = { sp: 'basilic', prog: 1, water: 1, pests: 0, q: 90, vr: 0 };
+    expect(sim.harvestCutting(s, 7)).toBe(true);
+    expect(s.seeds.basilic).toBe(2);
+    s.slots[7].plant = { sp: 'basilic', prog: 1, water: 1, pests: 0, q: 90, vr: 0 };
+    s.order = { who: 'Test', family: 'aromatiques', minQ: 85, coins: 40, clay: 3, left: 100 };
+    const coins = s.coins, clay = s.clay;
+    expect(sim.deliver(s, 7)).toBeGreaterThan(40);
+    expect(s.coins).toBeGreaterThan(coins + 40);
+    expect(s.clay).toBe(clay + 3);
+    expect(s.order).toBeNull();
+  });
 });

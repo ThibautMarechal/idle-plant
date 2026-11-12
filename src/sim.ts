@@ -1,9 +1,13 @@
-import { FAMILY_IDS, NEWS, RARITIES, SLOT_COUNT, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, ZONES } from './data';
+import { CLIENTS, FAMILIES, FAMILY_IDS, GLAZES, NEWS, POT_SIZES, RARITIES, SLOT_COUNT, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, ZONES } from './data';
 import type { Family, Rarity, Species, Zone } from './data';
 
 /** `vr` : variante, 0 normale, 1 panachée, 2 dorée. */
 export interface Plant { sp: string; prog: number; water: number; pests: number; q: number; vr: number }
-export interface Slot { pot: boolean; plant: Plant | null }
+/** Un pot façonné : taille 1..3, émail (index de GLAZES) et motif (index de PATTERNS). */
+export interface PotDesign { size: number; glaze: number; pat: number }
+/** `pd` absent : petit pot de base en terre cuite. */
+export interface Slot { pot: boolean; pd?: PotDesign; plant: Plant | null }
+export interface Order { who: string; family: Family; minQ: number; coins: number; clay: number; left: number }
 export interface Harvest { sp: string; q: number; vr: number }
 export interface MarketLine { p: number; hist: number[]; drift: number; driftLeft: number }
 export interface NewsItem { t: number; family: Family; dir: 1 | -1; text: string }
@@ -39,6 +43,16 @@ export interface State {
   theme?: string;
   /** Direction artistique choisie (purement visuel). */
   style?: string;
+  /** Atelier de poterie. */
+  clay: number;
+  clayAcc: number;
+  /** Pot en cours de cuisson ; `left` à 0 quand il est prêt à défourner. */
+  kiln: { size: number; left: number } | null;
+  /** Pots façonnés en attente d'être posés. */
+  shelf: PotDesign[];
+  /** Commande d'un visiteur. */
+  order: Order | null;
+  orderIn: number;
   market: Record<Family, MarketLine>;
   marketAcc: number;
   news: NewsItem[];
@@ -47,11 +61,17 @@ export interface State {
   upgrades: Upgrades;
   disc: Record<string, Disc>;
   quests: Record<string, boolean>;
-  stats: { sold: number; earned: number; bestMult: number; planted: number; opened: number };
+  stats: { sold: number; earned: number; bestMult: number; planted: number; opened: number; crafted: number; painted: number; orders: number; cuttings: number };
   lastTick: number;
 }
 
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
+export const CLAY_EVERY = 40;
+export const CLAY_CAP = 12;
+export const SHELF_CAP = 6;
+export const PAINT_PRICE = 15;
+export const HARMONY_SPEED = 1.12;
+export const ORDER_TIME = 600;
 export const VARIANTS = ['', 'panachée', 'dorée'];
 export const VARIANT_MULT = [1, 2.5, 6];
 export const VARIANT_ODDS = [0.08, 0.015];
@@ -112,9 +132,15 @@ export function newState(now: number): State {
     fert: 1,
     composted: 0,
     off: {},
+    clay: 4,
+    clayAcc: 0,
+    kiln: null,
+    shelf: [],
+    order: null,
+    orderIn: 150,
     disc: {},
     quests: {},
-    stats: { sold: 0, earned: 0, bestMult: 0, planted: 0, opened: 0 },
+    stats: { sold: 0, earned: 0, bestMult: 0, planted: 0, opened: 0, crafted: 0, painted: 0, orders: 0, cuttings: 0 },
     lastTick: now,
   };
 }
@@ -187,7 +213,7 @@ function stepPlants(s: State, dt: number, rng: Rng, offline: boolean): void {
     const wet = p.water > 0;
     if (p.prog < 1) {
       // Jamais de plante morte : sans eau ou infestée, elle tourne au ralenti.
-      const speed = fit * (wet ? 1 : 0.25) * (p.pests > 0 ? 0.5 : 1);
+      const speed = fit * (wet ? 1 : 0.25) * (p.pests > 0 ? 0.5 : 1) * (harmony(slot) ? HARMONY_SPEED : 1);
       p.prog = Math.min(1, p.prog + (dt / sp.grow) * speed);
       const target = 100 * fit * (wet ? 1 : 0.6) * (p.pests > 0 ? 0.5 : 1);
       p.q += (target - p.q) * Math.min(1, (dt / sp.grow) * 2.2);
@@ -269,6 +295,21 @@ export function advance(s: State, now: number, rng: Rng = Math.random): number {
     s.tips = Math.min(rate * TIP_CAP_SECONDS, s.tips + rate * total);
     s.visitors += (total / 20) * s.showcase.filter(Boolean).length * (0.5 + rng());
   }
+  // Atelier : l'argile se dépose toute seule, le four cuit, les commandes passent.
+  if (s.clay < CLAY_CAP) {
+    s.clayAcc += total;
+    const n = Math.floor(s.clayAcc / CLAY_EVERY);
+    s.clayAcc -= n * CLAY_EVERY;
+    s.clay = Math.min(CLAY_CAP, s.clay + n);
+  } else s.clayAcc = 0;
+  if (s.kiln) s.kiln.left = Math.max(0, s.kiln.left - total);
+  if (s.order) {
+    s.order.left -= total;
+    if (s.order.left <= 0) { s.order = null; s.orderIn = 120; }
+  } else {
+    s.orderIn -= Math.min(total, 300);
+    if (s.orderIn <= 0) s.order = makeOrder(s, rng);
+  }
   if (s.packets >= MAX_PACKETS) {
     s.packetIn = PACKET_EVERY;
   } else {
@@ -280,6 +321,112 @@ export function advance(s: State, now: number, rng: Rng = Math.random): number {
     if (s.packets >= MAX_PACKETS) s.packetIn = PACKET_EVERY;
   }
   return total;
+}
+
+function makeOrder(s: State, rng: Rng): Order | null {
+  // On ne demande que des familles que le joueur sait déjà faire fleurir.
+  const fams = FAMILY_IDS.filter((f) => SPECIES.some((sp) => sp.family === f && s.disc[sp.id]?.bloomed));
+  if (fams.length === 0) { s.orderIn = 60; return null; }
+  const family = fams[Math.floor(rng() * fams.length)];
+  const hard = rng() < 0.35;
+  const n = collection(s).bloomed;
+  return {
+    who: CLIENTS[Math.floor(rng() * CLIENTS.length)],
+    family,
+    minQ: hard ? 85 : 60,
+    coins: Math.round((30 + n * 6) * (hard ? 2 : 1)),
+    clay: hard ? 5 : 3,
+    left: ORDER_TIME,
+  };
+}
+
+export function potSize(slot: Slot): number {
+  return slot.pot ? slot.pd?.size ?? 1 : 0;
+}
+export function sizeOf(sp: Species): number {
+  return sp.size ?? 1;
+}
+/** Un pot émaillé à la couleur préférée de la famille : la plante pousse plus vite. */
+export function harmony(slot: Slot): boolean {
+  return !!slot.plant && !!slot.pd && slot.pd.glaze > 0 && FAMILIES[SPECIES_BY_ID[slot.plant.sp].family].glaze === slot.pd.glaze;
+}
+export function glazeOpen(s: State, g: number): boolean {
+  return collection(s).stars >= GLAZES[g].stars;
+}
+
+/** Lance la cuisson d'un pot de la taille demandée (1..3). */
+export function startPot(s: State, size: number): boolean {
+  const def = POT_SIZES[size - 1];
+  if (!def || s.kiln || s.clay < def.clay) return false;
+  s.clay -= def.clay;
+  s.kiln = { size, left: def.fire };
+  return true;
+}
+/** Sort le pot cuit du four et le range sur l'étagère de l'atelier. */
+export function collectKiln(s: State): boolean {
+  if (!s.kiln || s.kiln.left > 0 || s.shelf.length >= SHELF_CAP) return false;
+  s.shelf.push({ size: s.kiln.size, glaze: 0, pat: 0 });
+  s.kiln = null;
+  s.stats.crafted++;
+  return true;
+}
+/** Pose un pot de l'étagère sur un emplacement libre. */
+export function placePot(s: State, i: number, k: number): boolean {
+  const slot = s.slots[i];
+  if (slot.pot || !s.shelf[k] || !s.zonesOpen[zoneIndexOfSlot(i)]) return false;
+  slot.pot = true;
+  slot.pd = s.shelf.splice(k, 1)[0];
+  return true;
+}
+/** Range un pot vide sur l'étagère, pour le remplacer par un autre. */
+export function stowPot(s: State, i: number): boolean {
+  const slot = s.slots[i];
+  if (!slot.pot || slot.plant || s.shelf.length >= SHELF_CAP) return false;
+  s.shelf.push(slot.pd ?? { size: 1, glaze: 0, pat: 0 });
+  slot.pot = false;
+  delete slot.pd;
+  return true;
+}
+/** Peint un pot posé (`slot`) ou rangé sur l'étagère (`shelf`). */
+export function paintPot(s: State, where: 'slot' | 'shelf', k: number, glaze: number, pat: number): boolean {
+  if (!GLAZES[glaze] || !glazeOpen(s, glaze) || s.coins < PAINT_PRICE) return false;
+  let pd: PotDesign | undefined;
+  if (where === 'shelf') pd = s.shelf[k];
+  else if (s.slots[k]?.pot) pd = s.slots[k].pd ?? (s.slots[k].pd = { size: 1, glaze: 0, pat: 0 });
+  if (!pd || (pd.glaze === glaze && pd.pat === pat)) return false;
+  pd.glaze = glaze;
+  pd.pat = pat;
+  s.coins -= PAINT_PRICE;
+  s.stats.painted++;
+  return true;
+}
+
+/** Prélève des boutures : la plante part, deux graines de la même espèce reviennent. */
+export function harvestCutting(s: State, i: number): boolean {
+  const p = s.slots[i].plant;
+  if (!p || p.prog < 1) return false;
+  s.slots[i].plant = null;
+  s.seeds[p.sp] = (s.seeds[p.sp] ?? 0) + 2;
+  s.stats.cuttings++;
+  return true;
+}
+export function orderFits(s: State, p: Plant | null): boolean {
+  return !!s.order && !!p && p.prog >= 1 && SPECIES_BY_ID[p.sp].family === s.order.family && p.q >= s.order.minQ;
+}
+/** Livre la plante en fleur au client : prix de vente, prime et argile. */
+export function deliver(s: State, i: number): number {
+  const p = s.slots[i].plant;
+  if (!s.order || !orderFits(s, p) || !p) return 0;
+  const o = s.order;
+  s.slots[i].plant = null;
+  const gain = sell(s, { sp: p.sp, q: p.q, vr: p.vr }) + o.coins;
+  s.coins += o.coins;
+  s.stats.earned += o.coins;
+  s.clay = Math.min(CLAY_CAP + 6, s.clay + o.clay);
+  s.stats.orders++;
+  s.order = null;
+  s.orderIn = 90;
+  return gain;
 }
 
 export function discOf(s: State, id: string): Disc {
@@ -368,7 +515,7 @@ export function buyPacket(s: State, rng: Rng = Math.random, family?: Family) {
 
 export function plantSeed(s: State, i: number, id: string, rng: Rng = Math.random): boolean {
   const slot = s.slots[i];
-  if (!slot.pot || slot.plant || !(s.seeds[id] > 0)) return false;
+  if (!slot.pot || slot.plant || !(s.seeds[id] > 0) || potSize(slot) < sizeOf(SPECIES_BY_ID[id])) return false;
   discOf(s, id).seen = true;
   s.seeds[id]--;
   if (s.seeds[id] === 0) delete s.seeds[id];
@@ -506,6 +653,7 @@ export function buyPot(s: State, i: number): boolean {
   if (s.slots[i].pot || s.coins < price || !s.zonesOpen[zoneIndexOfSlot(i)]) return false;
   s.coins -= price;
   s.slots[i].pot = true;
+  delete s.slots[i].pd;
   return true;
 }
 
@@ -531,13 +679,19 @@ export const QUESTS: Quest[] = [
   { id: 'bloom1', text: 'Fais fleurir ta première plante', reward: 20, done: (s) => collection(s).bloomed >= 1 },
   { id: 'move', text: 'Déplace un pot vers un meilleur emplacement', reward: 20, done: (s) => s.moved >= 1 },
   { id: 'compost', text: 'Composte une graine en trop pour obtenir de l\'engrais', reward: 20, done: (s) => s.composted >= 1 },
+  { id: 'craft', text: 'Façonne et défourne un pot à l\'atelier', reward: 30, done: (s) => s.stats.crafted >= 1 },
   { id: 'bloom3', text: 'Ajoute 3 espèces à l\'almanach', reward: 50, done: (s) => collection(s).bloomed >= 3 },
   { id: 'zone1', text: 'Aménage une nouvelle zone de la serre', reward: 60, done: (s) => s.zonesOpen.filter(Boolean).length >= 3 },
   { id: 'show', text: 'Expose une plante en fleur dans la vitrine', reward: 60, done: (s) => s.showcase.some(Boolean) },
+  { id: 'paint', text: 'Peins un pot à l\'atelier', reward: 40, done: (s) => s.stats.painted >= 1 },
+  { id: 'order', text: 'Livre la commande d\'un client', reward: 80, done: (s) => s.stats.orders >= 1 },
   { id: 'star3', text: 'Obtiens un spécimen d\'exposition ⭐⭐⭐', reward: 80, done: (s) => Object.values(s.disc).some((d) => starsOf(d) >= 3) },
   { id: 'bloom6', text: 'Ajoute 6 espèces à l\'almanach', reward: 100, done: (s) => collection(s).bloomed >= 6 },
   { id: 'rare', text: 'Fais fleurir une plante rare', reward: 120,
     done: (s) => Object.entries(s.disc).some(([id, d]) => d.bloomed && SPECIES_BY_ID[id].rarity !== 'commun') },
+  { id: 'cutting', text: 'Prélève des boutures sur une plante en fleur', reward: 60, done: (s) => s.stats.cuttings >= 1 },
+  { id: 'shrub', text: 'Fais fleurir un arbuste dans un pot moyen ou grand', reward: 200,
+    done: (s) => Object.entries(s.disc).some(([id, d]) => d.bloomed && SPECIES_BY_ID[id].family === 'arbustes') },
   { id: 'gear', text: 'Installe un équipement dans la serre', reward: 100, done: (s) => Object.values(s.upgrades).some(Boolean) },
   { id: 'variant', text: 'Fais fleurir une variante panachée ou dorée', reward: 150, done: (s) => collection(s).variants >= 1 },
   { id: 'zone2', text: 'Aménage toute la serre', reward: 150, done: (s) => s.zonesOpen.every(Boolean) },
@@ -545,6 +699,8 @@ export const QUESTS: Quest[] = [
   { id: 'bloom10', text: 'Ajoute 10 espèces à l\'almanach', reward: 300, done: (s) => collection(s).bloomed >= 10 },
   { id: 'show4', text: 'Remplis la vitrine', reward: 300, done: (s) => s.showcase.every(Boolean) },
   { id: 'bloom20', text: 'Ajoute 20 espèces à l\'almanach', reward: 600, done: (s) => collection(s).bloomed >= 20 },
+  { id: 'harmony', text: 'Accorde l\'émail d\'un pot à la famille de sa plante', reward: 150, done: (s) => s.slots.some(harmony) },
+  { id: 'bloom30', text: 'Ajoute 30 espèces à l\'almanach', reward: 700, done: (s) => collection(s).bloomed >= 30 },
   { id: 'stars60', text: 'Cumule 60 étoiles dans l\'almanach', reward: 800, done: (s) => collection(s).stars >= 60 },
   { id: 'disc14', text: 'Complète l\'almanach', reward: 1000, done: (s) => collection(s).bloomed >= SPECIES.length },
 ];
@@ -572,7 +728,7 @@ export function load(now: number): State {
       const s = JSON.parse(raw) as State;
       if (s.v === 1 && Array.isArray(s.slots) && s.slots.length === SLOT_COUNT) {
         // Sauvegarde de la première version : on garde tout et on ouvre les zones déjà utilisées.
-        s.v = SAVE_VERSION;
+        s.v = 2;
         s.packetIn = PACKET_EVERY;
         s.fresh = [];
         s.moved = 0;
@@ -584,9 +740,19 @@ export function load(now: number): State {
         // Sauvegarde de la deuxième version : on complète avec les nouveautés.
         const base = newState(now);
         Object.assign(s, { ...base, ...s, v: SAVE_VERSION, market: { ...base.market, ...s.market }, upgrades: { ...base.upgrades, ...s.upgrades } });
+        s.v = 3;
         for (const sl of s.slots) if (sl.plant) sl.plant.vr = 0;
         for (const h of s.stock) h.vr = 0;
         for (const d of Object.values(s.disc)) d.vars = [d.bloomed, false, false];
+      }
+      if (s.v === 3 && Array.isArray(s.slots) && s.slots.length === SLOT_COUNT) {
+        // Troisième version : atelier, commandes, nouvelle famille. Les pots s'adaptent aux plantes en place.
+        const base = newState(now);
+        Object.assign(s, { ...base, ...s, v: SAVE_VERSION, market: { ...base.market, ...s.market }, stats: { ...base.stats, ...s.stats } });
+        for (const sl of s.slots) {
+          const need = sl.plant ? sizeOf(SPECIES_BY_ID[sl.plant.sp]) : 1;
+          if (need > 1) sl.pd = { size: need, glaze: 0, pat: 0 };
+        }
       }
       if (s.v === SAVE_VERSION && Array.isArray(s.slots) && s.slots.length === SLOT_COUNT) return s;
     }

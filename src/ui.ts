@@ -1,4 +1,4 @@
-import { FAMILIES, FAMILY_IDS, LEVEL_WORDS, RARITIES, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, STAGES, ZONES } from './data';
+import { FAMILIES, FAMILY_IDS, GLAZES, LEVEL_WORDS, PATTERNS, POT_SIZES, RARITIES, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, STAGES, ZONES } from './data';
 import type { Family, Species } from './data';
 import type { Scene3D } from './scene';
 import { STYLES } from './styles';
@@ -12,16 +12,26 @@ const EMOJI: Record<string, string> = {
   haworthia: '🦓', echinocactus: '🌵', opuntia: '🌵', thym: '🌿', romarin: '🌿', ciboulette: '🧅', platycerium: '🦌', asplenium: '🪺',
   cattleya: '💮', dendrobium: '🌸', tournesol: '🌻', tulipe: '🌷', hibiscus: '🌺', semper: '🌷', monstera: '🌴', calathea: '🍃',
   pilea: '🪙', chlorophytum: '🕷️', anthurium: '❤️', dionee: '🪤', drosera: '💧', sarracenia: '🏺',
+  figuier: '🌳', hortensia: '💠', olivier: '🫒', citronnier: '🍋', camelia: '🏵️', erable: '🍁', bonsai: '🎍',
+  dahlia: '🌺', muguet: '🔔', rose: '🌹', pivoine: '🌸',
 };
 const ZONE_SHORT = ['Ombre', 'Bassin', 'Porte', 'Plein sud'];
 
-type SheetKind = 'vitrine' | 'none' | 'seed' | 'buypot' | 'plant' | 'harvest' | 'packets' | 'market' | 'shop' | 'almanac' | 'fiche' | 'zone';
+type SheetKind = 'atelier' | 'paint' | 'vitrine' | 'none' | 'seed' | 'buypot' | 'plant' | 'harvest' | 'packets' | 'market' | 'shop' | 'almanac' | 'fiche' | 'zone';
 
 const $ = (id: string) => document.getElementById(id)!;
 const fmt = (n: number) => Math.round(n).toLocaleString('fr-FR');
 const mult = (p: number) => '×' + p.toFixed(2).replace('.', ',');
 const stars = (n: number) => '⭐'.repeat(n) + '☆'.repeat(3 - n);
 const vname = (sp: Species, vr: number) => sp.name + (vr ? ' ' + sim.VARIANTS[vr] : '');
+const hex = (c: number) => '#' + c.toString(16).padStart(6, '0');
+const clock = (sec: number) => { const w = Math.max(0, Math.ceil(sec)); return `${Math.floor(w / 60)}:${String(w % 60).padStart(2, '0')}`; };
+/** Pastille de couleur et nom d'un pot. */
+function potLabel(pd: sim.PotDesign | undefined): string {
+  const g = GLAZES[pd?.glaze ?? 0];
+  const size = POT_SIZES[(pd?.size ?? 1) - 1];
+  return `<span class="potdot" style="background:${hex(g.color)};border-color:${hex(g.rim)}"></span>${size.name} · ${g.name.toLowerCase()}${pd?.pat ? ' à ' + PATTERNS[pd.pat].toLowerCase() : ''}`;
+}
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
 
 function rarTag(sp: Species): string {
@@ -78,6 +88,9 @@ export class UI {
   private lastHud = '';
   private lastQuest = '';
   private lastNav = '';
+  private lastOrder = '';
+  /** Pot en cours de peinture : sur un emplacement ou sur l'étagère. */
+  private paintAt: { where: 'slot' | 'shelf'; k: number } = { where: 'slot', k: 0 };
   private lastNewsT = 0;
   private pointerDown = false;
   private slotEls: HTMLButtonElement[] = [];
@@ -296,6 +309,46 @@ export class UI {
         break;
       case 'plant':
         if (sim.plantSeed(s, this.arg, arg)) { this.scene.pop(this.arg); this.float(this.arg, '🌱'); this.buzz(12); this.close(); }
+        break;
+      case 'craft':
+        if (sim.startPot(s, n)) { this.toast('Au four ! La cuisson continue même en ton absence.'); this.buzz(15); }
+        else this.toast(s.kiln ? 'Le four est déjà occupé.' : 'Pas assez d\'argile.');
+        break;
+      case 'kiln':
+        if (sim.collectKiln(s)) { this.toast('Pot défourné : il t\'attend sur l\'étagère.'); this.buzz(25); }
+        else if (s.shelf.length >= sim.SHELF_CAP) this.toast('L\'étagère est pleine : pose un pot dans la serre.');
+        break;
+      case 'place':
+        if (sim.placePot(s, this.arg, n)) { this.scene.pop(this.arg); this.buzz(20); this.open('seed', this.arg); }
+        break;
+      case 'stow':
+        if (sim.stowPot(s, this.arg)) { this.toast('Pot rangé sur l\'étagère de l\'atelier.'); this.close(); }
+        else this.toast('L\'étagère est pleine.');
+        break;
+      case 'paintslot': this.paintAt = { where: 'slot', k: this.arg }; this.open('paint', this.arg); break;
+      case 'paintshelf': this.paintAt = { where: 'shelf', k: n }; this.open('paint', this.arg); break;
+      case 'glaze':
+      case 'pattern': {
+        const cur = this.paintTarget();
+        const g = name === 'glaze' ? n : cur?.glaze ?? 0;
+        const pt = name === 'pattern' ? n : cur?.pat ?? 0;
+        if (!sim.glazeOpen(s, g)) this.toast(`Cet émail se débloque à ${GLAZES[g].stars} ⭐ dans l'almanach.`);
+        else if (sim.paintPot(s, this.paintAt.where, this.paintAt.k, g, pt)) { if (this.paintAt.where === 'slot') this.scene.pop(this.paintAt.k); this.buzz(15); }
+        else if (s.coins < sim.PAINT_PRICE) this.toast('Pas assez de pièces.');
+        break;
+      }
+      case 'cutting':
+        if (sim.harvestCutting(s, this.arg)) { this.float(this.arg, '✂️ +2 graines'); this.buzz(15); this.close(); }
+        break;
+      case 'deliver': {
+        const who = s.order?.who ?? '';
+        const clay = s.order?.clay ?? 0;
+        const gain = sim.deliver(s, this.arg);
+        if (gain) { this.coinFx(this.arg, gain); this.toast(`${who} est ravi : +${fmt(gain)} 🪙 et +${clay} argile.`); this.close(); }
+        break;
+      }
+      case 'orderinfo':
+        if (s.order) this.toast(`Fais fleurir une plante de la famille ${FAMILIES[s.order.family].name.toLowerCase()}, qualité ${sim.qualityWord(s.order.minQ).toLowerCase()} ou mieux, puis choisis « Livrer » à la récolte.`);
         break;
       case 'buypot':
         if (sim.buyPot(s, this.arg)) { this.scene.pop(this.arg); this.buzz(20); this.open('seed', this.arg); }
@@ -580,6 +633,11 @@ export class UI {
       : `<span class="chip">+${q.reward} 🪙</span>`}` : '';
     if (qh !== this.lastQuest && (force || !this.pointerDown)) { $('quest').innerHTML = qh; this.lastQuest = qh; }
 
+    // Commande en cours
+    const o = s.order;
+    const oh = o ? `<div class="qt" data-act="orderinfo"><small>Commande · ${clock(o.left)}</small><b>${esc(o.who)}</b> cherche ${FAMILIES[o.family].icon} ${FAMILIES[o.family].name.toLowerCase()}, ${sim.qualityWord(o.minQ).toLowerCase()} ou mieux</div><span class="chip">+${o.coins} 🪙 · +${o.clay} 🧱</span>` : '';
+    if (oh !== this.lastOrder && (force || !this.pointerDown)) { $('order').innerHTML = oh; this.lastOrder = oh; }
+
     // Navigation
     const seeds = Object.values(s.seeds).reduce((a, b) => a + b, 0);
     const wait = Math.max(0, Math.ceil(s.packetIn));
@@ -588,6 +646,7 @@ export class UI {
     const nav = [
       ['packets', '🎁', s.packets > 0 ? 'Sachets' : timer, s.packets > 0 ? String(s.packets) : '', s.packets > 0 && seeds === 0],
       ['almanac', '📖', 'Almanach', '', false],
+      ['atelier', '🏺', s.kiln && s.kiln.left > 0 ? clock(s.kiln.left) : 'Atelier', s.kiln && s.kiln.left <= 0 ? '!' : '', !!s.kiln && s.kiln.left <= 0],
       ['shop', '🛒', 'Boutique', '', false],
       ['market', '📈', 'Marché', hot ? '!' : '', false],
     ].map(([k, e, l, d, pulse]) => `<button class="navb${pulse ? ' pulse' : ''}" data-act="nav" data-arg="${k}"><span>${e}</span>${l}${d ? `<i class="dot">${d}</i>` : ''}</button>`).join('');
@@ -625,6 +684,8 @@ export class UI {
       case 'fiche': return this.ficheHtml(SPECIES_BY_ID[this.argId]);
       case 'zone': return this.zoneHtml();
       case 'vitrine': return this.vitrineHtml();
+      case 'atelier': return this.atelierHtml();
+      case 'paint': return this.paintHtml();
       default: return '';
     }
     void s;
@@ -669,27 +730,84 @@ export class UI {
       ${can ? '' : `<p class="sub center">Il te manque ${fmt(price - s.coins)} 🪙.</p>`}</div>`;
   }
 
+  private paintTarget(): sim.PotDesign | undefined {
+    const { where, k } = this.paintAt;
+    if (where === 'shelf') return this.s.shelf[k];
+    return this.s.slots[k]?.pot ? this.s.slots[k].pd ?? { size: 1, glaze: 0, pat: 0 } : undefined;
+  }
+
   private buyPotHtml(): string {
-    const price = sim.potPrice(this.s);
-    const can = this.s.coins >= price;
+    const s = this.s;
+    const price = sim.potPrice(s);
+    const can = s.coins >= price;
+    const shelf = s.shelf.map((pd, k) => `<button class="card" data-act="place" data-arg="${k}"><div class="ico">🏺</div><div class="mid"><div class="nm">${potLabel(pd)}</div><div class="ds">Façonné à l'atelier</div></div><div class="end">Poser</div></button>`).join('');
     return this.head('Emplacement libre') + `<div class="sh-body">${this.zoneLine(this.arg)}
-      <p class="sub">Achète un pot pour le poser ici. Tu pourras le déplacer ensuite, avec sa plante, vers n'importe quel emplacement libre.</p>
-      <button class="btn primary wide" data-act="buypot" ${can ? '' : 'disabled'}>Acheter un pot · ${fmt(price)} 🪙</button>
-      ${can ? '' : `<p class="sub center">Il te manque ${fmt(price - this.s.coins)} 🪙.</p>`}</div>`;
+      ${shelf ? `<h3>Tes pots façonnés</h3>${shelf}` : ''}
+      <h3>Pot tout fait</h3>
+      <p class="sub">Un petit pot en terre cuite, tout de suite. Les pots moyens et grands, pour les arbustes et les grandes plantes, se façonnent à l'atelier.</p>
+      <button class="btn primary wide" data-act="buypot" ${can ? '' : 'disabled'}>Acheter un petit pot · ${fmt(price)} 🪙</button>
+      ${can ? '' : `<p class="sub center">Il te manque ${fmt(price - s.coins)} 🪙.</p>`}
+      <button class="btn wide" data-act="nav" data-arg="atelier">🏺 Aller à l'atelier</button></div>`;
+  }
+
+  private atelierHtml(): string {
+    const s = this.s;
+    const k = s.kiln;
+    const kiln = !k ? '<p class="sub">Le four est vide. Choisis une taille de pot à façonner.</p>'
+      : k.left > 0
+        ? `<div class="kv"><span>${POT_SIZES[k.size - 1].name} en cuisson</span><b>${clock(k.left)}</b></div><div class="kilnbar"><i style="width:${Math.round((1 - k.left / POT_SIZES[k.size - 1].fire) * 100)}%"></i></div>`
+        : `<button class="btn gold wide" data-act="kiln">🔥 Défourner le ${POT_SIZES[k.size - 1].name.toLowerCase()}</button>`;
+    const sizes = POT_SIZES.map((d, n) => {
+      const ok = !k && s.clay >= d.clay;
+      const what = n === 0 ? 'Pour la plupart des plantes.' : n === 1 ? 'Pour les grandes plantes et les petits arbustes.' : 'Pour les arbres : figuier, olivier, citronnier, érable.';
+      return `<div class="card"><div class="ico" style="font-size:${18 + n * 7}px">🏺</div><div class="mid"><div class="nm">${d.name}</div><div class="ds">${what} Cuisson ${d.fire < 60 ? d.fire + ' s' : Math.round(d.fire / 60) + ' min'}.</div></div><button class="btn small ${ok ? 'primary' : ''}" data-act="craft" data-arg="${n + 1}" ${ok ? '' : 'disabled'}>${d.clay} 🧱</button></div>`;
+    }).join('');
+    const shelf = s.shelf.map((pd, n) => `<div class="card"><div class="ico">🏺</div><div class="mid"><div class="nm">${potLabel(pd)}</div><div class="ds">Touche un emplacement libre de la serre pour le poser.</div></div><button class="btn small" data-act="paintshelf" data-arg="${n}">🎨 Peindre</button></div>`).join('');
+    const next = sim.CLAY_EVERY - s.clayAcc;
+    return this.head('🏺 Atelier de poterie') + `<div class="sh-body">
+      <p class="sub">Façonne tes pots, cuis-les au four puis peins-les. Un émail accordé à la famille de la plante la fait pousser ${Math.round((sim.HARMONY_SPEED - 1) * 100)} % plus vite.</p>
+      <div class="kv"><span>🧱 Argile</span><b>${s.clay} / ${sim.CLAY_CAP}${s.clay < sim.CLAY_CAP ? ` · +1 dans ${clock(next)}` : ' · bac plein'}</b></div>
+      <p class="sub">L'argile se dépose toute seule dans le bac. Les commandes des clients en rapportent aussi.</p>
+      <h3>Four</h3>${kiln}
+      <h3>Tour de potier</h3>${sizes}
+      <h3>Étagère (${s.shelf.length}/${sim.SHELF_CAP})</h3>${shelf || '<p class="sub">Aucun pot en attente.</p>'}
+      <p class="sub">Pour peindre un pot déjà posé, touche-le dans la serre puis choisis « Peindre le pot ».</p></div>`;
+  }
+
+  private paintHtml(): string {
+    const s = this.s;
+    const pd = this.paintTarget();
+    if (!pd) return this.head('🎨 Peinture') + '<div class="sh-body"><p class="sub">Ce pot n\'est plus là.</p></div>';
+    const plant = this.paintAt.where === 'slot' ? s.slots[this.paintAt.k].plant : null;
+    const fav = plant ? FAMILIES[SPECIES_BY_ID[plant.sp].family] : null;
+    const st = sim.collection(s).stars;
+    const glazes = GLAZES.map((g, n) => {
+      const open = st >= g.stars;
+      return `<button class="sw-b${pd.glaze === n ? ' on' : ''}${open ? '' : ' lock'}" data-act="glaze" data-arg="${n}"><i style="background:${hex(g.color)};border-color:${hex(g.rim)}"></i>${g.name}${open ? (fav && fav.glaze === n ? '<small>💚 accordé</small>' : '') : `<small>🔒 ${g.stars} ⭐</small>`}</button>`;
+    }).join('');
+    const pats = PATTERNS.map((nm, n) => `<button class="btn small ${pd.pat === n ? 'primary' : ''}" data-act="pattern" data-arg="${n}">${nm}</button>`).join('');
+    return this.head('🎨 Peinture') + `<div class="sh-body">
+      <div class="kv"><span>Ce pot</span><b>${potLabel(pd)}</b></div>
+      <p class="sub">Chaque coup de pinceau coûte ${sim.PAINT_PRICE} 🪙. Les émaux se débloquent avec les étoiles de l'almanach (tu en as ${st}).</p>
+      ${fav ? `<p class="sub">${fav.icon} Les ${fav.name.toLowerCase()} préfèrent l'émail <b>${GLAZES[fav.glaze].name.toLowerCase()}</b>.</p>` : ''}
+      <h3>Émail</h3><div class="swatches">${glazes}</div>
+      <h3>Motif</h3><div class="row">${pats}</div></div>`;
   }
 
   private seedHtml(): string {
     const s = this.s;
     const c = sim.zoneClimate(s, sim.zoneOfSlot(this.arg));
     const ids = Object.keys(s.seeds).sort((a, b) => sim.fitOf(SPECIES_BY_ID[b], c) - sim.fitOf(SPECIES_BY_ID[a], c));
+    const size = sim.potSize(s.slots[this.arg]);
     const list = ids.map((id) => {
       const sp = SPECIES_BY_ID[id];
-      return `<button class="card" data-act="plant" data-arg="${id}"><div class="ico">${EMOJI[id]}</div><div class="mid"><div class="nm">${esc(sp.name)} ${rarTag(sp)}</div>${needsChips(sp, c)}</div><div class="end">×${s.seeds[id]}</div></button>`;
+      const small = sim.sizeOf(sp) > size;
+      return `<button class="card" data-act="plant" data-arg="${id}" ${small ? 'disabled style="opacity:.55"' : ''}><div class="ico">${EMOJI[id]}</div><div class="mid"><div class="nm">${esc(sp.name)} ${rarTag(sp)}</div>${small ? `<div class="ds">🏺 Il lui faut un ${POT_SIZES[sim.sizeOf(sp) - 1].name.toLowerCase()} : façonne-le à l'atelier.</div>` : needsChips(sp, c)}</div><div class="end">×${s.seeds[id]}</div></button>`;
     }).join('');
     const empty = `<p class="sub">Tu n'as plus de graines.</p>${s.packets > 0
       ? '<button class="btn gold wide" data-act="free">🎁 Ouvrir un sachet gratuit</button>'
       : `<button class="btn primary wide" data-act="buypacket" ${s.coins >= sim.PRICES.packet ? '' : 'disabled'}>Sachet mystère · ${sim.PRICES.packet} 🪙</button>`}`;
-    return this.head('Que semer ici ?') + `<div class="sh-body">${this.zoneLine(this.arg)}${ids.length ? `<p class="sub">En vert : ce qui convient à cet emplacement.</p>${list}` : empty}<button class="btn wide" data-act="move">✋ Déplacer ce pot</button></div>`;
+    return this.head('Que semer ici ?') + `<div class="sh-body">${this.zoneLine(this.arg)}${ids.length ? `<p class="sub">En vert : ce qui convient à cet emplacement.</p>${list}` : empty}<div class="kv"><span>Ce pot</span><b>${potLabel(s.slots[this.arg].pd)}</b></div><div class="row"><button class="btn small" data-act="move">✋ Déplacer</button><button class="btn small" data-act="paintslot">🎨 Peindre</button><button class="btn small" data-act="stow">📥 Ranger</button></div></div>`;
   }
 
   private plantHtml(): string {
@@ -707,9 +825,11 @@ export class UI {
       <div class="prog"><i style="width:${Math.round(p.prog * 100)}%"></i></div>
       <div class="kv"><span>Qualité</span><b>${sim.qualityWord(p.q)}</b></div>
       <div class="kv"><span>Arrosage</span><b>${s.upgrades.water ? 'Automatique' : p.water > 0 ? Math.round(p.water * 100) + ' %' : 'À sec : elle tourne au ralenti'}</b></div>
+      <div class="kv"><span>Pot</span><b>${potLabel(s.slots[this.arg].pd)}${sim.harmony(s.slots[this.arg]) ? ' 💚' : ''}</b></div>
+      ${sim.harmony(s.slots[this.arg]) ? `<p class="sub">💚 Émail accordé à sa famille : elle pousse ${Math.round((sim.HARMONY_SPEED - 1) * 100)} % plus vite.</p>` : ''}
       ${this.zoneLine(this.arg)}${conditions(sp, c)}
       <div class="row">${s.upgrades.water ? '' : `<button class="btn primary" data-act="water" ${p.water > 0.95 ? 'disabled' : ''}>💧 Arroser</button>`}<button class="btn" data-act="fert" ${s.fert > 0 && p.prog < 1 ? '' : 'disabled'}>🧪 Engrais (${s.fert})</button></div>
-      <div class="row"><button class="btn small" data-act="move">✋ Déplacer</button><button class="btn small" data-act="fiche" data-arg="${sp.id}">📖 Fiche</button></div></div>`;
+      <div class="row"><button class="btn small" data-act="move">✋ Déplacer</button><button class="btn small" data-act="paintslot">🎨 Peindre le pot</button><button class="btn small" data-act="fiche" data-arg="${sp.id}">📖 Fiche</button></div></div>`;
   }
 
   private marketHint(p: number): string {
@@ -733,10 +853,11 @@ export class UI {
       <div class="big">${stars(n)}</div>
       <div class="kv"><span>Ce spécimen</span><b>${sim.qualityWord(p.q)}</b></div>
       <p class="sub">${next}</p>
+      ${s.order && sim.orderFits(s, p) ? `<button class="btn gold wide" data-act="deliver">📦 Livrer à ${esc(s.order.who)} · ${fmt(sim.saleValue(s, p) + s.order.coins)} 🪙 +${s.order.clay} 🧱</button>` : ''}
       <button class="btn primary wide" data-act="sell">Récolter et vendre · ${fmt(sim.saleValue(s, p))} 🪙</button>
       <p class="sub center">Cours ${FAMILIES[sp.family].name.toLowerCase()} : <b class="${level(m.p)}">${mult(m.p)}</b>. ${this.marketHint(m.p)}</p>
       <button class="btn gold wide" data-act="show" ${freeShow ? '' : 'disabled'}>🏛️ Exposer en vitrine${freeShow ? '' : ' (pleine)'}</button>
-      <div class="row"><button class="btn small" data-act="store" ${full ? 'disabled' : ''}>📦 Réserve (${s.stock.length}/${s.stockCap})</button><button class="btn small" data-act="move">✋ Déplacer</button><button class="btn small" data-act="fiche" data-arg="${sp.id}">📖 Fiche</button></div></div>`;
+      <div class="row"><button class="btn small" data-act="cutting">✂️ Bouturer</button><button class="btn small" data-act="store" ${full ? 'disabled' : ''}>📦 Réserve (${s.stock.length}/${s.stockCap})</button><button class="btn small" data-act="move">✋ Déplacer</button><button class="btn small" data-act="fiche" data-arg="${sp.id}">📖 Fiche</button></div></div>`;
   }
 
   private packetsHtml(): string {
@@ -833,6 +954,8 @@ export class UI {
       <h3>Ce qu'elle aime</h3>${needsChips(sp)}
       <p class="sub">Idéal : ${ZONES.filter((z) => sim.fitOf(sp, sim.zoneClimate(this.s, z)) >= 1).map((z) => this.zname(ZONES.indexOf(z))).join(', ') || 'aucun coin parfait pour l\'instant, cherche le moins mauvais ou équipe la serre'}.</p>
       <div class="kv"><span>Taille adulte</span><b>${esc(sp.height)}</b></div>
+      <div class="kv"><span>Pot nécessaire</span><b>${POT_SIZES[sim.sizeOf(sp) - 1].name}${sim.sizeOf(sp) > 1 ? ' ou plus grand' : ''}</b></div>
+      <div class="kv"><span>Émail préféré</span><b>${GLAZES[FAMILIES[sp.family].glaze].name}</b></div>
       ${sp.pets ? `<div class="kv"><span>Chats et chiens</span><b>${sp.pets === 'ok' ? 'Sans danger' : 'Toxique si mâchouillée'}</b></div>` : ''}
       <h3>Dans ta collection</h3>
       <div class="kv"><span>Variantes obtenues</span><b>${d?.bloomed ? 'Normale' : 'Aucune'}${d?.vars[1] ? ' · Panachée 🤍' : ''}${d?.vars[2] ? ' · Dorée 💛' : ''}</b></div>

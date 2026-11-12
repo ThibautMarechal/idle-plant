@@ -534,6 +534,113 @@ function buildNest(f: number, leaf: number, g: THREE.Group, rnd: () => number): 
   }
 }
 
+/** Arbuste sur tronc : figuier, olivier, citronnier, érable, bonsaï. */
+function buildTree(sp: Species, f: number, buds: boolean, bloom: boolean, leaf: number, g: THREE.Group, rnd: () => number): void {
+  const bonsai = sp.id === 'bonsai';
+  const bark = sp.id === 'olivier' ? 0x8a8272 : sp.id === 'erable' ? 0x5a3f36 : 0x7a5a3c;
+  const h = (bonsai ? 0.42 : 0.86) * f + 0.1;
+  const lean = bonsai ? 0.5 : 0.08;
+  const trunk = mesh(GEO.cyl, bark, 0.05 * f + 0.02, h, 0.05 * f + 0.02);
+  trunk.rotation.z = -lean;
+  g.add(trunk);
+  const top = new THREE.Vector3(Math.sin(lean) * h, Math.cos(lean) * h, 0);
+  const n = Math.round((bonsai ? 3 : 5) + f * 4);
+  const crowns: THREE.Vector3[] = [];
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 + rnd();
+    const r = (i === 0 ? 0 : 0.13 + rnd() * 0.13) * f;
+    const s = (bonsai ? 0.11 : 0.13) * f + rnd() * 0.04 * f + 0.03;
+    const c = new THREE.Vector3(top.x + Math.cos(a) * r, top.y + (rnd() - 0.3) * 0.22 * f + (bonsai ? 0 : 0.08), top.z + Math.sin(a) * r);
+    if (bonsai && i > 0) c.y -= 0.12 * (i % 2);
+    const br = mesh(GEO.cyl, bark, 0.016, c.clone().sub(top).length(), 0.016);
+    br.position.copy(top);
+    br.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), c.clone().sub(top).normalize());
+    g.add(br);
+    const b = mesh(bonsai ? GEO.blob : GEO.rough, leaf, s * 1.15, s * (bonsai ? 0.55 : 0.85), s * 1.15);
+    b.position.copy(c);
+    b.rotation.y = rnd() * 3;
+    g.add(b);
+    crowns.push(c.clone().setY(c.y + s * 0.5));
+    crowns.push(new THREE.Vector3(c.x + Math.cos(a) * s * 0.9, c.y - s * 0.1, c.z + Math.sin(a) * s * 0.9));
+  }
+  if (!buds && !bloom) return;
+  crowns.forEach((c, i) => {
+    if (i % (bloom ? 2 : 4)) return;
+    // En fleur : des fruits pour les arbres fruitiers, de jeunes pousses claires pour les autres.
+    const size = sp.id === 'citronnier' ? 0.06 : sp.id === 'figuier' ? 0.05 : 0.04;
+    const fr = mesh(GEO.blob, bloom ? sp.flower : tint(sp.flower, 0.5), size * (bloom ? 1 : 0.6), size * (bloom ? 1.25 : 0.7), size * (bloom ? 1 : 0.6));
+    fr.position.copy(c);
+    g.add(fr);
+  });
+}
+
+/** Buisson rond couvert de grosses boules de fleurs : hortensia, camélia. */
+function buildShrub(sp: Species, f: number, buds: boolean, bloom: boolean, leaf: number, g: THREE.Group, rnd: () => number): void {
+  const n = Math.round(5 + f * 5);
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 + rnd() * 0.5;
+    const r = (i === 0 ? 0 : 0.14 + rnd() * 0.14) * f;
+    const y = (0.2 + rnd() * 0.22) * f + 0.05;
+    const s = (0.17 + rnd() * 0.06) * f + 0.03;
+    const st = stalk(0x6b5a3a, y, 0.02);
+    st.position.set(Math.cos(a) * r * 0.5, 0, Math.sin(a) * r * 0.5);
+    g.add(st);
+    const b = mesh(GEO.rough, leaf, s, s * 0.85, s);
+    b.position.set(Math.cos(a) * r, y, Math.sin(a) * r);
+    b.rotation.set(rnd() * 3, rnd() * 3, rnd() * 3);
+    g.add(b);
+    if ((buds && i % 2 === 0) || bloom) {
+      const k = bloom ? 0.1 + rnd() * 0.03 : 0.045;
+      const ball = mesh(GEO.blob, bloom ? sp.flower : tint(sp.flower, 0.6), k, k * 0.85, k);
+      ball.position.set(Math.cos(a) * (r + s * 0.45), y + s * 0.6, Math.sin(a) * (r + s * 0.45));
+      g.add(ball);
+      if (bloom && sp.id === 'camelia') {
+        const heart = mesh(GEO.rough, 0xf6d04a, k * 0.35, k * 0.35, k * 0.35);
+        heart.position.copy(ball.position).setY(ball.position.y + k * 0.7);
+        g.add(heart);
+      }
+    }
+  }
+}
+
+/** Tiges feuillues portant de grosses fleurs doubles : rosier, pivoine, dahlia. */
+function buildRose(sp: Species, f: number, buds: boolean, bloom: boolean, leaf: number, g: THREE.Group, rnd: () => number): void {
+  const n = Math.round(3 + f * 3);
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 + rnd() * 0.6;
+    const h = (0.38 + rnd() * 0.3) * f + 0.08;
+    const p = new THREE.Group();
+    p.rotation.order = 'YXZ';
+    p.rotation.y = a;
+    p.rotation.z = -(i === 0 ? 0.05 : 0.22 + rnd() * 0.25);
+    p.add(stalk(0x4f7a3f, h, 0.014));
+    for (let k = 1; k <= 3; k++) {
+      const l = mesh(GEO.blob, leaf, 0.075 * f + 0.015, 0.014, 0.045 * f + 0.01);
+      l.position.set((k % 2 ? 1 : -1) * 0.07, h * (k / 4), 0);
+      l.rotation.z = (k % 2 ? -1 : 1) * 0.5;
+      p.add(l);
+    }
+    if (buds || bloom) {
+      const k = bloom ? 0.085 + rnd() * 0.025 : 0.035;
+      const head = new THREE.Group();
+      head.position.y = h;
+      if (bloom) {
+        // Fleur double : deux couronnes de pétales et un cœur.
+        const outer = flower(sp.flower, sp.flower, k * 1.5);
+        const inner = flower(tint(sp.flower, 0.85), 0xf6d04a, k);
+        inner.position.y = k * 0.3;
+        inner.rotation.y = 0.6;
+        head.add(outer, inner);
+        head.rotation.set((rnd() - 0.5) * 0.6, rnd() * 3, (rnd() - 0.5) * 0.6);
+      } else {
+        head.add(mesh(GEO.blob, sp.flower, k, k * 1.4, k));
+      }
+      p.add(head);
+    }
+    g.add(p);
+  }
+}
+
 /** Construit le modèle d'une plante. `stage` de 0 (graine) à 4 (floraison), `health` de 0 à 1. */
 export function buildPlant(sp: Species, stage: number, health: number, variant = 0): THREE.Group {
   const g = new THREE.Group();
@@ -576,12 +683,16 @@ export function buildPlant(sp: Species, stage: number, health: number, variant =
     case 'pitcher': buildPitcher(sp, f, buds, bloom, leaf, g, rnd); break;
     case 'stem': buildStem(sp, f, buds, bloom, leaf, g, rnd); break;
     case 'nest': buildNest(f, leaf, g, rnd); break;
+    case 'tree': buildTree(sp, f, buds, bloom, leaf, g, rnd); break;
+    case 'shrub': buildShrub(sp, f, buds, bloom, leaf, g, rnd); break;
+    case 'rose': buildRose(sp, f, buds, bloom, leaf, g, rnd); break;
   }
   g.scale.setScalar(1.25);
   return g;
 }
 
-export function buildPot(color = 0xc9714a, rimColor = 0xd9825a): THREE.Group {
+/** `pat` : 0 uni, 1 bandes, 2 pois (dans la couleur du rebord). */
+export function buildPot(color = 0xc9714a, rimColor = 0xd9825a, pat = 0): THREE.Group {
   const g = new THREE.Group();
   const body = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.26, 0.42, 10), mat(color));
   body.position.y = 0.21;
@@ -594,6 +705,23 @@ export function buildPot(color = 0xc9714a, rimColor = 0xd9825a): THREE.Group {
   soil.position.y = 0.47;
   soil.receiveShadow = true;
   g.add(body, rim, soil);
+  if (pat === 1) {
+    for (const [y, r] of [[0.14, 0.305], [0.27, 0.338]]) {
+      const band = new THREE.Mesh(new THREE.CylinderGeometry(r + 0.012, r - 0.005, 0.05, 10), mat(rimColor));
+      band.position.y = y;
+      g.add(band);
+    }
+  } else if (pat === 2) {
+    for (let k = 0; k < 10; k++) {
+      const a = (k / 10) * Math.PI * 2;
+      const y = k % 2 ? 0.15 : 0.29;
+      const r = 0.26 + (y / 0.42) * 0.1 + 0.005;
+      const dot = new THREE.Mesh(GEO.blob, mat(rimColor));
+      dot.scale.set(0.035, 0.035, 0.035);
+      dot.position.set(Math.cos(a) * r, y, Math.sin(a) * r);
+      g.add(dot);
+    }
+  }
   return g;
 }
 export const POT_TOP = 0.485;

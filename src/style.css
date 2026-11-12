@@ -82,11 +82,11 @@ button { font: inherit; color: inherit; border: 0; background: none; padding: 0;
 
 /* Bas d'écran */
 #bottom { position: absolute; left: 0; right: 0; bottom: 0; padding: 0 10px calc(10px + var(--safe-b)); display: flex; flex-direction: column; gap: 8px; }
-#quest { background: var(--cream); border-radius: 16px; box-shadow: var(--shadow); padding: 9px 12px; display: flex; align-items: center; gap: 10px; font-size: 13px; }
-#quest:empty { display: none; }
-#quest .qt { flex: 1; line-height: 1.25; }
-#quest small { display: block; color: var(--soft); font-weight: 700; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; }
-#nav { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+#quest, #order { background: var(--cream); border-radius: 16px; box-shadow: var(--shadow); padding: 9px 12px; display: flex; align-items: center; gap: 10px; font-size: 13px; }
+#quest:empty, #order:empty { display: none; }
+#quest .qt, #order .qt { flex: 1; line-height: 1.25; }
+#quest small, #order small { display: block; color: var(--soft); font-weight: 700; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; }
+#nav { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
 .navb { position: relative; background: var(--cream); border-radius: 18px; box-shadow: var(--shadow); padding: 9px 2px 7px; display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 11.5px; font-weight: 800; }
 .navb span { font-size: 24px; line-height: 1.1; }
 .navb:active, .btn:active, .card:active { transform: scale(0.96); }
@@ -204,7 +204,7 @@ body[data-style="bd"] {
   --green: #2fc46f; --green-d: #15803f; --gold: #ffcf33; --red: #ff5a4d;
   --shadow: 3px 4px 0 #1f1a2b;
 }
-body[data-style="bd"] :is(.pill, .navb, .tabs, #quest, .badge, .showb, .zinfo, .card, .btn, .rc, .sp, .mrow, .cond, .theme, .zlock, .sh-head .x, .chip, .fact, .packet, #toast) { border: 2.5px solid var(--ink); }
+body[data-style="bd"] :is(.pill, .navb, .tabs, #quest, #order, .badge, .showb, .zinfo, .card, .btn, .rc, .sp, .mrow, .cond, .theme, .zlock, .sh-head .x, .chip, .fact, .packet, #toast) { border: 2.5px solid var(--ink); }
 body[data-style="bd"] #sheet { border-top: 3px solid var(--ink); border-radius: 22px 22px 0 0; }
 body[data-style="bd"] .btn { box-shadow: 0 4px 0 var(--ink); }
 body[data-style="bd"] .btn:not(.primary):not(.gold) { background: #fff; }
@@ -230,7 +230,7 @@ body[data-style="argile"] {
   --green: #8ccaa3; --green-d: #62a682; --gold: #f4d394; --red: #ee9f93;
   --shadow: 0 10px 22px rgba(160, 120, 100, 0.22), inset 0 -4px 0 rgba(160, 120, 100, 0.08), inset 0 2px 0 rgba(255, 255, 255, 0.9);
 }
-body[data-style="argile"] :is(.pill, .navb, #quest, .tabs) { border-radius: 26px; }
+body[data-style="argile"] :is(.pill, .navb, #quest, #order, .tabs) { border-radius: 26px; }
 body[data-style="argile"] :is(.card, .mrow, .sp, .cond, .theme, .rc) { border: 0; border-radius: 24px; background: #fff; box-shadow: 0 6px 14px rgba(160, 120, 100, 0.14), inset 0 -3px 0 rgba(160, 120, 100, 0.07); }
 body[data-style="argile"] .btn { border-radius: 22px; background: #f6e9de; box-shadow: 0 5px 0 #e6d3c5, 0 10px 16px rgba(160, 120, 100, 0.18); }
 body[data-style="argile"] .btn.primary { background: var(--green); box-shadow: 0 5px 0 var(--green-d), 0 10px 16px rgba(98, 166, 130, 0.3); }
@@ -254,7 +254,7 @@ body[data-style="pixel"] {
   letter-spacing: -0.03em;
 }
 body[data-style="pixel"] * { border-radius: 0 !important; }
-body[data-style="pixel"] :is(.pill, .navb, .tabs, #quest, .badge, .showb, .zinfo, .card, .btn, .rc, .sp, .mrow, .cond, .theme, .zlock, .sh-head .x, .packet, #toast) { border: 2px solid var(--ink); }
+body[data-style="pixel"] :is(.pill, .navb, .tabs, #quest, #order, .badge, .showb, .zinfo, .card, .btn, .rc, .sp, .mrow, .cond, .theme, .zlock, .sh-head .x, .packet, #toast) { border: 2px solid var(--ink); }
 body[data-style="pixel"] #sheet { border-top: 4px solid var(--ink); box-shadow: none; }
 body[data-style="pixel"] .btn:not(.primary):not(.gold) { background: #e9dcb4; }
 body[data-style="pixel"] .btn { box-shadow: 4px 4px 0 var(--ink); text-transform: uppercase; font-size: 13px; }
@@ -276,3 +276,19 @@ body[data-style="pixel"] #modal { background: repeating-conic-gradient(#f6ecd0 0
 body[data-style="pixel"] #toast { background: var(--ink); box-shadow: 4px 4px 0 var(--gold); }
 body[data-style="pixel"] .theme.on { box-shadow: 4px 4px 0 var(--green); }
 body[data-style="pixel"] .sh-head h2, body[data-style="pixel"] .mtitle { text-transform: uppercase; font-size: 17px; }
+
+/* Atelier de poterie, commandes */
+#order { padding: 7px 12px; font-size: 12.5px; }
+#order .qt b { font-weight: 800; }
+.navb { font-size: 10.5px; }
+.swatches { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.sw-b { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px; border-radius: 14px; background: #fff; border: 2px solid var(--line); font-size: 11px; font-weight: 800; text-align: center; line-height: 1.2; }
+.sw-b i { width: 38px; height: 38px; border-radius: 50%; border: 4px solid; display: block; }
+.sw-b.on { border-color: var(--green); box-shadow: 0 0 0 2px var(--green); }
+.sw-b.lock { opacity: 0.55; }
+.sw-b small { font-weight: 700; color: var(--soft); font-size: 10px; }
+.potdot { display: inline-block; width: 13px; height: 13px; border-radius: 50%; border: 2.5px solid; vertical-align: -2px; margin-right: 4px; }
+.kilnbar { height: 14px; border-radius: 7px; background: #efe6d0; overflow: hidden; }
+.kilnbar i { display: block; height: 100%; background: linear-gradient(90deg, #f2b441, #e2604f); }
+body[data-style="pixel"] .navb { font-size: 9px; }
+body[data-style="pixel"] .navb span { font-size: 20px; }

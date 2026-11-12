@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { SLOT_COUNT, SLOTS_PER_ZONE, SPECIES_BY_ID, ZONES } from './data';
+import { GLAZES, POT_SIZES, SLOT_COUNT, SLOTS_PER_ZONE, SPECIES_BY_ID, ZONES } from './data';
 import { buildPlant, buildPot, mat, POT_TOP } from './plants3d';
 import { fitOf, stageOf, zoneClimate, zoneOfSlot } from './sim';
 import type { State } from './sim';
@@ -14,6 +14,7 @@ import type { Theme, V3 } from './themes';
 interface SlotView {
   root: THREE.Group;
   pot: THREE.Group | null;
+  potKey: string;
   marker: THREE.Mesh;
   crate: THREE.Object3D;
   drip: THREE.Object3D;
@@ -211,7 +212,7 @@ export class Scene3D {
     drip.visible = false;
     root.add(drip);
     this.world.add(root, crate);
-    return { root, pot: null, marker, crate, drip, plant: null, key: '', pop: 0, base };
+    return { root, pot: null, potKey: '', marker, crate, drip, plant: null, key: '', pop: 0, base };
   }
 
   private cam(p: THREE.Vector3): THREE.Vector3 {
@@ -297,14 +298,21 @@ export class Scene3D {
       v.crate.visible = !open;
       v.marker.visible = !slot.pot && open;
       v.drip.visible = slot.pot && s.upgrades.water;
-      if (!slot.pot && v.pot) {
-        v.root.remove(v.pot);
+      // Le pot : taille, émail et motif viennent de l'atelier ; sans dessin, c'est le pot du décor.
+      const pd = slot.pd;
+      const scale = slot.pot ? POT_SIZES[(pd?.size ?? 1) - 1].scale : 1;
+      const potKey = slot.pot ? `${pd?.size ?? 1}|${pd?.glaze ?? -1}|${pd?.pat ?? 0}` : '';
+      if (potKey !== v.potKey) {
+        if (v.pot) v.root.remove(v.pot);
         v.pot = null;
-      }
-      if (slot.pot && !v.pot) {
-        v.pot = finish(buildPot(this.theme.pot[0], this.theme.pot[1]));
-        v.root.add(v.pot);
-        if (v.key !== '') v.pop = 1;
+        if (slot.pot) {
+          const gl = pd && (pd.glaze > 0 || pd.pat > 0) ? GLAZES[pd.glaze] : null;
+          v.pot = finish(buildPot(gl ? gl.color : this.theme.pot[0], gl ? gl.rim : this.theme.pot[1], pd?.pat ?? 0));
+          v.pot.scale.setScalar(scale);
+          v.root.add(v.pot);
+          if (v.key !== '') v.pop = 1;
+        }
+        v.potKey = potKey;
       }
       const p = slot.plant;
       let key = slot.pot ? 'pot' : 'none';
@@ -317,12 +325,12 @@ export class Scene3D {
         if (key !== v.key) {
           if (v.plant) v.root.remove(v.plant);
           v.plant = finish(buildPlant(sp, st, health, st >= 2 ? p.vr : 0));
-          v.plant.position.y = POT_TOP;
           v.root.add(v.plant);
           if (v.key.split('|')[1] !== key.split('|')[1]) v.pop = 1;
         }
         const frac = st >= 4 ? 1 : p.prog * 4 - st;
-        v.plant!.userData.grow = 0.82 + 0.18 * frac;
+        v.plant!.position.y = POT_TOP * scale;
+        v.plant!.userData.grow = (0.82 + 0.18 * frac) * [1, 1.1, 1.2][(sp.size ?? 1) - 1];
       } else if (v.plant) {
         v.root.remove(v.plant);
         v.plant = null;
