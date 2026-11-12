@@ -313,3 +313,21 @@ export const SEASONS: { name: string; icon: string; fams: Family[]; text: string
   { name: 'Automne', icon: '🍂', fams: ['arbustes', 'fougeres'], text: 'Air doux et humide : les arbustes et les fougères en profitent.' },
   { name: 'Hiver', icon: '❄️', fams: ['orchidees', 'carnivores'], text: 'Au chaud dans la serre, les orchidées et les carnivores s\'épanouissent.' },
 ];
+
+/** Couleurs du pinceau : les émaux (débloqués par les étoiles) puis quelques couleurs libres. */
+export const PAINTS: { name: string; color: number; stars: number }[] = [
+  ...GLAZES.map((g) => ({ name: g.name, color: g.color, stars: g.stars })),
+  { name: 'Blanc', color: 0xffffff, stars: 0 },
+  { name: 'Noir', color: 0x2b2b33, stars: 0 },
+  { name: 'Rouge', color: 0xd8453a, stars: 0 },
+  { name: 'Vert', color: 0x4fae6a, stars: 0 },
+  { name: 'Jaune', color: 0xf6d04a, stars: 0 },
+];
+/** Forme d'un pot : rayons de bas en haut, modelés au tour. */
+export const POT_RINGS = 7;
+export const DEFAULT_PROF = [0.26, 0.277, 0.293, 0.31, 0.327, 0.343, 0.36];
+export const PROF_MIN = 0.15;
+export const PROF_MAX = 0.48;
+/** Grille de peinture d'un pot : PAINT_W cases autour, PAINT_H en hauteur. */
+export const PAINT_W = 144;
+export const PAINT_H = 48;

@@ -1,7 +1,9 @@
-import { BASE_SLOTS, SEASONS, FAMILIES, FAMILY_IDS, GLAZES, LEVEL_WORDS, PATTERNS, POT_SIZES, RARITIES, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, STAGES, ZONES } from './data';
+import { BASE_SLOTS, SEASONS, FAMILIES, FAMILY_IDS, GLAZES, LEVEL_WORDS, PAINTS, PATTERNS, POT_SIZES, RARITIES, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, STAGES, ZONES } from './data';
 import type { Family, Species } from './data';
 import type { Scene3D } from './scene';
-import { STYLES } from './styles';
+import { buildPlant } from './plants3d';
+import { Studio } from './studio';
+import { finish, STYLES } from './styles';
 import { THEMES, themeOf } from './themes';
 import * as sim from './sim';
 import { play, setMuted, unlock } from './sound';
@@ -31,7 +33,7 @@ const clock = (sec: number) => { const w = Math.max(0, Math.ceil(sec)); return `
 function potLabel(pd: sim.PotDesign | undefined): string {
   const g = GLAZES[pd?.glaze ?? 0];
   const size = POT_SIZES[(pd?.size ?? 1) - 1];
-  return `<span class="potdot" style="background:${hex(g.color)};border-color:${hex(g.rim)}"></span>${size.name} · ${g.name.toLowerCase()}${pd?.pat ? ' à ' + PATTERNS[pd.pat].toLowerCase() : ''}`;
+  return `<span class="potdot" style="background:${hex(g.color)};border-color:${hex(g.rim)}"></span>${size.name} · ${g.name.toLowerCase()}${pd?.paint ? ', peint à la main' : pd?.pat ? ' à ' + PATTERNS[pd.pat].toLowerCase() : ''}${pd?.prof ? ', tourné main' : ''}`;
 }
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
 
@@ -92,6 +94,8 @@ export class UI {
   private lastOrder = '';
   /** Pot en cours de peinture : sur un emplacement ou sur l'étagère. */
   private paintAt: { where: 'slot' | 'shelf'; k: number } = { where: 'slot', k: 0 };
+  private studio!: Studio;
+  private viewSlot = -1;
   private lastNewsT = 0;
   private pointerDown = false;
   private slotEls: HTMLButtonElement[] = [];
@@ -136,6 +140,8 @@ export class UI {
     this.showEl.onclick = () => { if (Date.now() - this.swipedAt > 350) this.open('vitrine'); };
     overlay.appendChild(this.showEl);
     this.applyTheme();
+    $('studio').innerHTML = '<div class="st-head"><h2 id="st-title"></h2><button class="x" data-act="st-close">✕</button></div><p id="st-hint"></p><canvas id="stgl"></canvas><div id="st-tools"></div>';
+    this.studio = new Studio($('stgl') as HTMLCanvasElement);
     const app = $('app');
     let sx = 0, sy = 0, st = 0, onScene = false;
     setMuted(!!this.s.mute);
@@ -143,7 +149,7 @@ export class UI {
       unlock();
       this.pointerDown = true;
       sx = e.clientX; sy = e.clientY; st = Date.now();
-      onScene = !(e.target as HTMLElement).closest('#sheet, #modal, #bottom, #hud, #backdrop');
+      onScene = !(e.target as HTMLElement).closest('#sheet, #modal, #bottom, #hud, #backdrop, #studio');
     });
     app.addEventListener('pointermove', (e) => {
       if (this.drag < 0) {
@@ -373,18 +379,37 @@ export class UI {
         if (sim.stowPot(s, this.arg)) { this.toast('Pot rangé sur l\'étagère de l\'atelier.'); this.close(); }
         else this.toast('L\'étagère est pleine.');
         break;
-      case 'paintslot': this.paintAt = { where: 'slot', k: this.arg }; this.open('paint', this.arg); break;
-      case 'paintshelf': this.paintAt = { where: 'shelf', k: n }; this.open('paint', this.arg); break;
-      case 'glaze':
-      case 'pattern': {
-        const cur = this.paintTarget();
-        const g = name === 'glaze' ? n : cur?.glaze ?? 0;
-        const pt = name === 'pattern' ? n : cur?.pat ?? 0;
-        if (!sim.glazeOpen(s, g)) this.toast(`Cet émail se débloque à ${GLAZES[g].stars} ⭐ dans l'almanach.`);
-        else if (sim.paintPot(s, this.paintAt.where, this.paintAt.k, g, pt)) { if (this.paintAt.where === 'slot') this.scene.pop(this.paintAt.k); this.buzz(15); }
-        else if (s.coins < sim.PAINT_PRICE) this.toast('Pas assez de pièces.');
+      case 'paintslot': this.paintAt = { where: 'slot', k: this.arg }; this.openStudio('paint'); break;
+      case 'paintshelf': this.paintAt = { where: 'shelf', k: n }; this.openStudio('paint'); break;
+      case 'wheel': this.studio.size = n; this.openStudio('wheel'); break;
+      case 'admire': this.viewSlot = this.arg; this.openStudio('view'); break;
+      case 'st-close': this.closeStudio(); break;
+      case 'st-size': this.studio.size = n; this.studioTools(); break;
+      case 'st-reset': this.studio.resetWheel(); break;
+      case 'st-fire':
+        if (sim.startPot(s, this.studio.size, this.studio.prof)) { play('craft'); this.closeStudio(); this.toast('Au four ! La cuisson continue même en ton absence.'); this.buzz(15); this.open('atelier'); }
+        else this.toast(s.kiln ? 'Le four est déjà occupé.' : 'Pas assez d\'argile.');
+        break;
+      case 'st-color':
+        if (n > 0 && sim.collection(s).stars < PAINTS[n - 1].stars) { this.toast(`Cette couleur se débloque à ${PAINTS[n - 1].stars} ⭐ dans l'almanach.`); break; }
+        this.studio.color = n; this.studio.hand = false; this.studioTools(); break;
+      case 'st-brush': this.studio.brush = n; this.studio.hand = false; this.studioTools(); break;
+      case 'st-hand': this.studio.hand = !this.studio.hand; this.studioTools(); break;
+      case 'st-spin': this.studio.spin = !this.studio.spin; this.studioTools(); break;
+      case 'st-base':
+        if (!sim.glazeOpen(s, n)) { this.toast(`Cet émail se débloque à ${GLAZES[n].stars} ⭐ dans l'almanach.`); break; }
+        this.studio.setBase(n); this.studioTools(); break;
+      case 'st-clear': this.studio.clearPaint(); break;
+      case 'st-done': {
+        if (!this.studio.touched) { this.closeStudio(); break; }
+        const r = this.studio.paintResult();
+        if (sim.savePaint(s, this.paintAt.where, this.paintAt.k, r.glaze, r.paint)) {
+          play('craft'); this.buzz(20); this.closeStudio(); this.toast('Ton pot est peint !');
+          if (this.paintAt.where === 'slot') this.scene.pop(this.paintAt.k);
+        } else this.toast(s.coins < sim.PAINT_PRICE ? 'Pas assez de pièces.' : 'Ce pot n\'est plus là.');
         break;
       }
+      case 'st-paint': this.paintAt = { where: 'slot', k: this.viewSlot }; this.openStudio('paint'); break;
       case 'cutting':
         if (sim.harvestCutting(s, this.arg)) { this.float(this.arg, '✂️ +2 graines'); this.buzz(15); this.close(); }
         break;
@@ -472,6 +497,87 @@ export class UI {
     $('backdrop').classList.add('on');
     this.refresh(true);
     $('sheet').querySelector('.sh-body')?.scrollTo(0, 0);
+  }
+
+  private openStudio(mode: 'wheel' | 'paint' | 'view'): void {
+    const s = this.s;
+    const st = this.studio;
+    let title = '', hint = '';
+    if (mode === 'paint') {
+      const pd = this.paintTarget();
+      if (!pd) return;
+      title = '🎨 Peinture';
+      hint = 'Peins au doigt, directement sur le pot. Glisse à côté du pot pour le tourner.';
+    } else if (mode === 'wheel') {
+      title = '🏺 Tour de potier';
+      hint = 'Pose le doigt sur l\'argile : pousse vers le centre pour resserrer, tire vers l\'extérieur pour évaser.';
+    } else {
+      const slot = s.slots[this.viewSlot];
+      if (!slot?.pot) return;
+      const p = slot.plant;
+      title = p ? `${EMOJI[p.sp]} ${esc(vname(SPECIES_BY_ID[p.sp], sim.stageOf(p.prog) >= 2 ? p.vr : 0))}` : '🏺 Ton pot';
+      hint = 'Glisse pour faire tourner.';
+    }
+    this.close();
+    $('st-title').innerHTML = title;
+    $('st-hint').textContent = hint;
+    $('studio').className = 'on ' + mode;
+    // Le canevas doit avoir sa taille d'écran avant que la scène ne se cadre.
+    if (mode === 'paint') st.openPaint(this.paintTarget()!);
+    else if (mode === 'wheel') st.openWheel(st.size);
+    else {
+      const slot = s.slots[this.viewSlot];
+      const p = slot.plant;
+      let plant = null, scale = 1;
+      if (p) {
+        const sp = SPECIES_BY_ID[p.sp];
+        const stage = sim.stageOf(p.prog);
+        const fit = sim.fitOf(sp, sim.zoneClimate(s, sim.zoneOfSlot(this.viewSlot)));
+        const health = Math.min(fit, p.water > 0 ? 1 : 0.75) * (p.pests > 0 ? 0.8 : 1);
+        plant = finish(buildPlant(sp, stage, health, stage >= 2 ? p.vr : 0));
+        scale = (0.82 + 0.18 * (stage >= 4 ? 1 : p.prog * 4 - stage)) * [1, 1.1, 1.2][(sp.size ?? 1) - 1];
+      }
+      st.openView(slot.pd, themeOf(s.theme).pot, plant, scale);
+    }
+    this.studioTools();
+    st.resize();
+  }
+
+  private closeStudio(): void {
+    this.studio.close();
+    $('studio').className = '';
+  }
+
+  /** Les outils sous l'établi, selon ce qu'on y fait. */
+  private studioTools(): void {
+    const s = this.s;
+    const st = this.studio;
+    let html = '';
+    if (st.mode === 'wheel') {
+      const def = POT_SIZES[st.size - 1];
+      const why = s.kiln ? 'Four occupé' : s.clay < def.clay ? `Il manque ${def.clay - s.clay} 🧱` : '';
+      html = `<div class="row">${POT_SIZES.map((d, n) => `<button class="btn small ${st.size === n + 1 ? 'primary' : ''}" data-act="st-size" data-arg="${n + 1}">${d.name.replace(' pot', '')} · ${d.clay} 🧱</button>`).join('')}</div>
+        <p class="sub center">Tu as ${s.clay} 🧱. La taille décide de ce qui peut y pousser ; la forme, c'est toi.</p>
+        <div class="row"><button class="btn" data-act="st-reset">↺ Recommencer</button><button class="btn gold" data-act="st-fire" ${why ? 'disabled' : ''}>${why || '🔥 Au four'}</button></div>`;
+    } else if (st.mode === 'paint') {
+      const stars = sim.collection(s).stars;
+      const plant = this.paintAt.where === 'slot' ? s.slots[this.paintAt.k].plant : null;
+      const fav = plant ? FAMILIES[SPECIES_BY_ID[plant.sp].family] : null;
+      const cols = PAINTS.map((c, n) => [stars < c.stars ? 1 : 0, `<button class="pdot${st.color === n + 1 && !st.hand ? ' on' : ''}${stars < c.stars ? ' lock' : ''}" data-act="st-color" data-arg="${n + 1}" style="background:${hex(c.color)}">${stars < c.stars ? '🔒' : ''}</button>`] as [number, string]).sort((a, b) => a[0] - b[0]).map((x) => x[1]).join('');
+      const bases = GLAZES.map((g, n) => `<button class="pdot sq${st.base === n ? ' on' : ''}${stars < g.stars ? ' lock' : ''}" data-act="st-base" data-arg="${n}" style="background:${hex(g.color)}">${stars < g.stars ? '🔒' : fav && fav.glaze === n ? '💚' : ''}</button>`).join('');
+      html = `<div class="dots"><button class="pdot gum${st.color === 0 && !st.hand ? ' on' : ''}" data-act="st-color" data-arg="0">🧽</button>${cols}</div>
+        <div class="row tools">${[0, 1, 2].map((b) => `<button class="btn small ${st.brush === b && !st.hand ? 'primary' : ''}" data-act="st-brush" data-arg="${b}"><i class="tip" style="width:${6 + b * 6}px;height:${6 + b * 6}px"></i></button>`).join('')}<button class="btn small ${st.hand ? 'primary' : ''}" data-act="st-hand">🖐 Tourner</button><button class="btn small ${st.spin ? 'primary' : ''}" data-act="st-spin">🌀 Tour</button></div>
+        <div class="dots"><span class="lbl">Fond</span>${bases}</div>
+        ${fav ? `<p class="sub center">💚 Les ${fav.name.toLowerCase()} poussent plus vite sur un fond ${GLAZES[fav.glaze].name.toLowerCase()}.</p>` : ''}
+        <div class="row"><button class="btn" data-act="st-clear">Tout effacer</button><button class="btn gold" data-act="st-done">✅ Terminer · ${sim.PAINT_PRICE} 🪙</button></div>`;
+    } else if (st.mode === 'view') {
+      const slot = s.slots[this.viewSlot];
+      const p = slot.plant;
+      html = `${p ? `<div class="kv"><span>${STAGES[sim.stageOf(p.prog)]}</span><b>${sim.qualityWord(p.q)}</b></div>` : ''}
+        <div class="kv"><span>Pot</span><b>${potLabel(slot.pd)}${sim.harmony(slot) ? ' 💚' : ''}</b></div>
+        <button class="btn primary wide" data-act="st-paint">🎨 Peindre ce pot</button>`;
+    }
+    $('st-tools').innerHTML = html;
   }
 
   private close(): void {
@@ -756,7 +862,6 @@ export class UI {
       case 'atelier': return this.atelierHtml();
       case 'trophies': return this.trophiesHtml();
       case 'season': return this.seasonHtml();
-      case 'paint': return this.paintHtml();
       default: return '';
     }
     void s;
@@ -824,45 +929,25 @@ export class UI {
   private atelierHtml(): string {
     const s = this.s;
     const k = s.kiln;
-    const kiln = !k ? '<p class="sub">Le four est vide. Choisis une taille de pot à façonner.</p>'
+    const kiln = !k ? '<p class="sub">Le four est vide. Choisis une taille et passe au tour.</p>'
       : k.left > 0
         ? `<div class="kv"><span>${POT_SIZES[k.size - 1].name} en cuisson</span><b>${clock(k.left)}</b></div><div class="kilnbar"><i style="width:${Math.round((1 - k.left / POT_SIZES[k.size - 1].fire) * 100)}%"></i></div>`
         : `<button class="btn gold wide" data-act="kiln">🔥 Défourner le ${POT_SIZES[k.size - 1].name.toLowerCase()}</button>`;
     const sizes = POT_SIZES.map((d, n) => {
       const ok = !k && s.clay >= d.clay;
       const what = n === 0 ? 'Pour la plupart des plantes.' : n === 1 ? 'Pour les grandes plantes et les petits arbustes.' : 'Pour les arbres : figuier, olivier, citronnier, érable.';
-      return `<div class="card"><div class="ico" style="font-size:${18 + n * 7}px">🏺</div><div class="mid"><div class="nm">${d.name}</div><div class="ds">${what} Cuisson ${d.fire < 60 ? d.fire + ' s' : Math.round(d.fire / 60) + ' min'}.</div></div><button class="btn small ${ok ? 'primary' : ''}" data-act="craft" data-arg="${n + 1}" ${ok ? '' : 'disabled'}>${d.clay} 🧱</button></div>`;
+      return `<button class="card" data-act="wheel" data-arg="${n + 1}" ${ok ? '' : 'style="opacity:.6"'}><div class="ico" style="font-size:${18 + n * 7}px">🏺</div><div class="mid"><div class="nm">${d.name} · ${d.clay} 🧱</div><div class="ds">${what} Cuisson ${d.fire < 60 ? d.fire + ' s' : Math.round(d.fire / 60) + ' min'}.</div></div><div class="end">Tourner</div></button>`;
     }).join('');
     const shelf = s.shelf.map((pd, n) => `<div class="card"><div class="ico">🏺</div><div class="mid"><div class="nm">${potLabel(pd)}</div><div class="ds">Touche un emplacement libre de la serre pour le poser.</div></div><button class="btn small" data-act="paintshelf" data-arg="${n}">🎨 Peindre</button></div>`).join('');
     const next = sim.CLAY_EVERY - s.clayAcc;
     return this.head('🏺 Atelier de poterie') + `<div class="sh-body">
-      <p class="sub">Façonne tes pots, cuis-les au four puis peins-les. Un émail accordé à la famille de la plante la fait pousser ${Math.round((sim.HARMONY_SPEED - 1) * 100)} % plus vite.</p>
+      <p class="sub">Tourne tes pots au doigt, cuis-les au four puis peins-les au pinceau. Un émail accordé à la famille de la plante la fait pousser ${Math.round((sim.HARMONY_SPEED - 1) * 100)} % plus vite.</p>
       <div class="kv"><span>🧱 Argile</span><b>${s.clay} / ${sim.clayCap(s)}${s.clay < sim.clayCap(s) ? ` · +1 dans ${clock(next)}` : ' · bac plein'}</b></div>
       <p class="sub">L'argile se dépose toute seule dans le bac. Les commandes des clients en rapportent aussi.</p>
       <h3>Four</h3>${kiln}
       <h3>Tour de potier</h3>${sizes}
       <h3>Étagère (${s.shelf.length}/${sim.SHELF_CAP})</h3>${shelf || '<p class="sub">Aucun pot en attente.</p>'}
       <p class="sub">Pour peindre un pot déjà posé, touche-le dans la serre puis choisis « Peindre le pot ».</p></div>`;
-  }
-
-  private paintHtml(): string {
-    const s = this.s;
-    const pd = this.paintTarget();
-    if (!pd) return this.head('🎨 Peinture') + '<div class="sh-body"><p class="sub">Ce pot n\'est plus là.</p></div>';
-    const plant = this.paintAt.where === 'slot' ? s.slots[this.paintAt.k].plant : null;
-    const fav = plant ? FAMILIES[SPECIES_BY_ID[plant.sp].family] : null;
-    const st = sim.collection(s).stars;
-    const glazes = GLAZES.map((g, n) => {
-      const open = st >= g.stars;
-      return `<button class="sw-b${pd.glaze === n ? ' on' : ''}${open ? '' : ' lock'}" data-act="glaze" data-arg="${n}"><i style="background:${hex(g.color)};border-color:${hex(g.rim)}"></i>${g.name}${open ? (fav && fav.glaze === n ? '<small>💚 accordé</small>' : '') : `<small>🔒 ${g.stars} ⭐</small>`}</button>`;
-    }).join('');
-    const pats = PATTERNS.map((nm, n) => `<button class="btn small ${pd.pat === n ? 'primary' : ''}" data-act="pattern" data-arg="${n}">${nm}</button>`).join('');
-    return this.head('🎨 Peinture') + `<div class="sh-body">
-      <div class="kv"><span>Ce pot</span><b>${potLabel(pd)}</b></div>
-      <p class="sub">Chaque coup de pinceau coûte ${sim.PAINT_PRICE} 🪙. Les émaux se débloquent avec les étoiles de l'almanach (tu en as ${st}).</p>
-      ${fav ? `<p class="sub">${fav.icon} Les ${fav.name.toLowerCase()} préfèrent l'émail <b>${GLAZES[fav.glaze].name.toLowerCase()}</b>.</p>` : ''}
-      <h3>Émail</h3><div class="swatches">${glazes}</div>
-      <h3>Motif</h3><div class="row">${pats}</div></div>`;
   }
 
   private seedHtml(): string {
@@ -900,7 +985,7 @@ export class UI {
       ${sim.harmony(s.slots[this.arg]) ? `<p class="sub">💚 Émail accordé à sa famille : elle pousse ${Math.round((sim.HARMONY_SPEED - 1) * 100)} % plus vite.</p>` : ''}
       ${this.zoneLine(this.arg)}${conditions(sp, c)}
       <div class="row">${s.upgrades.water ? '' : `<button class="btn primary" data-act="water" ${p.water > 0.95 ? 'disabled' : ''}>💧 Arroser</button>`}<button class="btn" data-act="fert" ${s.fert > 0 && p.prog < 1 ? '' : 'disabled'}>🧪 Engrais (${s.fert})</button></div>
-      <div class="row"><button class="btn small" data-act="move">✋ Déplacer</button><button class="btn small" data-act="paintslot">🎨 Peindre le pot</button><button class="btn small" data-act="fiche" data-arg="${sp.id}">📖 Fiche</button></div></div>`;
+      <div class="row"><button class="btn small" data-act="move">✋ Déplacer</button><button class="btn small" data-act="paintslot">🎨 Peindre</button><button class="btn small" data-act="admire">🔍 Admirer</button><button class="btn small" data-act="fiche" data-arg="${sp.id}">📖 Fiche</button></div></div>`;
   }
 
   private marketHint(p: number): string {
@@ -928,7 +1013,7 @@ export class UI {
       <button class="btn primary wide" data-act="sell">Récolter et vendre · ${fmt(sim.saleValue(s, p))} 🪙</button>
       <p class="sub center">Cours ${FAMILIES[sp.family].name.toLowerCase()} : <b class="${level(m.p)}">${mult(m.p)}</b>. ${this.marketHint(m.p)}</p>
       <button class="btn gold wide" data-act="show" ${freeShow ? '' : 'disabled'}>🏛️ Exposer en vitrine${freeShow ? '' : ' (pleine)'}</button>
-      <div class="row wrap"><button class="btn small" data-act="cutting">✂️ Bouturer</button>${sim.CROSS_FEE[sp.rarity] ? `<button class="btn small" data-act="cross">🧬 Croiser · ${sim.CROSS_FEE[sp.rarity]} 🪙</button>` : ''}<button class="btn small" data-act="store" ${full ? 'disabled' : ''}>📦 Réserve (${s.stock.length}/${s.stockCap})</button><button class="btn small" data-act="move">✋ Déplacer</button><button class="btn small" data-act="fiche" data-arg="${sp.id}">📖 Fiche</button></div></div>`;
+      <div class="row wrap"><button class="btn small" data-act="cutting">✂️ Bouturer</button>${sim.CROSS_FEE[sp.rarity] ? `<button class="btn small" data-act="cross">🧬 Croiser · ${sim.CROSS_FEE[sp.rarity]} 🪙</button>` : ''}<button class="btn small" data-act="store" ${full ? 'disabled' : ''}>📦 Réserve (${s.stock.length}/${s.stockCap})</button><button class="btn small" data-act="move">✋ Déplacer</button><button class="btn small" data-act="admire">🔍 Admirer</button><button class="btn small" data-act="fiche" data-arg="${sp.id}">📖 Fiche</button></div></div>`;
   }
 
   private packetsHtml(): string {

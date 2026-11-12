@@ -45,6 +45,34 @@ export function setArtStyle(id: string | undefined): ArtStyle {
   return current;
 }
 
+function tinted(color: number): THREE.Color {
+  const c = new THREE.Color(color);
+  const hsl = { h: 0, s: 0, l: 0 };
+  c.getHSL(hsl);
+  return c.setHSL(hsl.h, Math.min(1, hsl.s * current.tint[0]), hsl.l + (1 - hsl.l) * current.tint[1]);
+}
+/** Couleur CSS d'une teinte passée par la palette du style : pour peindre une texture assortie aux matières. */
+export function styleCss(color: number): string {
+  return '#' + tinted(color).getHexString();
+}
+function toonRamp(): THREE.DataTexture {
+  if (!ramp) {
+    ramp = new THREE.DataTexture(new Uint8Array([120, 120, 120, 255, 190, 190, 190, 255, 255, 255, 255, 255]), 3, 1, THREE.RGBAFormat);
+    ramp.minFilter = ramp.magFilter = THREE.NearestFilter;
+    ramp.needsUpdate = true;
+  }
+  return ramp;
+}
+/** Matière portant une texture (pot peint au pinceau), dans le rendu du style courant. */
+export function matMap(map: THREE.Texture): THREE.Material {
+  if (current.kind === 'toon') {
+    const t = new THREE.MeshToonMaterial({ map, gradientMap: toonRamp() });
+    (t as unknown as { flatShading: boolean }).flatShading = true;
+    return t;
+  }
+  return new THREE.MeshStandardMaterial({ map, flatShading: current.kind !== 'clay', roughness: current.kind === 'clay' ? 1 : 0.85, metalness: 0 });
+}
+
 /** Matière d'une couleur, peinte selon le style courant. */
 export function mat(color: number): THREE.Material {
   let m = cache.get(color);
@@ -85,7 +113,7 @@ export function finish<T extends THREE.Object3D>(root: T): T {
     if (!mesh.isMesh) return;
     const mm = mesh.material as THREE.Material;
     if (mm.transparent) mm.userData.outlineParameters = { visible: false };
-    if (!mode || done.has(mesh.geometry)) return;
+    if (!mode || mesh.userData.raw || done.has(mesh.geometry)) return;
     let per = geoCache.get(mode);
     if (!per) { per = new WeakMap(); geoCache.set(mode, per); }
     let g = per.get(mesh.geometry);

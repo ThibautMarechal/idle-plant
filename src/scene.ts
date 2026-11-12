@@ -7,6 +7,7 @@ import { OutlineEffect } from 'three/examples/jsm/effects/OutlineEffect.js';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RenderPixelatedPass } from 'three/examples/jsm/postprocessing/RenderPixelatedPass.js';
+import { potModel } from './pots';
 import { artStyle, finish, setArtStyle } from './styles';
 import { box, themeOf } from './themes';
 import type { Theme, V3 } from './themes';
@@ -312,13 +313,12 @@ export class Scene3D {
       // Le pot : taille, émail et motif viennent de l'atelier ; sans dessin, c'est le pot du décor.
       const pd = slot.pd;
       const scale = slot.pot ? POT_SIZES[(pd?.size ?? 1) - 1].scale : 1;
-      const potKey = slot.pot ? `${pd?.size ?? 1}|${pd?.glaze ?? -1}|${pd?.pat ?? 0}` : '';
+      const potKey = slot.pot ? `${pd?.size ?? 1}|${pd?.glaze ?? -1}|${pd?.pat ?? 0}|${pd?.pv ?? 0}|${pd?.prof?.join(',') ?? ''}` : '';
       if (potKey !== v.potKey) {
         if (v.pot) v.root.remove(v.pot);
         v.pot = null;
         if (slot.pot) {
-          const gl = pd && (pd.glaze > 0 || pd.pat > 0) ? GLAZES[pd.glaze] : null;
-          v.pot = finish(buildPot(gl ? gl.color : this.theme.pot[0], gl ? gl.rim : this.theme.pot[1], pd?.pat ?? 0));
+          v.pot = finish(potModel(pd, this.theme.pot));
           v.pot.scale.setScalar(scale);
           v.root.add(v.pot);
           if (v.key !== '') v.pop = 1;

@@ -133,6 +133,22 @@ describe('simulation', () => {
     expect(got.every((g) => SPECIES_BY_ID[g.id].family === 'orchidees')).toBe(true);
   });
 
+  it('tour et pinceau : la forme et le dessin suivent le pot', () => {
+    const s = sim.newState(0);
+    s.clay = 5;
+    s.coins = 20;
+    expect(sim.startPot(s, 1, [0.05, 0.2, 0.3, 0.4, 0.5, 0.9, 0.3])).toBe(true);
+    expect(s.kiln!.prof).toEqual([0.15, 0.2, 0.3, 0.4, 0.48, 0.48, 0.3]);
+    sim.advance(s, 60_000, () => 0.5);
+    expect(sim.collectKiln(s)).toBe(true);
+    expect(s.shelf[0].prof).toHaveLength(7);
+    expect(sim.savePaint(s, 'shelf', 0, 8, 'a')).toBe(false); // émail verrouillé
+    expect(sim.savePaint(s, 'shelf', 0, 1, '..b.')).toBe(true);
+    expect(s.shelf[0]).toMatchObject({ glaze: 1, paint: '..b.', pv: 1 });
+    expect(s.coins).toBe(5);
+    expect(sim.savePaint(s, 'shelf', 0, 1, '....')).toBe(false); // plus assez de pièces
+  });
+
   it('atelier : façonner, défourner, poser, peindre', () => {
     const s = sim.newState(0);
     s.clay = 9;

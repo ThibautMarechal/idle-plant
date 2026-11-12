@@ -304,3 +304,23 @@ body[data-style="pixel"] .navb span { font-size: 20px; }
 
 /* Saison */
 .pill.season { position: relative; padding: 8px 11px; font-size: 17px; }
+
+/* Établi : tour de potier, peinture, vue en grand */
+#studio { position: absolute; inset: 0; z-index: 4; display: none; flex-direction: column; background: radial-gradient(120% 70% at 50% 38%, #fff8e6 0%, #f1e2bf 60%, #dcc79a 100%); padding: var(--safe-t) 0 var(--safe-b); }
+#studio.on { display: flex; }
+#studio.view { background: radial-gradient(120% 70% at 50% 40%, #f4fbf4 0%, #d6ecdf 55%, #a9cfc0 100%); }
+#studio .st-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px 4px; }
+#studio .st-head h2 { margin: 0; font-size: 19px; font-weight: 900; }
+#studio .st-head .x { width: 34px; height: 34px; border-radius: 17px; background: rgba(255, 255, 255, 0.7); font-weight: 900; font-size: 15px; }
+#st-hint { margin: 0; padding: 0 18px; color: var(--soft); font-size: 13px; line-height: 1.35; }
+#stgl { flex: 1; min-height: 0; width: 100%; touch-action: none; display: block; }
+#st-tools { display: flex; flex-direction: column; gap: 10px; padding: 8px 16px 16px; }
+#st-tools .dots { display: flex; gap: 7px; overflow-x: auto; padding: 3px 2px; align-items: center; scrollbar-width: none; }
+#st-tools .lbl { font-size: 12px; font-weight: 800; color: var(--soft); margin-right: 2px; }
+.pdot { flex: 0 0 auto; width: 34px; height: 34px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 1px 4px rgba(60, 40, 10, 0.35); font-size: 13px; padding: 0; }
+.pdot.sq { border-radius: 10px; width: 30px; height: 30px; }
+.pdot.on { box-shadow: 0 0 0 3px var(--green), 0 1px 4px rgba(60, 40, 10, 0.35); transform: scale(1.08); }
+.pdot.lock { opacity: 0.45; }
+.pdot.gum { background: #fff; }
+.row.tools .btn { padding: 8px 4px; display: flex; align-items: center; justify-content: center; min-height: 36px; white-space: nowrap; }
+.tip { display: block; border-radius: 50%; background: currentColor; }

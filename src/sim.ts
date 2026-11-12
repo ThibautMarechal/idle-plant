@@ -1,10 +1,14 @@
-import { BASE_SLOTS, SEASONS, SEASON_LENGTH, CLIENTS, FAMILIES, FAMILY_IDS, GLAZES, NEWS, POT_SIZES, RARITIES, SLOT_COUNT, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, ZONES } from './data';
+import { PROF_MAX, PROF_MIN, BASE_SLOTS, SEASONS, SEASON_LENGTH, CLIENTS, FAMILIES, FAMILY_IDS, GLAZES, NEWS, POT_SIZES, RARITIES, SLOT_COUNT, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, ZONES } from './data';
 import type { Family, Rarity, Species, Zone } from './data';
 
 /** `vr` : variante, 0 normale, 1 panachée, 2 dorée. */
 export interface Plant { sp: string; prog: number; water: number; pests: number; q: number; vr: number }
 /** Un pot façonné : taille 1..3, émail (index de GLAZES) et motif (index de PATTERNS). */
-export interface PotDesign { size: number; glaze: number; pat: number }
+/**
+ * `prof` : forme modelée au tour (rayons de bas en haut). `paint` : dessin au pinceau, une lettre par case
+ * ('.' = fond, 'a' + index dans PAINTS). `pv` change à chaque coup de pinceau enregistré.
+ */
+export interface PotDesign { size: number; glaze: number; pat: number; prof?: number[]; paint?: string; pv?: number }
 /** `pd` absent : petit pot de base en terre cuite. */
 export interface Slot { pot: boolean; pd?: PotDesign; plant: Plant | null }
 export interface Order { who: string; family: Family; minQ: number; coins: number; clay: number; left: number }
@@ -47,7 +51,7 @@ export interface State {
   clay: number;
   clayAcc: number;
   /** Pot en cours de cuisson ; `left` à 0 quand il est prêt à défourner. */
-  kiln: { size: number; left: number } | null;
+  kiln: { size: number; left: number; prof?: number[] } | null;
   /** Pots façonnés en attente d'être posés. */
   shelf: PotDesign[];
   /** Commande d'un visiteur. */
@@ -483,24 +487,25 @@ export function sizeOf(sp: Species): number {
 }
 /** Un pot émaillé à la couleur préférée de la famille : la plante pousse plus vite. */
 export function harmony(slot: Slot): boolean {
-  return !!slot.plant && !!slot.pd && slot.pd.glaze > 0 && FAMILIES[SPECIES_BY_ID[slot.plant.sp].family].glaze === slot.pd.glaze;
+  return !!slot.plant && !!slot.pd && (slot.pd.glaze > 0 || !!slot.pd.pv) && FAMILIES[SPECIES_BY_ID[slot.plant.sp].family].glaze === slot.pd.glaze;
 }
 export function glazeOpen(s: State, g: number): boolean {
   return collection(s).stars >= GLAZES[g].stars;
 }
 
 /** Lance la cuisson d'un pot de la taille demandée (1..3). */
-export function startPot(s: State, size: number): boolean {
+export function startPot(s: State, size: number, prof?: number[]): boolean {
   const def = POT_SIZES[size - 1];
   if (!def || s.kiln || s.clay < def.clay) return false;
   s.clay -= def.clay;
   s.kiln = { size, left: def.fire };
+  if (prof) s.kiln.prof = prof.map((r) => Math.round(clamp(r, PROF_MIN, PROF_MAX) * 1000) / 1000);
   return true;
 }
 /** Sort le pot cuit du four et le range sur l'étagère de l'atelier. */
 export function collectKiln(s: State): boolean {
   if (!s.kiln || s.kiln.left > 0 || s.shelf.length >= SHELF_CAP) return false;
-  s.shelf.push({ size: s.kiln.size, glaze: 0, pat: 0 });
+  s.shelf.push({ size: s.kiln.size, glaze: 0, pat: 0, ...(s.kiln.prof ? { prof: s.kiln.prof } : {}) });
   s.kiln = null;
   s.stats.crafted++;
   gainXp(s, 5);
@@ -532,6 +537,22 @@ export function paintPot(s: State, where: 'slot' | 'shelf', k: number, glaze: nu
   if (!pd || (pd.glaze === glaze && pd.pat === pat)) return false;
   pd.glaze = glaze;
   pd.pat = pat;
+  s.coins -= PAINT_PRICE;
+  s.stats.painted++;
+  return true;
+}
+
+/** Enregistre le dessin au pinceau d'un pot, et son émail de fond. */
+export function savePaint(s: State, where: 'slot' | 'shelf', k: number, glaze: number, paint: string): boolean {
+  if (!GLAZES[glaze] || !glazeOpen(s, glaze) || s.coins < PAINT_PRICE) return false;
+  let pd: PotDesign | undefined;
+  if (where === 'shelf') pd = s.shelf[k];
+  else if (s.slots[k]?.pot) pd = s.slots[k].pd ?? (s.slots[k].pd = { size: 1, glaze: 0, pat: 0 });
+  if (!pd) return false;
+  pd.glaze = glaze;
+  pd.pat = 0;
+  if (/[^.]/.test(paint)) pd.paint = paint; else delete pd.paint;
+  pd.pv = (pd.pv ?? 0) + 1;
   s.coins -= PAINT_PRICE;
   s.stats.painted++;
   return true;
