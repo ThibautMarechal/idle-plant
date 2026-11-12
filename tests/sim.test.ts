@@ -172,4 +172,27 @@ describe('simulation', () => {
     expect(s.clay).toBe(clay + 3);
     expect(s.order).toBeNull();
   });
+
+  it('croisement : deux communes de même famille donnent une rare', () => {
+    const s = sim.newState(0);
+    s.coins = 100;
+    s.slots[7].plant = { sp: 'basilic', prog: 1, water: 1, pests: 0, q: 90, vr: 0 };
+    s.slots[9].plant = { sp: 'menthe', prog: 1, water: 1, pests: 0, q: 90, vr: 0 };
+    s.slots[10].plant = { sp: 'aloe', prog: 1, water: 1, pests: 0, q: 90, vr: 0 };
+    expect(sim.crossBlock(s, 7, 10)).not.toBe('');
+    const got = sim.cross(s, 7, 9, () => 0);
+    expect(got?.id).toBe('lavande');
+    expect(s.coins).toBe(100 - sim.CROSS_FEE.commun);
+    expect(s.slots[7].plant).toBeNull();
+    expect(s.seeds.lavande).toBe(1);
+  });
+
+  it('cadeau du jour : une fois par jour, la série grandit', () => {
+    const s = sim.newState(0);
+    s.stats.opened = 1;
+    expect(sim.claimDaily(s, '2026-11-12', '2026-11-11')?.streak).toBe(1);
+    expect(sim.claimDaily(s, '2026-11-12', '2026-11-11')).toBeNull();
+    expect(sim.claimDaily(s, '2026-11-13', '2026-11-12')?.coins).toBe(40);
+    expect(sim.claimDaily(s, '2026-11-20', '2026-11-19')?.streak).toBe(1);
+  });
 });

@@ -292,3 +292,6 @@ body[data-style="pixel"] .sh-head h2, body[data-style="pixel"] .mtitle { text-tr
 .kilnbar i { display: block; height: 100%; background: linear-gradient(90deg, #f2b441, #e2604f); }
 body[data-style="pixel"] .navb { font-size: 9px; }
 body[data-style="pixel"] .navb span { font-size: 20px; }
+
+.row.wrap { flex-wrap: wrap; }
+.row.wrap > * { flex: 1 1 30%; }

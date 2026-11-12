@@ -99,6 +99,8 @@ export class UI {
   private resetAskedAt = 0;
   /** Emplacement du pot en cours de déplacement, ou -1. */
   private moving = -1;
+  /** Première plante choisie pour un croisement, ou -1. */
+  private crossing = -1;
   private swipedAt = 0;
   private celebrate: string[] = [];
   private drag = -1;
@@ -237,6 +239,17 @@ export class UI {
     const p = slot.plant;
     const z = sim.zoneIndexOfSlot(i);
     if (!s.zonesOpen[z]) return this.open('zone', z);
+    if (this.crossing >= 0) {
+      const from = this.crossing;
+      if (from === i) { this.crossing = -1; this.refresh(true); return; }
+      const why = sim.crossBlock(s, from, i);
+      if (why) { this.toast(why); return; }
+      this.crossing = -1;
+      const got = sim.cross(s, from, i);
+      if (got) { this.scene.pop(i); this.scene.pop(from); this.buzz(30); this.showPacket([got]); }
+      this.refresh(true);
+      return;
+    }
     if (this.moving >= 0) {
       const from = this.moving;
       this.moving = -1;
@@ -302,7 +315,18 @@ export class UI {
         this.close();
         this.toast('Touche l\'emplacement où poser ce pot. Balaye pour changer de zone.');
         break;
-      case 'cancelmove': this.moving = -1; break;
+      case 'cancelmove': this.moving = -1; this.crossing = -1; break;
+      case 'cross':
+        this.crossing = this.arg;
+        this.close();
+        this.toast('Touche une autre plante en fleur de la même famille et de la même rareté.');
+        break;
+      case 'prestige': {
+        const got = sim.buyPrestige(s);
+        if (got) this.showPacket(got);
+        else this.toast('Pas assez de pièces.');
+        break;
+      }
       case 'openzone':
         if (sim.openZone(s, this.arg)) { this.toast(`${this.zname(this.arg)} : zone aménagée !`); this.buzz(30); this.close(); this.goZone(this.arg); }
         else this.toast('Pas assez de pièces.');
@@ -614,7 +638,8 @@ export class UI {
       return `<button class="tab${cur === r ? ' on' : ''}${s.zonesOpen[r] ? '' : ' off'}" data-act="view" data-arg="${r}">${s.zonesOpen[r] ? z.icon : '🔒'} ${ZONE_SHORT[r]}${care ? '<i class="care"></i>' : ''}</button>`;
     })).join('');
     let info = '';
-    if (this.moving >= 0) info = `<div class="ticker"><span>Où poser ce pot ?</span><button class="btn small" data-act="cancelmove">Annuler</button></div>`;
+    if (this.crossing >= 0) info = `<div class="ticker"><span>🧬 Avec quelle plante la croiser ?</span><button class="btn small" data-act="cancelmove">Annuler</button></div>`;
+    else if (this.moving >= 0) info = `<div class="ticker"><span>Où poser ce pot ?</span><button class="btn small" data-act="cancelmove">Annuler</button></div>`;
     else if (cur >= 0) {
       const c = sim.zoneClimate(s, ZONES[cur]);
       info = `<div class="zinfo"><b>${this.zname(cur)}</b> ☀️ ${LEVEL_WORDS.light[c.light]} · 🌡️ ${LEVEL_WORDS.temp[c.temp]} · 💧 ${LEVEL_WORDS.hum[c.hum]}</div>`;
@@ -766,7 +791,7 @@ export class UI {
     const next = sim.CLAY_EVERY - s.clayAcc;
     return this.head('🏺 Atelier de poterie') + `<div class="sh-body">
       <p class="sub">Façonne tes pots, cuis-les au four puis peins-les. Un émail accordé à la famille de la plante la fait pousser ${Math.round((sim.HARMONY_SPEED - 1) * 100)} % plus vite.</p>
-      <div class="kv"><span>🧱 Argile</span><b>${s.clay} / ${sim.CLAY_CAP}${s.clay < sim.CLAY_CAP ? ` · +1 dans ${clock(next)}` : ' · bac plein'}</b></div>
+      <div class="kv"><span>🧱 Argile</span><b>${s.clay} / ${sim.clayCap(s)}${s.clay < sim.clayCap(s) ? ` · +1 dans ${clock(next)}` : ' · bac plein'}</b></div>
       <p class="sub">L'argile se dépose toute seule dans le bac. Les commandes des clients en rapportent aussi.</p>
       <h3>Four</h3>${kiln}
       <h3>Tour de potier</h3>${sizes}
@@ -857,7 +882,7 @@ export class UI {
       <button class="btn primary wide" data-act="sell">Récolter et vendre · ${fmt(sim.saleValue(s, p))} 🪙</button>
       <p class="sub center">Cours ${FAMILIES[sp.family].name.toLowerCase()} : <b class="${level(m.p)}">${mult(m.p)}</b>. ${this.marketHint(m.p)}</p>
       <button class="btn gold wide" data-act="show" ${freeShow ? '' : 'disabled'}>🏛️ Exposer en vitrine${freeShow ? '' : ' (pleine)'}</button>
-      <div class="row"><button class="btn small" data-act="cutting">✂️ Bouturer</button><button class="btn small" data-act="store" ${full ? 'disabled' : ''}>📦 Réserve (${s.stock.length}/${s.stockCap})</button><button class="btn small" data-act="move">✋ Déplacer</button><button class="btn small" data-act="fiche" data-arg="${sp.id}">📖 Fiche</button></div></div>`;
+      <div class="row wrap"><button class="btn small" data-act="cutting">✂️ Bouturer</button>${sim.CROSS_FEE[sp.rarity] ? `<button class="btn small" data-act="cross">🧬 Croiser · ${sim.CROSS_FEE[sp.rarity]} 🪙</button>` : ''}<button class="btn small" data-act="store" ${full ? 'disabled' : ''}>📦 Réserve (${s.stock.length}/${s.stockCap})</button><button class="btn small" data-act="move">✋ Déplacer</button><button class="btn small" data-act="fiche" data-arg="${sp.id}">📖 Fiche</button></div></div>`;
   }
 
   private packetsHtml(): string {
@@ -919,7 +944,11 @@ export class UI {
       ${gear('♨️', 'Radiateur', 'Zone fraîche : tempéré au lieu de frais.', 'heat')}
       ${gear('🌀', 'Ventilateur', 'Zone plein sud : tempéré au lieu de chaud. Pour lavande, thym et romarin.', 'fan')}
       ${s.stockCap < 10 ? item('📦', 'Réserve agrandie', `Deux places de plus (${s.stockCap} aujourd'hui).`, sim.PRICES.stock, 'upgrade', 'stock') : ''}
+      <h3>Atelier</h3>
+      ${item('🔥', 'Four à double foyer', 'Les pots cuisent deux fois plus vite.', sim.PRICES.fastKiln, 'upgrade', 'fastKiln', !!s.upgrades.fastKiln)}
+      ${item('🧱', 'Grand bac d\'argile', 'Le bac contient deux fois plus d\'argile.', sim.PRICES.bigClay, 'upgrade', 'bigClay', !!s.upgrades.bigClay)}
       <h3>Graines</h3>
+      ${item('💎', 'Sachet prestige', 'Trois graines, toutes rares ou mieux.', sim.PRICES.prestige, 'prestige', '')}
       ${item('🎁', 'Sachet mystère', 'Trois graines de toutes familles.', sim.PRICES.packet, 'buypacket', '')}
       ${FAMILY_IDS.map((f) => item(FAMILIES[f].icon, `Sachet ${FAMILIES[f].name.toLowerCase()}`, 'Trois graines de cette famille.', sim.PRICES.familyPacket, 'buypacket', f)).join('')}
       <p class="sub">Pour un nouveau pot ou une nouvelle zone, touche un emplacement libre ou un cadenas dans la serre.</p></div>`;

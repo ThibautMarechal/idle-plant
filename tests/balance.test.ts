@@ -56,6 +56,12 @@ describe.skipIf(!process.env.BALANCE)('rythme de jeu', () => {
         if (spot < 0 && !s.kiln && s.clay >= POT_SIZES[want - 1].clay) { const e = s.slots.findIndex((x) => x.pot && !x.plant && sim.potSize(x) < want); if (e >= 0) sim.stowPot(s, e); }
         if (sim.startPot(s, want)) acted = true;
       }
+      // Croisements : deux communes en fleur de la même famille deviennent une rare.
+      for (let i = 0; i < s.slots.length; i++) for (let j = i + 1; j < s.slots.length; j++) {
+        const a = s.slots[i].plant, b = s.slots[j].plant;
+        if (a && b && s.disc[a.sp]?.bestQ >= 90 && s.disc[b.sp]?.bestQ >= 90 && !sim.crossBlock(s, i, j) && sim.cross(s, i, j, rng)) acted = true;
+      }
+      if (s.coins > 1200) { for (const k of ['fastKiln', 'bigClay'] as const) if (!s.upgrades[k] && sim.buyUpgrade(s, k)) acted = true; if (sim.buyPrestige(s, rng)) acted = true; }
       const seedsWaiting = Object.values(s.seeds).reduce((a, b) => a + b, 0);
       const z = s.zonesOpen.findIndex((o) => !o);
       if (z >= 0 && sim.openZone(s, z)) acted = true;
@@ -68,7 +74,7 @@ describe.skipIf(!process.env.BALANCE)('rythme de jeu', () => {
       if (!acted) idle += 5;
       if (marks.includes(t / 60)) {
         const c = sim.collection(s);
-        console.log(`${String(t / 60).padStart(3)} min | 🪙 ${String(Math.round(s.coins)).padStart(5)} | pots ${s.slots.filter((x) => x.pot).length} | zones ${s.zonesOpen.filter(Boolean).length} | fleuries ${c.bloomed}/${SPECIES.length} | arbustes ${SPECIES.filter((x) => x.family === 'arbustes' && s.disc[x.id]?.bloomed).length} | commandes ${s.stats.orders} | pots façonnés ${s.stats.crafted} | argile ${s.clay} | ⭐ ${c.stars} | variantes ${c.variants} | vitrine ${s.showcase.filter(Boolean).length} | équip. ${Object.values(s.upgrades).filter(Boolean).length} | graines en attente ${seedsWaiting} | sans rien à faire ${Math.round(idle / 60)} min`);
+        console.log(`${String(t / 60).padStart(3)} min | 🪙 ${String(Math.round(s.coins)).padStart(5)} | pots ${s.slots.filter((x) => x.pot).length} | zones ${s.zonesOpen.filter(Boolean).length} | fleuries ${c.bloomed}/${SPECIES.length} | arbustes ${SPECIES.filter((x) => x.family === 'arbustes' && s.disc[x.id]?.bloomed).length} | croisements ${s.stats.crossed ?? 0} | commandes ${s.stats.orders} | pots façonnés ${s.stats.crafted} | argile ${s.clay} | ⭐ ${c.stars} | variantes ${c.variants} | vitrine ${s.showcase.filter(Boolean).length} | équip. ${Object.values(s.upgrades).filter(Boolean).length} | graines en attente ${seedsWaiting} | sans rien à faire ${Math.round(idle / 60)} min`);
       }
     }
   });

@@ -22,6 +22,15 @@ const ui = new UI(state, scene, () => {
   ui.setState(state);
 });
 
+const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+function daily(): void {
+  const now = new Date();
+  const gift = sim.claimDaily(state, ymd(now), ymd(new Date(now.getTime() - 86400000)));
+  if (gift) setTimeout(() => ui.toast(`🎁 Cadeau du jour ${gift.streak} : +${gift.coins} 🪙, +${gift.clay} argile, un sachet${gift.fert ? ' et une dose d\'engrais' : ''}. Reviens demain pour plus !`), 2600);
+}
+daily();
+document.addEventListener('visibilitychange', () => { if (!document.hidden) daily(); });
+
 if (away > 90) {
   const mins = Math.round(away / 60);
   const txt = mins >= 60 ? `${Math.floor(mins / 60)} h ${String(mins % 60).padStart(2, '0')}` : `${mins} min`;

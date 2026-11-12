@@ -11,7 +11,7 @@ export interface Order { who: string; family: Family; minQ: number; coins: numbe
 export interface Harvest { sp: string; q: number; vr: number }
 export interface MarketLine { p: number; hist: number[]; drift: number; driftLeft: number }
 export interface NewsItem { t: number; family: Family; dir: 1 | -1; text: string }
-export interface Upgrades { water: boolean; bugs: boolean; mist: boolean; lamp: boolean; heat: boolean; fan: boolean }
+export interface Upgrades { water: boolean; bugs: boolean; mist: boolean; lamp: boolean; heat: boolean; fan: boolean; fastKiln?: boolean; bigClay?: boolean }
 export type ClimateGear = 'mist' | 'lamp' | 'heat' | 'fan';
 export interface Disc { seen: boolean; bloomed: boolean; sold: number; bestQ: number; vars: boolean[] }
 
@@ -53,6 +53,9 @@ export interface State {
   /** Commande d'un visiteur. */
   order: Order | null;
   orderIn: number;
+  /** Dernier jour (AAAA-MM-JJ) où le cadeau quotidien a été reçu, et jours d'affilée. */
+  day?: string;
+  streak?: number;
   market: Record<Family, MarketLine>;
   marketAcc: number;
   news: NewsItem[];
@@ -61,7 +64,7 @@ export interface State {
   upgrades: Upgrades;
   disc: Record<string, Disc>;
   quests: Record<string, boolean>;
-  stats: { sold: number; earned: number; bestMult: number; planted: number; opened: number; crafted: number; painted: number; orders: number; cuttings: number };
+  stats: { sold: number; earned: number; bestMult: number; planted: number; opened: number; crafted: number; painted: number; orders: number; cuttings: number; crossed?: number };
   lastTick: number;
 }
 
@@ -99,7 +102,11 @@ export const PRICES = {
   heat: 450,
   fan: 400,
   stock: 250,
+  fastKiln: 600,
+  bigClay: 450,
+  prestige: 380,
 };
+export const CROSS_FEE: Record<string, number> = { commun: 60, rare: 250, exotique: 900 };
 
 export type Rng = () => number;
 
@@ -296,13 +303,13 @@ export function advance(s: State, now: number, rng: Rng = Math.random): number {
     s.visitors += (total / 20) * s.showcase.filter(Boolean).length * (0.5 + rng());
   }
   // Atelier : l'argile se dépose toute seule, le four cuit, les commandes passent.
-  if (s.clay < CLAY_CAP) {
+  if (s.clay < clayCap(s)) {
     s.clayAcc += total;
     const n = Math.floor(s.clayAcc / CLAY_EVERY);
     s.clayAcc -= n * CLAY_EVERY;
-    s.clay = Math.min(CLAY_CAP, s.clay + n);
+    s.clay = Math.min(clayCap(s), s.clay + n);
   } else s.clayAcc = 0;
-  if (s.kiln) s.kiln.left = Math.max(0, s.kiln.left - total);
+  if (s.kiln) s.kiln.left = Math.max(0, s.kiln.left - total * (s.upgrades.fastKiln ? 2 : 1));
   if (s.order) {
     s.order.left -= total;
     if (s.order.left <= 0) { s.order = null; s.orderIn = 120; }
@@ -338,6 +345,56 @@ function makeOrder(s: State, rng: Rng): Order | null {
     clay: hard ? 5 : 3,
     left: ORDER_TIME,
   };
+}
+
+export function clayCap(s: State): number {
+  return s.upgrades.bigClay ? CLAY_CAP * 2 : CLAY_CAP;
+}
+
+const NEXT_RARITY: Record<string, Rarity> = { commun: 'rare', rare: 'exotique', exotique: 'legendaire' };
+/** Deux plantes en fleur de même famille et de même rareté peuvent être croisées. Renvoie la raison du refus, ou ''. */
+export function crossBlock(s: State, i: number, j: number): string {
+  const a = s.slots[i]?.plant, b = s.slots[j]?.plant;
+  if (i === j || !a || !b || a.prog < 1 || b.prog < 1) return 'Il faut deux plantes en fleur.';
+  const x = SPECIES_BY_ID[a.sp], y = SPECIES_BY_ID[b.sp];
+  if (x.family !== y.family) return 'Les deux plantes doivent être de la même famille.';
+  if (x.rarity !== y.rarity) return 'Les deux plantes doivent être de la même rareté.';
+  if (!NEXT_RARITY[x.rarity]) return 'Rien n\'est plus rare qu\'une légendaire.';
+  if (s.coins < CROSS_FEE[x.rarity]) return `Il faut ${CROSS_FEE[x.rarity]} pièces pour ce croisement.`;
+  return '';
+}
+/** Croise deux plantes : elles partent, une graine de la rareté supérieure arrive (même famille si possible). */
+export function cross(s: State, i: number, j: number, rng: Rng = Math.random): { id: string; isNew: boolean } | null {
+  if (crossBlock(s, i, j)) return null;
+  const x = SPECIES_BY_ID[s.slots[i].plant!.sp];
+  const rar = NEXT_RARITY[x.rarity];
+  let pool = SPECIES.filter((sp) => sp.rarity === rar && sp.family === x.family);
+  if (pool.length === 0) pool = SPECIES.filter((sp) => sp.rarity === rar);
+  // On favorise les espèces encore absentes de l'almanach.
+  const fresh = pool.filter((sp) => !s.disc[sp.id]?.bloomed);
+  if (fresh.length) pool = fresh;
+  const pick = pool[Math.floor(rng() * pool.length)];
+  s.coins -= CROSS_FEE[x.rarity];
+  s.slots[i].plant = null;
+  s.slots[j].plant = null;
+  s.stats.crossed = (s.stats.crossed ?? 0) + 1;
+  return grant(s, [pick.id])[0];
+}
+
+/** Cadeau du jour : une fois par jour calendaire, plus généreux quand les jours s'enchaînent. */
+export function claimDaily(s: State, today: string, yesterday: string): { streak: number; coins: number; clay: number; fert: number } | null {
+  if (s.day === today) return null;
+  const streak = s.day === yesterday ? (s.streak ?? 0) + 1 : 1;
+  const first = s.day === undefined && s.stats.opened === 0;
+  s.day = today;
+  s.streak = streak;
+  if (first) return null; // toute première partie : on laisse le tutoriel tranquille
+  const gift = { streak, coins: 20 * Math.min(streak, 7), clay: 2, fert: streak % 3 === 0 ? 1 : 0 };
+  s.coins += gift.coins;
+  s.clay += gift.clay;
+  s.fert += gift.fert;
+  s.packets += 1;
+  return gift;
 }
 
 export function potSize(slot: Slot): number {
@@ -422,7 +479,7 @@ export function deliver(s: State, i: number): number {
   const gain = sell(s, { sp: p.sp, q: p.q, vr: p.vr }) + o.coins;
   s.coins += o.coins;
   s.stats.earned += o.coins;
-  s.clay = Math.min(CLAY_CAP + 6, s.clay + o.clay);
+  s.clay = Math.min(clayCap(s) + 6, s.clay + o.clay);
   s.stats.orders++;
   s.order = null;
   s.orderIn = 90;
@@ -464,11 +521,12 @@ function rollRarity(rng: Rng): Rarity {
 }
 
 /** Tire les graines d'un sachet. Le contenu penche vers les familles dont le cours est haut. */
-export function rollSeeds(s: State, rng: Rng, family?: Family): string[] {
+export function rollSeeds(s: State, rng: Rng, family?: Family, prestige = false): string[] {
   const out: string[] = [];
   for (let i = 0; i < PACKET_SIZE; i++) {
     let pool: Species[] = [];
     let rar = rollRarity(rng);
+    if (prestige && rar === 'commun') rar = rng() < 0.82 ? 'rare' : 'exotique';
     for (let k = 0; k < 4 && pool.length === 0; k++) {
       pool = SPECIES.filter((sp) => sp.rarity === rar && (!family || sp.family === family));
       if (pool.length === 0) rar = 'commun';
@@ -511,6 +569,14 @@ export function buyPacket(s: State, rng: Rng = Math.random, family?: Family) {
   s.coins -= price;
   s.stats.opened++;
   return grant(s, rollSeeds(s, rng, family));
+}
+
+/** Sachet prestige : trois graines, toutes rares ou mieux. Payé en pièces gagnées en jeu uniquement. */
+export function buyPrestige(s: State, rng: Rng = Math.random) {
+  if (s.coins < PRICES.prestige) return null;
+  s.coins -= PRICES.prestige;
+  s.stats.opened++;
+  return grant(s, rollSeeds(s, rng, undefined, true));
 }
 
 export function plantSeed(s: State, i: number, id: string, rng: Rng = Math.random): boolean {
@@ -692,6 +758,7 @@ export const QUESTS: Quest[] = [
   { id: 'cutting', text: 'Prélève des boutures sur une plante en fleur', reward: 60, done: (s) => s.stats.cuttings >= 1 },
   { id: 'shrub', text: 'Fais fleurir un arbuste dans un pot moyen ou grand', reward: 200,
     done: (s) => Object.entries(s.disc).some(([id, d]) => d.bloomed && SPECIES_BY_ID[id].family === 'arbustes') },
+  { id: 'cross', text: 'Croise deux plantes en fleur de même famille et de même rareté', reward: 120, done: (s) => (s.stats.crossed ?? 0) >= 1 },
   { id: 'gear', text: 'Installe un équipement dans la serre', reward: 100, done: (s) => Object.values(s.upgrades).some(Boolean) },
   { id: 'variant', text: 'Fais fleurir une variante panachée ou dorée', reward: 150, done: (s) => collection(s).variants >= 1 },
   { id: 'zone2', text: 'Aménage toute la serre', reward: 150, done: (s) => s.zonesOpen.every(Boolean) },
