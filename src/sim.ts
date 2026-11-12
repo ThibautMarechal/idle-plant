@@ -35,6 +35,8 @@ export interface State {
   composted: number;
   /** Équipements climatiques éteints par le joueur. */
   off: Partial<Record<ClimateGear, boolean>>;
+  /** Décor choisi pour l'espace de culture (purement visuel). */
+  theme?: string;
   market: Record<Family, MarketLine>;
   marketAcc: number;
   news: NewsItem[];

@@ -1,6 +1,7 @@
 import { FAMILIES, FAMILY_IDS, LEVEL_WORDS, RARITIES, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, STAGES, ZONES } from './data';
 import type { Family, Species } from './data';
 import type { Scene3D } from './scene';
+import { THEMES, themeOf } from './themes';
 import * as sim from './sim';
 import type { State } from './sim';
 
@@ -88,8 +89,7 @@ export class UI {
   private celebrate: string[] = [];
   private drag = -1;
   private dragTarget = -1;
-  private holdTimer = 0;
-  private holdAt: { x: number; y: number } | null = null;
+  private holdAt: { x: number; y: number; i: number } | null = null;
   private edgeAt = 0;
   private showEl!: HTMLButtonElement;
 
@@ -107,20 +107,9 @@ export class UI {
       b.className = 'slot';
       b.innerHTML = '<div class="badge hidden"></div><div class="bar"><i></i></div>';
       b.onclick = () => { if (Date.now() - this.swipedAt > 350) this.tapSlot(i); };
-      // Appui long : on soulève le pot pour le glisser ailleurs.
+      // Glisser un pot : dès que le doigt bouge, le pot se soulève et suit.
       b.addEventListener('pointerdown', (e) => {
-        clearTimeout(this.holdTimer);
-        if (!this.s.slots[i].pot || this.moving >= 0) return;
-        const x0 = e.clientX, y0 = e.clientY;
-        this.holdAt = { x: x0, y: y0 };
-        this.holdTimer = window.setTimeout(() => {
-          this.drag = i;
-          this.dragTarget = -1;
-          this.scene.lift(i);
-          this.buzz(25);
-          this.moveGhost(x0, y0);
-          this.refresh(true);
-        }, 380);
+        this.holdAt = this.s.slots[i].pot && this.moving < 0 ? { x: e.clientX, y: e.clientY, i } : null;
       });
       overlay.appendChild(b);
       this.slotEls.push(b);
@@ -129,11 +118,7 @@ export class UI {
     this.showEl.className = 'showb';
     this.showEl.onclick = () => { if (Date.now() - this.swipedAt > 350) this.open('vitrine'); };
     overlay.appendChild(this.showEl);
-    const ghost = document.createElement('div');
-    ghost.id = 'ghost';
-    ghost.hidden = true;
-    ghost.textContent = '🪴';
-    $('fx').appendChild(ghost);
+    this.applyTheme();
     const app = $('app');
     let sx = 0, sy = 0, st = 0, onScene = false;
     app.addEventListener('pointerdown', (e) => {
@@ -143,8 +128,12 @@ export class UI {
     });
     app.addEventListener('pointermove', (e) => {
       if (this.drag < 0) {
-        if (this.holdAt && Math.hypot(e.clientX - this.holdAt.x, e.clientY - this.holdAt.y) > 12) clearTimeout(this.holdTimer);
-        return;
+        if (!this.holdAt || Math.hypot(e.clientX - this.holdAt.x, e.clientY - this.holdAt.y) < 10) return;
+        this.drag = this.holdAt.i;
+        this.dragTarget = -1;
+        this.scene.lift(this.drag);
+        this.buzz(20);
+        this.refresh(true);
       }
       this.moveGhost(e.clientX, e.clientY);
       // Près du bord haut ou bas, on change de zone sans lâcher le pot.
@@ -157,7 +146,7 @@ export class UI {
     });
     app.addEventListener('pointerup', (e) => {
       this.pointerDown = false;
-      clearTimeout(this.holdTimer);
+      const onPot = !!this.holdAt;
       this.holdAt = null;
       if (this.drag >= 0) {
         const from = this.drag, to = this.dragTarget;
@@ -171,13 +160,13 @@ export class UI {
         return;
       }
       const dx = e.clientX - sx, dy = e.clientY - sy;
-      if (!onScene || Date.now() - st > 900 || Math.max(Math.abs(dx), Math.abs(dy)) < 45) return;
+      if (onPot || !onScene || Date.now() - st > 900 || Math.max(Math.abs(dx), Math.abs(dy)) < 45) return;
       // Balayer vers la gauche ou vers le haut avance d'une zone ; l'inverse recule.
       const dir = Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 1 : -1) : (dy < 0 ? 1 : -1);
       this.swipedAt = Date.now();
       this.goZone(Math.max(-1, Math.min(ZONES.length - 1, this.scene.currentZone + dir)));
     });
-    for (const ev of ['pointercancel', 'pointerleave']) app.addEventListener(ev, () => { this.pointerDown = false; clearTimeout(this.holdTimer); if (this.drag >= 0) { this.endDrag(); this.refresh(true); } });
+    for (const ev of ['pointercancel', 'pointerleave']) app.addEventListener(ev, () => { this.pointerDown = false; this.holdAt = null; if (this.drag >= 0) { this.endDrag(); this.refresh(true); } });
     app.addEventListener('click', (e) => {
       const t = (e.target as HTMLElement).closest('[data-act]') as HTMLElement | null;
       if (t && !t.hasAttribute('disabled')) this.act(t.dataset.act!, t.dataset.arg ?? '');
@@ -189,7 +178,6 @@ export class UI {
     this.drag = -1;
     this.dragTarget = -1;
     this.scene.lift(-1);
-    $('ghost').hidden = true;
   }
 
   private moveGhost(cx: number, cy: number): void {
@@ -210,6 +198,14 @@ export class UI {
   private goZone(z: number): void {
     this.scene.setView(z);
     this.refresh(true);
+  }
+
+  private zname(z: number): string {
+    return themeOf(this.scene.themeId).zones[z];
+  }
+
+  private applyTheme(): void {
+    $('app').style.background = themeOf(this.scene.themeId).bg;
   }
 
   setState(s: State): void {
@@ -293,7 +289,7 @@ export class UI {
         break;
       case 'cancelmove': this.moving = -1; break;
       case 'openzone':
-        if (sim.openZone(s, this.arg)) { this.toast(`${ZONES[this.arg].name} : zone aménagée !`); this.buzz(30); this.close(); this.goZone(this.arg); }
+        if (sim.openZone(s, this.arg)) { this.toast(`${this.zname(this.arg)} : zone aménagée !`); this.buzz(30); this.close(); this.goZone(this.arg); }
         else this.toast('Pas assez de pièces.');
         break;
       case 'plant':
@@ -334,6 +330,13 @@ export class UI {
       case 'upgrade':
         if (sim.buyUpgrade(s, arg as 'water' | 'bugs' | 'mist' | 'stock')) { this.toast('Installé dans la serre !'); this.buzz(25); }
         else this.toast('Pas assez de pièces.');
+        break;
+      case 'theme':
+        s.theme = arg;
+        this.scene.setTheme(arg);
+        this.applyTheme();
+        this.close();
+        this.toast(`Décor : ${themeOf(arg).name}`);
         break;
       case 'quest': {
         const r = sim.claimQuest(s);
@@ -544,7 +547,7 @@ export class UI {
     // Haut d'écran
     const col = sim.collection(s);
     const cur = this.scene.currentZone;
-    const tabs = [`<button class="tab${cur < 0 ? ' on' : ''}" data-act="view" data-arg="-1">Serre</button>`].concat(ZONES.map((z, r) => {
+    const tabs = [`<button class="tab${cur < 0 ? ' on' : ''}" data-act="view" data-arg="-1">${themeOf(this.scene.themeId).all}</button>`].concat(ZONES.map((z, r) => {
       const care = s.zonesOpen[r] && [0, 1, 2].some((c) => this.needsCare(r * SLOTS_PER_ZONE + c));
       return `<button class="tab${cur === r ? ' on' : ''}${s.zonesOpen[r] ? '' : ' off'}" data-act="view" data-arg="${r}">${s.zonesOpen[r] ? z.icon : '🔒'} ${ZONE_SHORT[r]}${care ? '<i class="care"></i>' : ''}</button>`;
     })).join('');
@@ -552,7 +555,7 @@ export class UI {
     if (this.moving >= 0) info = `<div class="ticker"><span>Où poser ce pot ?</span><button class="btn small" data-act="cancelmove">Annuler</button></div>`;
     else if (cur >= 0) {
       const c = sim.zoneClimate(s, ZONES[cur]);
-      info = `<div class="zinfo"><b>${ZONES[cur].name}</b> ☀️ ${LEVEL_WORDS.light[c.light]} · 🌡️ ${LEVEL_WORDS.temp[c.temp]} · 💧 ${LEVEL_WORDS.hum[c.hum]}</div>`;
+      info = `<div class="zinfo"><b>${this.zname(cur)}</b> ☀️ ${LEVEL_WORDS.light[c.light]} · 🌡️ ${LEVEL_WORDS.temp[c.temp]} · 💧 ${LEVEL_WORDS.hum[c.hum]}</div>`;
     }
     const hud = `<div class="hudrow"><div class="pill coins">🪙 ${fmt(s.coins)}</div><button class="pill" data-act="nav" data-arg="almanac">📖 ${col.bloomed}/${SPECIES.length} <small>⭐ ${col.stars}</small></button></div><div class="tabs">${tabs}</div>${info}`;
     if (hud !== this.lastHud && (force || !this.pointerDown)) { $('hud').innerHTML = hud; this.lastHud = hud; }
@@ -621,7 +624,7 @@ export class UI {
   private zoneLine(i: number): string {
     const z = sim.zoneOfSlot(i);
     const c = sim.zoneClimate(this.s, z);
-    return `<p class="sub">${z.icon} <b>${z.name}</b> : ${LEVEL_WORDS.light[c.light].toLowerCase()}, ${LEVEL_WORDS.temp[c.temp].toLowerCase()}, ${LEVEL_WORDS.hum[c.hum].toLowerCase()}.</p>`;
+    return `<p class="sub">${z.icon} <b>${this.zname(ZONES.indexOf(z))}</b> : ${LEVEL_WORDS.light[c.light].toLowerCase()}, ${LEVEL_WORDS.temp[c.temp].toLowerCase()}, ${LEVEL_WORDS.hum[c.hum].toLowerCase()}.</p>`;
   }
 
   private vitrineHtml(): string {
@@ -649,8 +652,8 @@ export class UI {
     const can = s.coins >= price;
     const c = sim.zoneClimate(s, z);
     const fans = SPECIES.filter((sp) => sim.fitOf(sp, c) >= 1 && s.disc[sp.id]?.seen).map((sp) => `${EMOJI[sp.id]} ${sp.name}`);
-    return this.head(`${z.icon} ${z.name}`) + `<div class="sh-body">
-      <p class="sub">Cette partie de la serre est encore encombrée. Aménage-la pour gagner trois emplacements au climat différent.</p>
+    return this.head(`${z.icon} ${this.zname(this.arg)}`) + `<div class="sh-body">
+      <p class="sub">Ce coin est encore encombrée. Aménage-la pour gagner trois emplacements au climat différent.</p>
       ${this.zoneLine(this.arg * SLOTS_PER_ZONE)}
       <p class="sub">${fans.length ? 'Parfaite pour : ' + fans.join(', ') + '.' : 'Aucune de tes espèces connues n\'y serait parfaitement à l\'aise pour l\'instant.'}</p>
       <button class="btn primary wide" data-act="openzone" ${can ? '' : 'disabled'}>Aménager · ${fmt(price)} 🪙</button>
@@ -769,16 +772,19 @@ export class UI {
     const gear = (ico: string, nm: string, ds: string, k: sim.ClimateGear) => !s.upgrades[k] ? item(ico, nm, ds, sim.PRICES[k], 'upgrade', k)
       : `<div class="card"><div class="ico">${ico}</div><div class="mid"><div class="nm">${nm}</div><div class="ds">${ds}</div></div><button class="btn small ${s.off[k] ? '' : 'primary'}" data-act="gear" data-arg="${k}">${s.off[k] ? 'Éteint' : 'Allumé'}</button></div>`;
     return this.head('🛒 Boutique') + `<div class="sh-body">
-      <p class="sub">Tout s'achète avec les pièces gagnées en vendant tes plantes.</p>
+      <h3>Décor</h3>
+      <p class="sub">Quatre ambiances à essayer, gratuites. Tes plantes et tes pots restent en place.</p>
+      <div class="themes">${THEMES.map((t) => `<button class="theme ${t.id === this.scene.themeId ? 'on' : ''}" data-act="theme" data-arg="${t.id}"><span class="sw" style="background:${t.bg}"></span><b>${esc(t.name)}</b><small>${esc(t.desc)}</small></button>`).join('')}</div>
+      <p class="sub">Tout le reste s'achète avec les pièces gagnées en vendant tes plantes.</p>
       <h3>Équipement</h3>
       ${item('🚿', 'Arrosage automatique', 'Plus jamais de pot à sec, même en ton absence.', sim.PRICES.water, 'upgrade', 'water', s.upgrades.water)}
       ${item('🐞', 'Lâcher de coccinelles', 'Elles mangent les pucerons à ta place.', sim.PRICES.bugs, 'upgrade', 'bugs', s.upgrades.bugs)}
       <h3>Climat</h3>
       <p class="sub">Ces appareils changent le climat d'une zone. Tu peux les éteindre et les rallumer à volonté.</p>
-      ${gear('🌫️', 'Brumisateur', 'Sous l\'étagère : l\'air devient humide. Pour les fougères.', 'mist')}
-      ${gear('💡', 'Lampe horticole', 'Près de la porte : plein soleil. Pour les tulipes.', 'lamp')}
-      ${gear('♨️', 'Radiateur', 'Près de la porte : tempéré au lieu de frais.', 'heat')}
-      ${gear('🌀', 'Ventilateur', 'Table plein sud : tempéré au lieu de chaud. Pour lavande, thym et romarin.', 'fan')}
+      ${gear('🌫️', 'Brumisateur', 'Zone d\'ombre : l\'air devient humide. Pour les fougères.', 'mist')}
+      ${gear('💡', 'Lampe horticole', 'Zone fraîche : plein soleil. Pour les tulipes.', 'lamp')}
+      ${gear('♨️', 'Radiateur', 'Zone fraîche : tempéré au lieu de frais.', 'heat')}
+      ${gear('🌀', 'Ventilateur', 'Zone plein sud : tempéré au lieu de chaud. Pour lavande, thym et romarin.', 'fan')}
       ${s.stockCap < 10 ? item('📦', 'Réserve agrandie', `Deux places de plus (${s.stockCap} aujourd'hui).`, sim.PRICES.stock, 'upgrade', 'stock') : ''}
       <h3>Graines</h3>
       ${item('🎁', 'Sachet mystère', 'Trois graines de toutes familles.', sim.PRICES.packet, 'buypacket', '')}
@@ -813,7 +819,7 @@ export class UI {
       <p class="sub"><i>${esc(sp.latin)}</i> · ${FAMILIES[sp.family].name} · ${esc(sp.origin)}</p>
       <div>${rarTag(sp)} <span class="st">${stars(sim.starsOf(d))}</span></div>
       <h3>Ce qu'elle aime</h3>${needsChips(sp)}
-      <p class="sub">Idéal : ${ZONES.filter((z) => sim.fitOf(sp, sim.zoneClimate(this.s, z)) >= 1).map((z) => z.name).join(', ') || 'aucun coin parfait pour l\'instant, cherche le moins mauvais ou équipe la serre'}.</p>
+      <p class="sub">Idéal : ${ZONES.filter((z) => sim.fitOf(sp, sim.zoneClimate(this.s, z)) >= 1).map((z) => this.zname(ZONES.indexOf(z))).join(', ') || 'aucun coin parfait pour l\'instant, cherche le moins mauvais ou équipe la serre'}.</p>
       <div class="kv"><span>Taille adulte</span><b>${esc(sp.height)}</b></div>
       ${sp.pets ? `<div class="kv"><span>Chats et chiens</span><b>${sp.pets === 'ok' ? 'Sans danger' : 'Toxique si mâchouillée'}</b></div>` : ''}
       <h3>Dans ta collection</h3>

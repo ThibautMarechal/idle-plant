@@ -12,10 +12,12 @@ const clock = () => t0 + (Date.now() - t0) * speed;
 let state = sim.load(clock());
 const away = sim.advance(state, clock());
 
-const scene = new Scene3D(document.getElementById('gl') as HTMLCanvasElement);
+const scene = new Scene3D(document.getElementById('gl') as HTMLCanvasElement, state.theme);
 const ui = new UI(state, scene, () => {
   sim.wipe();
+  const theme = state.theme;
   state = sim.newState(clock());
+  state.theme = theme;
   ui.setState(state);
 });
 
