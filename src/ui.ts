@@ -4,6 +4,7 @@ import type { Scene3D } from './scene';
 import { STYLES } from './styles';
 import { THEMES, themeOf } from './themes';
 import * as sim from './sim';
+import { play, setMuted, unlock } from './sound';
 import type { State } from './sim';
 
 const EMOJI: Record<string, string> = {
@@ -17,7 +18,7 @@ const EMOJI: Record<string, string> = {
 };
 const ZONE_SHORT = ['Ombre', 'Bassin', 'Porte', 'Plein sud'];
 
-type SheetKind = 'atelier' | 'paint' | 'vitrine' | 'none' | 'seed' | 'buypot' | 'plant' | 'harvest' | 'packets' | 'market' | 'shop' | 'almanac' | 'fiche' | 'zone';
+type SheetKind = 'trophies' | 'atelier' | 'paint' | 'vitrine' | 'none' | 'seed' | 'buypot' | 'plant' | 'harvest' | 'packets' | 'market' | 'shop' | 'almanac' | 'fiche' | 'zone';
 
 const $ = (id: string) => document.getElementById(id)!;
 const fmt = (n: number) => Math.round(n).toLocaleString('fr-FR');
@@ -137,7 +138,9 @@ export class UI {
     this.applyTheme();
     const app = $('app');
     let sx = 0, sy = 0, st = 0, onScene = false;
+    setMuted(!!this.s.mute);
     app.addEventListener('pointerdown', (e) => {
+      unlock();
       this.pointerDown = true;
       sx = e.clientX; sy = e.clientY; st = Date.now();
       onScene = !(e.target as HTMLElement).closest('#sheet, #modal, #bottom, #hud, #backdrop');
@@ -275,6 +278,7 @@ export class UI {
       sim.water(s, i);
       this.scene.pop(i);
       this.float(i, '💧');
+      play('water');
       this.buzz(10);
       return;
     }
@@ -315,6 +319,16 @@ export class UI {
         this.close();
         this.toast('Touche l\'emplacement où poser ce pot. Balaye pour changer de zone.');
         break;
+      case 'trophy': {
+        const r = sim.claimTrophy(s, arg);
+        if (r) { this.toast(`Trophée obtenu ! +${fmt(r)} 🪙`); play('coin'); this.bumpCoins(); this.buzz(30); }
+        break;
+      }
+      case 'mute':
+        s.mute = !s.mute;
+        setMuted(s.mute);
+        if (!s.mute) play('tap');
+        break;
       case 'cancelmove': this.moving = -1; this.crossing = -1; break;
       case 'cross':
         this.crossing = this.arg;
@@ -332,14 +346,14 @@ export class UI {
         else this.toast('Pas assez de pièces.');
         break;
       case 'plant':
-        if (sim.plantSeed(s, this.arg, arg)) { this.scene.pop(this.arg); this.float(this.arg, '🌱'); this.buzz(12); this.close(); }
+        if (sim.plantSeed(s, this.arg, arg)) { play('plant'); this.scene.pop(this.arg); this.float(this.arg, '🌱'); this.buzz(12); this.close(); }
         break;
       case 'craft':
-        if (sim.startPot(s, n)) { this.toast('Au four ! La cuisson continue même en ton absence.'); this.buzz(15); }
+        if (sim.startPot(s, n)) { play('craft'); this.toast('Au four ! La cuisson continue même en ton absence.'); this.buzz(15); }
         else this.toast(s.kiln ? 'Le four est déjà occupé.' : 'Pas assez d\'argile.');
         break;
       case 'kiln':
-        if (sim.collectKiln(s)) { this.toast('Pot défourné : il t\'attend sur l\'étagère.'); this.buzz(25); }
+        if (sim.collectKiln(s)) { play('craft'); this.toast('Pot défourné : il t\'attend sur l\'étagère.'); this.buzz(25); }
         else if (s.shelf.length >= sim.SHELF_CAP) this.toast('L\'étagère est pleine : pose un pot dans la serre.');
         break;
       case 'place':
@@ -426,7 +440,7 @@ export class UI {
         break;
       case 'quest': {
         const r = sim.claimQuest(s);
-        if (r) { this.toast(`Objectif atteint ! +${fmt(r)} 🪙`); this.bumpCoins(); this.buzz(30); }
+        if (r) { play('coin'); this.toast(`Objectif atteint ! +${fmt(r)} 🪙`); this.bumpCoins(); this.buzz(30); }
         break;
       }
       case 'fiche': this.argId = arg; this.open('fiche', this.arg); break;
@@ -490,6 +504,7 @@ export class UI {
 
   private coinFx(i: number, gain: number): void {
     this.float(i, `+${fmt(gain)} 🪙`);
+    play('coin');
     this.bumpCoins();
     this.buzz(25);
   }
@@ -535,11 +550,24 @@ export class UI {
     const sp = SPECIES_BY_ID[this.pack[this.flipped].id];
     this.flipped++;
     this.buzz(sp.rarity === 'commun' ? 12 : 60);
+    play(sp.rarity === 'commun' ? 'card' : 'rare');
     this.renderPack();
+  }
+
+  private showLevel(level: number): void {
+    const m = $('modal');
+    m.innerHTML = `<div class="mtitle">Niveau ${level} !</div>
+      <div class="rc solo" style="border-color:var(--gold)"><span class="e">🎓</span>Jardinier niveau ${level}<i>Ta serre prend de l'ampleur</i></div>
+      <div class="fact">Récompense : +${25 * level} 🪙, +2 argile et un sachet de graines.</div>
+      <button class="btn primary" data-act="closemodal">Continuer</button>`;
+    m.classList.add('on');
+    this.buzz(60);
+    play('level');
   }
 
   private showBloom(key: string): void {
     const [id, v] = key.split(':');
+    if (id === 'lvl') return this.showLevel(Number(v));
     const vr = Number(v) || 0;
     const sp = SPECIES_BY_ID[id];
     const d = this.s.disc[id];
@@ -551,6 +579,7 @@ export class UI {
       <button class="btn primary" data-act="closemodal">Continuer</button>`;
     m.classList.add('on');
     this.buzz(40);
+    play('bloom');
   }
 
   // ---------- rendu ----------
@@ -644,7 +673,9 @@ export class UI {
       const c = sim.zoneClimate(s, ZONES[cur]);
       info = `<div class="zinfo"><b>${this.zname(cur)}</b> ☀️ ${LEVEL_WORDS.light[c.light]} · 🌡️ ${LEVEL_WORDS.temp[c.temp]} · 💧 ${LEVEL_WORDS.hum[c.hum]}</div>`;
     }
-    const hud = `<div class="hudrow"><div class="pill coins">🪙 ${fmt(s.coins)}</div><button class="pill" data-act="nav" data-arg="almanac">📖 ${col.bloomed}/${SPECIES.length} <small>⭐ ${col.stars}</small></button></div><div class="tabs">${tabs}</div>${info}`;
+    const lv = sim.levelOf(s);
+    const ready = sim.TROPHIES.filter((x) => sim.trophyReady(s, x)).length;
+    const hud = `<div class="hudrow"><div class="pill coins">🪙 ${fmt(s.coins)}</div><button class="pill lvl" data-act="nav" data-arg="trophies">🎓 ${lv.level}<i class="xp"><i style="width:${Math.round(100 * lv.into / lv.span)}%"></i></i>${ready ? `<i class="dot">${ready}</i>` : ''}</button><button class="pill" data-act="nav" data-arg="almanac">📖 ${col.bloomed}/${SPECIES.length} <small>⭐ ${col.stars}</small></button></div><div class="tabs">${tabs}</div>${info}`;
     if (hud !== this.lastHud && (force || !this.pointerDown)) { $('hud').innerHTML = hud; this.lastHud = hud; }
 
     // Nouvelles fiches à fêter
@@ -710,6 +741,7 @@ export class UI {
       case 'zone': return this.zoneHtml();
       case 'vitrine': return this.vitrineHtml();
       case 'atelier': return this.atelierHtml();
+      case 'trophies': return this.trophiesHtml();
       case 'paint': return this.paintHtml();
       default: return '';
     }
@@ -954,6 +986,26 @@ export class UI {
       <p class="sub">Pour un nouveau pot ou une nouvelle zone, touche un emplacement libre ou un cadenas dans la serre.</p></div>`;
   }
 
+  private trophiesHtml(): string {
+    const s = this.s;
+    const lv = sim.levelOf(s);
+    const rank = (x: sim.Trophy) => (sim.trophyReady(s, x) ? 0 : s.trophies?.[x.id] ? 2 : 1);
+    const rows = [...sim.TROPHIES].sort((a, b) => rank(a) - rank(b)).map((x) => {
+      const [a, b] = x.at(s);
+      const done = !!s.trophies?.[x.id];
+      const end = done ? '<span class="chip ok">Obtenu</span>'
+        : a >= b ? `<button class="btn gold small" data-act="trophy" data-arg="${x.id}">+${fmt(x.reward)} 🪙</button>`
+          : `<span class="chip">${fmt(a)} / ${fmt(b)}</span>`;
+      return `<div class="card" ${done ? 'style="opacity:.6"' : ''}><div class="ico">${x.icon}</div><div class="mid"><div class="nm">${esc(x.name)}</div><div class="ds">${esc(x.text)}</div>${done || a >= b ? '' : `<div class="prog" style="height:6px;margin-top:5px"><i style="width:${Math.round(100 * a / b)}%"></i></div>`}</div>${end}</div>`;
+    }).join('');
+    const got = sim.TROPHIES.filter((x) => s.trophies?.[x.id]).length;
+    return this.head('🎓 Jardinier') + `<div class="sh-body">
+      <div class="big">Niveau ${lv.level}</div>
+      <div class="prog"><i style="width:${Math.round(100 * lv.into / lv.span)}%"></i></div>
+      <p class="sub center">${fmt(lv.into)} / ${fmt(lv.span)} points d'expérience. Chaque floraison, commande, croisement et pot façonné en rapporte. Un niveau gagné offre des pièces, de l'argile et un sachet.</p>
+      <h3>Trophées (${got}/${sim.TROPHIES.length})</h3>${rows}</div>`;
+  }
+
   private almanacHtml(): string {
     const s = this.s;
     const col = sim.collection(s);
@@ -970,6 +1022,8 @@ export class UI {
       <div class="grid">${cells}</div>
       <div class="kv"><span>Plantes vendues</span><b>${fmt(s.stats.sold)}</b></div>
       <div class="kv"><span>Pièces gagnées</span><b>${fmt(s.stats.earned)} 🪙</b></div>
+      <button class="btn wide" data-act="nav" data-arg="trophies">🎓 Niveau et trophées</button>
+      <button class="btn wide" data-act="mute">${s.mute ? '🔇 Sons coupés' : '🔊 Sons activés'}</button>
       <button class="linkb" data-act="reset">Recommencer la partie</button></div>`;
   }
 

@@ -295,3 +295,9 @@ body[data-style="pixel"] .navb span { font-size: 20px; }
 
 .row.wrap { flex-wrap: wrap; }
 .row.wrap > * { flex: 1 1 30%; }
+
+/* Niveau de jardinier */
+.pill.lvl { position: relative; padding: 8px 12px; font-size: 15px; flex-direction: column; gap: 3px; align-items: stretch; text-align: center; }
+.pill.lvl .xp { display: block; height: 4px; border-radius: 2px; background: rgba(60, 50, 30, 0.16); overflow: hidden; min-width: 44px; }
+.pill.lvl .xp i { display: block; height: 100%; background: var(--gold); }
+.hudrow .pill.coins { margin-right: auto; }

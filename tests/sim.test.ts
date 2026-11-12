@@ -195,4 +195,22 @@ describe('simulation', () => {
     expect(sim.claimDaily(s, '2026-11-13', '2026-11-12')?.coins).toBe(40);
     expect(sim.claimDaily(s, '2026-11-20', '2026-11-19')?.streak).toBe(1);
   });
+
+  it('niveau : l\'expérience fait monter de niveau et récompense', () => {
+    const s = sim.newState(0);
+    const coins = s.coins, packets = s.packets;
+    sim.gainXp(s, sim.xpNeed(3));
+    expect(s.level).toBe(3);
+    expect(s.coins).toBe(coins + 50 + 75);
+    expect(s.packets).toBe(packets + 2);
+    expect(s.fresh).toEqual(['lvl:2', 'lvl:3']);
+  });
+
+  it('trophées : réclamés une seule fois, quand l\'objectif est atteint', () => {
+    const s = sim.newState(0);
+    expect(sim.claimTrophy(s, 'sold1')).toBe(0);
+    s.stats.sold = 10;
+    expect(sim.claimTrophy(s, 'sold1')).toBe(40);
+    expect(sim.claimTrophy(s, 'sold1')).toBe(0);
+  });
 });

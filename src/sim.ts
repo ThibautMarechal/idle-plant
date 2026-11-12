@@ -56,6 +56,11 @@ export interface State {
   /** Dernier jour (AAAA-MM-JJ) où le cadeau quotidien a été reçu, et jours d'affilée. */
   day?: string;
   streak?: number;
+  /** Expérience et niveau de jardinier. */
+  xp?: number;
+  level?: number;
+  trophies?: Record<string, boolean>;
+  mute?: boolean;
   market: Record<Family, MarketLine>;
   marketAcc: number;
   news: NewsItem[];
@@ -232,6 +237,7 @@ function stepPlants(s: State, dt: number, rng: Rng, offline: boolean): void {
         const newVar = !d.vars[p.vr];
         d.vars[p.vr] = true;
         if (starsOf(d) > before || newVar) s.fresh.push(`${p.sp}:${p.vr}`);
+        gainXp(s, XP_BLOOM[sp.rarity] * (p.vr > 0 ? 2 : 1));
       }
     } else if (p.pests > 0) {
       p.q = Math.max(10, p.q - dt * 0.05);
@@ -347,6 +353,62 @@ function makeOrder(s: State, rng: Rng): Order | null {
   };
 }
 
+export const XP_BLOOM: Record<string, number> = { commun: 10, rare: 25, exotique: 60, legendaire: 200 };
+/** Expérience totale nécessaire pour atteindre un niveau. */
+export function xpNeed(level: number): number {
+  return Math.round(35 * Math.pow(Math.max(0, level - 1), 1.8));
+}
+export function levelOf(s: State): { level: number; into: number; span: number } {
+  const level = s.level ?? 1;
+  const base = xpNeed(level), next = xpNeed(level + 1);
+  return { level, into: (s.xp ?? 0) - base, span: next - base };
+}
+/** Ajoute de l'expérience. Chaque niveau gagné offre des pièces, de l'argile et un sachet, et sera fêté par l'interface. */
+export function gainXp(s: State, n: number): void {
+  s.xp = (s.xp ?? 0) + n;
+  s.level = s.level ?? 1;
+  while (s.xp >= xpNeed(s.level + 1)) {
+    s.level++;
+    s.coins += 25 * s.level;
+    s.clay += 2;
+    s.packets += 1;
+    s.fresh.push(`lvl:${s.level}`);
+  }
+}
+
+export interface Trophy { id: string; icon: string; name: string; text: string; reward: number; at: (s: State) => [number, number] }
+const tier = (id: string, icon: string, name: string, text: (n: number) => string, steps: [number, number][], cur: (s: State) => number): Trophy[] =>
+  steps.map(([goal, reward], k) => ({ id: `${id}${k + 1}`, icon, name: `${name} ${'I'.repeat(k + 1)}`, text: text(goal), reward, at: (s: State) => [Math.min(goal, cur(s)), goal] as [number, number] }));
+export const TROPHIES: Trophy[] = [
+  ...tier('bloom', '🌼', 'Botaniste', (n) => `Fais fleurir ${n} espèces différentes`, [[10, 80], [25, 300], [SPECIES.length, 1500]], (s) => collection(s).bloomed),
+  ...tier('stars', '⭐', 'Perfectionniste', (n) => `Cumule ${n} étoiles`, [[30, 120], [75, 400], [SPECIES.length * 3, 2000]], (s) => collection(s).stars),
+  ...tier('vars', '✨', 'Chasseur de variantes', (n) => `Obtiens ${n} variantes panachées ou dorées`, [[3, 100], [12, 400], [40, 1500]], (s) => collection(s).variants),
+  ...tier('sold', '🧺', 'Pépiniériste', (n) => `Vends ${n} plantes`, [[10, 40], [60, 200], [250, 800]], (s) => s.stats.sold),
+  ...tier('rich', '🪙', 'Bonne affaire', (n) => `Gagne ${n.toLocaleString('fr-FR')} pièces au total`, [[1000, 80], [10000, 400], [100000, 2000]], (s) => s.stats.earned),
+  ...tier('pots', '🏺', 'Potier', (n) => `Façonne ${n} pots`, [[3, 60], [12, 250], [40, 900]], (s) => s.stats.crafted),
+  ...tier('paint', '🎨', 'Céramiste', (n) => `Peins ${n} fois un pot`, [[3, 50], [15, 250]], (s) => s.stats.painted),
+  ...tier('orders', '📦', 'Fournisseur', (n) => `Livre ${n} commandes`, [[3, 80], [15, 350], [50, 1200]], (s) => s.stats.orders),
+  ...tier('cross', '🧬', 'Hybrideur', (n) => `Réussis ${n} croisements`, [[2, 100], [10, 400], [30, 1200]], (s) => s.stats.crossed ?? 0),
+  ...tier('cut', '✂️', 'Boutureur', (n) => `Prélève des boutures ${n} fois`, [[3, 50], [20, 300]], (s) => s.stats.cuttings),
+  ...tier('visit', '🏛️', 'Conservateur', (n) => `Accueille ${n.toLocaleString('fr-FR')} visiteurs en vitrine`, [[100, 80], [1000, 400], [10000, 1500]], (s) => Math.floor(s.visitors)),
+  ...tier('streak', '📅', 'Fidèle', (n) => `Joue ${n} jours d'affilée`, [[3, 100], [7, 400], [30, 2000]], (s) => s.streak ?? 0),
+  ...tier('level', '🎓', 'Jardinier', (n) => `Atteins le niveau ${n}`, [[5, 100], [10, 400], [20, 1500]], (s) => s.level ?? 1),
+  ...FAMILY_IDS.map((f): Trophy => ({ id: `fam-${f}`, icon: FAMILIES[f].icon, name: `Tout sur les ${FAMILIES[f].name.toLowerCase()}`, text: 'Fais fleurir toutes les espèces de cette famille', reward: 250,
+    at: (s) => { const all = SPECIES.filter((sp) => sp.family === f); return [all.filter((sp) => s.disc[sp.id]?.bloomed).length, all.length]; } })),
+];
+export function trophyReady(s: State, t: Trophy): boolean {
+  const [a, b] = t.at(s);
+  return a >= b && !s.trophies?.[t.id];
+}
+export function claimTrophy(s: State, id: string): number {
+  const t = TROPHIES.find((x) => x.id === id);
+  if (!t || !trophyReady(s, t)) return 0;
+  (s.trophies ??= {})[id] = true;
+  s.coins += t.reward;
+  gainXp(s, 20);
+  return t.reward;
+}
+
 export function clayCap(s: State): number {
   return s.upgrades.bigClay ? CLAY_CAP * 2 : CLAY_CAP;
 }
@@ -378,6 +440,7 @@ export function cross(s: State, i: number, j: number, rng: Rng = Math.random): {
   s.slots[i].plant = null;
   s.slots[j].plant = null;
   s.stats.crossed = (s.stats.crossed ?? 0) + 1;
+  gainXp(s, 20);
   return grant(s, [pick.id])[0];
 }
 
@@ -425,6 +488,7 @@ export function collectKiln(s: State): boolean {
   s.shelf.push({ size: s.kiln.size, glaze: 0, pat: 0 });
   s.kiln = null;
   s.stats.crafted++;
+  gainXp(s, 5);
   return true;
 }
 /** Pose un pot de l'étagère sur un emplacement libre. */
@@ -481,6 +545,7 @@ export function deliver(s: State, i: number): number {
   s.stats.earned += o.coins;
   s.clay = Math.min(clayCap(s) + 6, s.clay + o.clay);
   s.stats.orders++;
+  gainXp(s, 30);
   s.order = null;
   s.orderIn = 90;
   return gain;
@@ -780,6 +845,7 @@ export function claimQuest(s: State): number {
   const q = currentQuest(s);
   if (!q || !q.done(s)) return 0;
   s.quests[q.id] = true;
+  gainXp(s, 15);
   s.coins += q.reward;
   return q.reward;
 }
