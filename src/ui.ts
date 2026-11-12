@@ -76,6 +76,7 @@ export class UI {
   private slotEls: HTMLButtonElement[] = [];
   private zoneEls: HTMLElement[] = [];
   private toastTimer = 0;
+  private resetAskedAt = 0;
 
   constructor(private s: State, private scene: Scene3D, private onReset: () => void) {
     const overlay = $('overlay');
@@ -188,7 +189,9 @@ export class UI {
       case 'fiche': this.argId = arg; this.open('fiche', this.arg); break;
       case 'closemodal': $('modal').classList.remove('on'); break;
       case 'reset':
-        if (confirm('Recommencer la partie depuis le début ?')) this.onReset();
+        // Pas de boîte de dialogue native : deux touches rapprochées valent confirmation.
+        if (Date.now() - this.resetAskedAt < 4000) { this.resetAskedAt = 0; this.onReset(); this.toast('Nouvelle partie.'); }
+        else { this.resetAskedAt = Date.now(); this.toast('Touche encore une fois pour tout effacer.'); }
         break;
     }
     this.refresh(true);
