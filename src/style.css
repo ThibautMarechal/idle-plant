@@ -324,3 +324,13 @@ body[data-style="pixel"] .navb span { font-size: 20px; }
 .pdot.gum { background: #fff; }
 .row.tools .btn { padding: 8px 4px; display: flex; align-items: center; justify-content: center; min-height: 36px; white-space: nowrap; }
 .tip { display: block; border-radius: 50%; background: currentColor; }
+
+/* Outils à promener au-dessus des plantes */
+#tools { display: flex; gap: 10px; justify-content: flex-end; pointer-events: none; }
+.tool { pointer-events: auto; width: 58px; height: 58px; border-radius: 50%; background: #fff; font-size: 28px; box-shadow: 0 4px 0 rgba(60, 50, 30, 0.18), 0 6px 14px rgba(60, 50, 30, 0.18); touch-action: none; animation: toolpulse 1.6s ease-in-out infinite; }
+.tool.off { display: none; }
+.tool.held { opacity: 0.35; animation: none; }
+@keyframes toolpulse { 50% { transform: scale(1.09); } }
+.toolghost { position: absolute; font-size: 44px; transform: translate(-50%, -85%) rotate(-18deg); pointer-events: none; filter: drop-shadow(0 6px 6px rgba(40, 30, 10, 0.3)); }
+#bottom { pointer-events: none; }
+#bottom > :not(#tools) { pointer-events: auto; }

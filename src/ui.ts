@@ -95,6 +95,11 @@ export class UI {
   /** Pot en cours de peinture : sur un emplacement ou sur l'étagère. */
   private paintAt: { where: 'slot' | 'shelf'; k: number } = { where: 'slot', k: 0 };
   private studio!: Studio;
+  /** Outil tenu au doigt : arrosoir ou gant, promené au-dessus des plantes. */
+  private tool = '';
+  private toolEl: HTMLElement | null = null;
+  private toolAt: number[] = [];
+  private toolUsed = false;
   private viewSlot = -1;
   private lastNewsT = 0;
   private pointerDown = false;
@@ -142,6 +147,17 @@ export class UI {
     this.applyTheme();
     $('studio').innerHTML = '<div class="st-head"><h2 id="st-title"></h2><button class="x" data-act="st-close">✕</button></div><p id="st-hint"></p><canvas id="stgl"></canvas><div id="st-tools"></div>';
     this.studio = new Studio($('stgl') as HTMLCanvasElement);
+    $('tools').innerHTML = '<button class="tool" data-tool="can">🚿</button><button class="tool" data-tool="glove">🧤</button>';
+    $('tools').querySelectorAll<HTMLElement>('.tool').forEach((b) => b.addEventListener('pointerdown', (e) => {
+      this.tool = b.dataset.tool!;
+      this.toolUsed = false;
+      this.toolEl = document.createElement('div');
+      this.toolEl.className = 'toolghost';
+      this.toolEl.textContent = b.textContent;
+      $('fx').appendChild(this.toolEl);
+      b.classList.add('held');
+      this.useTool(e.clientX, e.clientY);
+    }));
     const app = $('app');
     let sx = 0, sy = 0, st = 0, onScene = false;
     setMuted(!!this.s.mute);
@@ -152,6 +168,7 @@ export class UI {
       onScene = !(e.target as HTMLElement).closest('#sheet, #modal, #bottom, #hud, #backdrop, #studio');
     });
     app.addEventListener('pointermove', (e) => {
+      if (this.tool) { this.useTool(e.clientX, e.clientY); return; }
       if (this.drag < 0) {
         if (!this.holdAt || Math.hypot(e.clientX - this.holdAt.x, e.clientY - this.holdAt.y) < 10) return;
         this.drag = this.holdAt.i;
@@ -170,6 +187,7 @@ export class UI {
       }
     });
     app.addEventListener('pointerup', (e) => {
+      if (this.tool) { this.dropTool(); return; }
       this.pointerDown = false;
       const onPot = !!this.holdAt;
       this.holdAt = null;
@@ -191,7 +209,7 @@ export class UI {
       this.swipedAt = Date.now();
       this.goZone(Math.max(-1, Math.min(ZONES.length - 1, this.scene.currentZone + dir)));
     });
-    for (const ev of ['pointercancel', 'pointerleave']) app.addEventListener(ev, () => { this.pointerDown = false; this.holdAt = null; if (this.drag >= 0) { this.endDrag(); this.refresh(true); } });
+    for (const ev of ['pointercancel', 'pointerleave']) app.addEventListener(ev, () => { this.dropTool(); this.pointerDown = false; this.holdAt = null; if (this.drag >= 0) { this.endDrag(); this.refresh(true); } });
     app.addEventListener('click', (e) => {
       const t = (e.target as HTMLElement).closest('[data-act]') as HTMLElement | null;
       if (t && !t.hasAttribute('disabled')) this.act(t.dataset.act!, t.dataset.arg ?? '');
@@ -218,6 +236,40 @@ export class UI {
       if (d < bestD && d < r.unit * 0.95) { bestD = d; best = i; }
     });
     if (best !== this.dragTarget) { this.dragTarget = best; this.refresh(true); }
+  }
+
+  /** L'outil suit le doigt et agit sur chaque plante qu'il survole. */
+  private useTool(cx: number, cy: number): void {
+    const rect = $('app').getBoundingClientRect();
+    const x = cx - rect.left, y = cy - rect.top;
+    if (this.toolEl) { this.toolEl.style.left = x + 'px'; this.toolEl.style.top = y + 'px'; }
+    const s = this.s;
+    const now = Date.now();
+    s.slots.forEach((slot, i) => {
+      if (!slot.plant || !sim.slotOpen(s, i)) return;
+      if (this.scene.currentZone >= 0 && sim.zoneIndexOfSlot(i) !== this.scene.currentZone) return;
+      const r = this.scene.slotRect(i);
+      if (Math.hypot(r.x - x, r.bottom - r.unit * 0.7 - y) > r.unit * 0.8 || now - (this.toolAt[i] ?? 0) < 280) return;
+      if (this.tool === 'can' ? sim.water(s, i) : sim.squash(s, i)) {
+        this.toolAt[i] = now;
+        this.toolUsed = true;
+        this.scene.pop(i);
+        this.float(i, this.tool === 'can' ? '💧' : slot.plant.pests > 0 ? '🐛' : '✨ Propre !');
+        play(this.tool === 'can' ? 'water' : 'tap');
+        this.buzz(10);
+        this.refresh(true);
+      }
+    });
+  }
+
+  private dropTool(): void {
+    if (!this.tool) return;
+    if (!this.toolUsed) this.toast(this.tool === 'can' ? 'Garde le doigt sur l\'arrosoir et promène-le au-dessus des plantes assoiffées.' : 'Garde le doigt sur le gant et frotte les plantes envahies pour chasser les chenilles.');
+    this.tool = '';
+    this.toolEl?.remove();
+    this.toolEl = null;
+    $('tools').querySelectorAll('.held').forEach((b) => b.classList.remove('held'));
+    this.swipedAt = Date.now();
   }
 
   private goZone(z: number): void {
@@ -728,6 +780,12 @@ export class UI {
   refresh(force = false): void {
     const s = this.s;
     this.layout();
+    // Outils à promener : visibles seulement quand ils servent.
+    const thirsty = !s.upgrades.water && s.slots.some((sl) => sl.plant && sl.plant.water < 0.5);
+    const bugs = s.slots.some((sl) => sl.plant && sl.plant.pests > 0);
+    const tools = $('tools').children;
+    tools[0].classList.toggle('off', !thirsty && this.tool !== 'can');
+    tools[1].classList.toggle('off', !bugs && this.tool !== 'glove');
     // Emplacements
     s.slots.forEach((slot, i) => {
       const el = this.slotEls[i];
