@@ -18,6 +18,7 @@ export interface Theme {
   bg: string;
   yaw: number;
   pitch: number;
+  /** Douze emplacements au sol puis quatre suspensions (une par zone). */
   slots: V3[];
   shows: V3[];
   /** Points extrêmes du décor, pour cadrer la vue d'ensemble. */
@@ -104,7 +105,8 @@ const verriere: Theme = {
   bg: 'linear-gradient(180deg, #a9dcd8 0%, #cfeadd 38%, #f6efd9 70%, #f3e6c4 100%)',
   yaw: 0.2,
   pitch: 0.85,
-  slots: rows(V.colX, [[0, V.rowZ[0]], [0, V.rowZ[1]], [0, V.rowZ[2]], [V.table, V.rowZ[3]]]),
+  slots: [...rows(V.colX, [[0, V.rowZ[0]], [0, V.rowZ[1]], [0, V.rowZ[2]], [V.table, V.rowZ[3]]]),
+    ...V.rowZ.map((z, k): V3 => [-2.3, (k === 3 ? V.table : 0) + 1.05, z - 0.35])],
   shows: [-1.95, -0.65, 0.65, 1.95].map((x): V3 => [x, 2.2, -V.D + 0.4]),
   bounds: [[-3.1, 0, -4], [3.1, 0, -4], [-3.1, 3.3, -4], [3.1, 3.3, -4], [-3.1, -0.6, 4.1], [3.1, -0.6, 4.1]],
   pot: [0xc9714a, 0xd9825a],
@@ -158,6 +160,7 @@ const appartement: Theme = {
     [0.7, 0.36, -0.9], [1.7, 0.36, -0.9], [2.7, 0.36, -0.9],
     [-1.5, 0, 2.5], [-0.4, 0, 2.5], [0.7, 0, 2.5],
     [-1.1, 1.36, -2.95], [0.1, 1.36, -2.95], [1.3, 1.36, -2.95],
+    [-2.75, 2.0, -2.45], [1.7, 1.5, -1.9], [1.9, 0, 2.5], [2.5, 1.36, -2.95],
   ],
   shows: [1.2, 1.78, 2.36, 2.94].map((x): V3 => [x, 0.82, 1.6]),
   bounds: [[-3.4, 0, -3.4], [3.4, 0, -3.4], [-3.4, 3.5, -3.4], [3.4, 3.5, -3.4], [-3.4, 3.5, 3.4], [3.4, -0.4, 3.4], [-3.4, -0.4, 3.4]],
@@ -209,7 +212,8 @@ const balcon: Theme = {
   bg: 'linear-gradient(180deg, #f6a57a 0%, #f9c79a 35%, #f7e0c0 70%, #e9d6c4 100%)',
   yaw: 0.12,
   pitch: 0.72,
-  slots: BX.flatMap((cx): V3[] => [[cx - 0.62, 0, 0.45], [cx, 0, -0.5], [cx + 0.62, 0, 0.45]]),
+  slots: [...BX.flatMap((cx): V3[] => [[cx - 0.62, 0, 0.45], [cx, 0, -0.5], [cx + 0.62, 0, 0.45]]),
+    ...BX.map((cx): V3 => [cx + 0.95, 1.05, -1.0])],
   shows: [-2.0, -1.4, -0.8, -0.2].map((x): V3 => [x, 1.95, -1.05]),
   bounds: [[-4.8, 0, -1.5], [4.8, 0, -1.5], [-4.8, 3.3, -1.5], [4.8, 3.3, -1.5], [-4.8, -0.5, 1.5], [4.8, -0.5, 1.5]],
   pot: [0x4f7f9a, 0x6f9fba],

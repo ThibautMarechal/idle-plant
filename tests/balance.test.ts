@@ -48,7 +48,7 @@ describe.skipIf(!process.env.BALANCE)('rythme de jeu', () => {
       }
       // Atelier : on défourne, on pose, et on façonne la taille que réclament les graines en attente.
       if (sim.collectKiln(s)) acted = true;
-      const spot = s.slots.findIndex((slot, i) => !slot.pot && s.zonesOpen[Math.floor(i / SLOTS_PER_ZONE)]);
+      const spot = s.slots.findIndex((slot, i) => !slot.pot && sim.slotOpen(s, i));
       if (spot >= 0 && s.shelf.length && sim.placePot(s, spot, 0)) acted = true;
       const want = Math.max(1, ...Object.keys(s.seeds).map((id) => sim.sizeOf(SPECIES_BY_ID[id])));
       const have = Math.max(0, ...s.slots.filter((x) => !x.plant).map(sim.potSize), ...s.shelf.map((x) => x.size), s.kiln?.size ?? 0);
@@ -65,7 +65,9 @@ describe.skipIf(!process.env.BALANCE)('rythme de jeu', () => {
       const seedsWaiting = Object.values(s.seeds).reduce((a, b) => a + b, 0);
       const z = s.zonesOpen.findIndex((o) => !o);
       if (z >= 0 && sim.openZone(s, z)) acted = true;
-      const free = s.slots.findIndex((slot, i) => !slot.pot && s.zonesOpen[Math.floor(i / SLOTS_PER_ZONE)]);
+      if (z < 0) for (let k = 0; k < 4; k++) if (sim.buyExtra(s, k)) acted = true;
+      while (sim.claimContest(s)) acted = true;
+      const free = s.slots.findIndex((slot, i) => !slot.pot && sim.slotOpen(s, i));
       if (free >= 0 && seedsWaiting > 0 && sim.buyPot(s, free)) acted = true;
       else if (free < 0 || s.coins > sim.potPrice(s) * 2) {
         for (const k of ['water', 'bugs', 'mist', 'fan', 'heat'] as const) if (!s.upgrades[k] && sim.buyUpgrade(s, k)) { acted = true; break; }
@@ -74,7 +76,7 @@ describe.skipIf(!process.env.BALANCE)('rythme de jeu', () => {
       if (!acted) idle += 5;
       if (marks.includes(t / 60)) {
         const c = sim.collection(s);
-        console.log(`${String(t / 60).padStart(3)} min | 🪙 ${String(Math.round(s.coins)).padStart(5)} | pots ${s.slots.filter((x) => x.pot).length} | zones ${s.zonesOpen.filter(Boolean).length} | fleuries ${c.bloomed}/${SPECIES.length} | arbustes ${SPECIES.filter((x) => x.family === 'arbustes' && s.disc[x.id]?.bloomed).length} | croisements ${s.stats.crossed ?? 0} | commandes ${s.stats.orders} | pots façonnés ${s.stats.crafted} | argile ${s.clay} | ⭐ ${c.stars} | variantes ${c.variants} | vitrine ${s.showcase.filter(Boolean).length} | équip. ${Object.values(s.upgrades).filter(Boolean).length} | graines en attente ${seedsWaiting} | sans rien à faire ${Math.round(idle / 60)} min`);
+        console.log(`${String(t / 60).padStart(3)} min | 🪙 ${String(Math.round(s.coins)).padStart(5)} | pots ${s.slots.filter((x) => x.pot).length} | zones ${s.zonesOpen.filter(Boolean).length} | fleuries ${c.bloomed}/${SPECIES.length} | arbustes ${SPECIES.filter((x) => x.family === 'arbustes' && s.disc[x.id]?.bloomed).length} | concours ${s.stats.contests ?? 0} | croisements ${s.stats.crossed ?? 0} | commandes ${s.stats.orders} | pots façonnés ${s.stats.crafted} | argile ${s.clay} | ⭐ ${c.stars} | variantes ${c.variants} | vitrine ${s.showcase.filter(Boolean).length} | équip. ${Object.values(s.upgrades).filter(Boolean).length} | graines en attente ${seedsWaiting} | sans rien à faire ${Math.round(idle / 60)} min`);
       }
     }
   });

@@ -213,4 +213,29 @@ describe('simulation', () => {
     expect(sim.claimTrophy(s, 'sold1')).toBe(40);
     expect(sim.claimTrophy(s, 'sold1')).toBe(0);
   });
+
+  it('saisons : les familles de saison poussent plus vite et comptent au concours', () => {
+    const s = sim.newState(0);
+    expect(sim.seasonOf(s).index).toBe(0);
+    s.slots[9].plant = { sp: 'pensee', prog: 0.99, water: 1, pests: 0, q: 90, vr: 0 };
+    sim.advance(s, 20_000, () => 0.99);
+    expect(sim.contestOf(s).blooms).toBe(1);
+    sim.contestOf(s).blooms = 3;
+    expect(sim.claimContest(s)?.label).toBe('Bronze');
+    expect(sim.claimContest(s)).toBeNull();
+    sim.advance(s, 20_000 + 1200_000, () => 0.99);
+    expect(sim.seasonOf(s).index).toBe(1);
+    expect(sim.contestOf(s).blooms).toBe(0);
+  });
+
+  it('suspension : un emplacement de plus par zone aménagée', () => {
+    const s = sim.newState(0);
+    expect(s.slots.length).toBe(16);
+    expect(sim.slotOpen(s, 14)).toBe(false);
+    s.coins = 1000;
+    expect(sim.buyExtra(s, 0)).toBe(false); // zone pas encore aménagée
+    expect(sim.buyExtra(s, 2)).toBe(true);
+    expect(sim.slotOpen(s, 14)).toBe(true);
+    expect(sim.buyPot(s, 14)).toBe(true);
+  });
 });

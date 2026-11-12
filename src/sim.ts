@@ -1,4 +1,4 @@
-import { CLIENTS, FAMILIES, FAMILY_IDS, GLAZES, NEWS, POT_SIZES, RARITIES, SLOT_COUNT, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, ZONES } from './data';
+import { BASE_SLOTS, SEASONS, SEASON_LENGTH, CLIENTS, FAMILIES, FAMILY_IDS, GLAZES, NEWS, POT_SIZES, RARITIES, SLOT_COUNT, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, ZONES } from './data';
 import type { Family, Rarity, Species, Zone } from './data';
 
 /** `vr` : variante, 0 normale, 1 panachée, 2 dorée. */
@@ -57,6 +57,12 @@ export interface State {
   day?: string;
   streak?: number;
   /** Expérience et niveau de jardinier. */
+  /** Suspensions achetées, une par zone. */
+  extra?: boolean[];
+  /** Temps de jeu écoulé, qui fait tourner les saisons. */
+  seasonT?: number;
+  /** Concours de la saison : numéro de la saison, floraisons comptées, paliers réclamés. */
+  contest?: { n: number; blooms: number; claimed: number };
   xp?: number;
   level?: number;
   trophies?: Record<string, boolean>;
@@ -69,11 +75,18 @@ export interface State {
   upgrades: Upgrades;
   disc: Record<string, Disc>;
   quests: Record<string, boolean>;
-  stats: { sold: number; earned: number; bestMult: number; planted: number; opened: number; crafted: number; painted: number; orders: number; cuttings: number; crossed?: number };
+  stats: { sold: number; earned: number; bestMult: number; planted: number; opened: number; crafted: number; painted: number; orders: number; cuttings: number; crossed?: number; contests?: number };
   lastTick: number;
 }
 
 export const SAVE_VERSION = 4;
+export const SEASON_SPEED = 1.25;
+export const EXTRA_PRICES = [250, 400, 600, 900];
+export const CONTEST: { need: number; coins: number; clay: number; label: string }[] = [
+  { need: 3, coins: 60, clay: 2, label: 'Bronze' },
+  { need: 7, coins: 180, clay: 4, label: 'Argent' },
+  { need: 12, coins: 450, clay: 6, label: 'Or' },
+];
 export const CLAY_EVERY = 40;
 export const CLAY_CAP = 12;
 export const SHELF_CAP = 6;
@@ -158,7 +171,7 @@ export function newState(now: number): State {
 }
 
 export function zoneOfSlot(i: number): Zone {
-  return ZONES[Math.floor(i / SLOTS_PER_ZONE)];
+  return ZONES[zoneIndexOfSlot(i)];
 }
 
 export function gearOn(s: State, g: ClimateGear): boolean {
@@ -225,7 +238,7 @@ function stepPlants(s: State, dt: number, rng: Rng, offline: boolean): void {
     const wet = p.water > 0;
     if (p.prog < 1) {
       // Jamais de plante morte : sans eau ou infestée, elle tourne au ralenti.
-      const speed = fit * (wet ? 1 : 0.25) * (p.pests > 0 ? 0.5 : 1) * (harmony(slot) ? HARMONY_SPEED : 1);
+      const speed = fit * (wet ? 1 : 0.25) * (p.pests > 0 ? 0.5 : 1) * (harmony(slot) ? HARMONY_SPEED : 1) * (inSeason(s, sp) ? SEASON_SPEED : 1);
       p.prog = Math.min(1, p.prog + (dt / sp.grow) * speed);
       const target = 100 * fit * (wet ? 1 : 0.6) * (p.pests > 0 ? 0.5 : 1);
       p.q += (target - p.q) * Math.min(1, (dt / sp.grow) * 2.2);
@@ -238,6 +251,7 @@ function stepPlants(s: State, dt: number, rng: Rng, offline: boolean): void {
         d.vars[p.vr] = true;
         if (starsOf(d) > before || newVar) s.fresh.push(`${p.sp}:${p.vr}`);
         gainXp(s, XP_BLOOM[sp.rarity] * (p.vr > 0 ? 2 : 1));
+        if (inSeason(s, sp)) contestOf(s).blooms++;
       }
     } else if (p.pests > 0) {
       p.q = Math.max(10, p.q - dt * 0.05);
@@ -308,6 +322,7 @@ export function advance(s: State, now: number, rng: Rng = Math.random): number {
     s.tips = Math.min(rate * TIP_CAP_SECONDS, s.tips + rate * total);
     s.visitors += (total / 20) * s.showcase.filter(Boolean).length * (0.5 + rng());
   }
+  s.seasonT = (s.seasonT ?? 0) + Math.min(total, SEASON_LENGTH);
   // Atelier : l'argile se dépose toute seule, le four cuit, les commandes passent.
   if (s.clay < clayCap(s)) {
     s.clayAcc += total;
@@ -494,7 +509,7 @@ export function collectKiln(s: State): boolean {
 /** Pose un pot de l'étagère sur un emplacement libre. */
 export function placePot(s: State, i: number, k: number): boolean {
   const slot = s.slots[i];
-  if (slot.pot || !s.shelf[k] || !s.zonesOpen[zoneIndexOfSlot(i)]) return false;
+  if (slot.pot || !s.shelf[k] || !slotOpen(s, i)) return false;
   slot.pot = true;
   slot.pd = s.shelf.splice(k, 1)[0];
   return true;
@@ -757,12 +772,50 @@ export function sellStock(s: State, k: number): number {
 }
 
 export function zoneIndexOfSlot(i: number): number {
-  return Math.floor(i / SLOTS_PER_ZONE);
+  return i < BASE_SLOTS ? Math.floor(i / SLOTS_PER_ZONE) : i - BASE_SLOTS;
+}
+/** Un emplacement est utilisable si sa zone est aménagée et, pour une suspension, si elle est achetée. */
+export function slotOpen(s: State, i: number): boolean {
+  const z = zoneIndexOfSlot(i);
+  return !!s.zonesOpen[z] && (i < BASE_SLOTS || !!s.extra?.[z]);
+}
+export function buyExtra(s: State, z: number): boolean {
+  if (!s.zonesOpen[z] || s.extra?.[z] || s.coins < EXTRA_PRICES[z]) return false;
+  s.coins -= EXTRA_PRICES[z];
+  (s.extra ??= ZONES.map(() => false))[z] = true;
+  return true;
+}
+
+export function seasonOf(s: State): { n: number; index: number; left: number } {
+  const t = s.seasonT ?? 0;
+  const n = Math.floor(t / SEASON_LENGTH);
+  return { n, index: n % SEASONS.length, left: SEASON_LENGTH - (t % SEASON_LENGTH) };
+}
+export function inSeason(s: State, sp: Species): boolean {
+  return SEASONS[seasonOf(s).index].fams.includes(sp.family);
+}
+export function contestOf(s: State): { n: number; blooms: number; claimed: number } {
+  const n = seasonOf(s).n;
+  if (!s.contest || s.contest.n !== n) s.contest = { n, blooms: 0, claimed: 0 };
+  return s.contest;
+}
+/** Réclame le prochain palier du concours de saison, s'il est atteint. */
+export function claimContest(s: State): { coins: number; clay: number; label: string } | null {
+  const c = contestOf(s);
+  const tier = CONTEST[c.claimed];
+  if (!tier || c.blooms < tier.need) return null;
+  c.claimed++;
+  s.stats.contests = (s.stats.contests ?? 0) + 1;
+  s.coins += tier.coins;
+  s.clay += tier.clay;
+  if (c.claimed === CONTEST.length) s.packets += 2;
+  gainXp(s, 25);
+  return tier;
 }
 
 /** Déplace un pot (et sa plante) vers un autre emplacement ; échange si la cible est occupée. */
 export function movePot(s: State, from: number, to: number): boolean {
-  if (from === to || !s.slots[from].pot || !s.zonesOpen[zoneIndexOfSlot(to)]) return false;
+  if (from === to || !s.slots[from].pot || !slotOpen(s, to)) return false;
   const tmp = s.slots[to];
   s.slots[to] = s.slots[from];
   s.slots[from] = tmp;
@@ -781,7 +834,7 @@ export function openZone(s: State, z: number): boolean {
 
 export function buyPot(s: State, i: number): boolean {
   const price = potPrice(s);
-  if (s.slots[i].pot || s.coins < price || !s.zonesOpen[zoneIndexOfSlot(i)]) return false;
+  if (s.slots[i].pot || s.coins < price || !slotOpen(s, i)) return false;
   s.coins -= price;
   s.slots[i].pot = true;
   delete s.slots[i].pd;
@@ -833,6 +886,8 @@ export const QUESTS: Quest[] = [
   { id: 'bloom20', text: 'Ajoute 20 espèces à l\'almanach', reward: 600, done: (s) => collection(s).bloomed >= 20 },
   { id: 'harmony', text: 'Accorde l\'émail d\'un pot à la famille de sa plante', reward: 150, done: (s) => s.slots.some(harmony) },
   { id: 'bloom30', text: 'Ajoute 30 espèces à l\'almanach', reward: 700, done: (s) => collection(s).bloomed >= 30 },
+  { id: 'extra', text: 'Installe une suspension pour gagner un emplacement', reward: 150, done: (s) => !!s.extra?.some(Boolean) },
+  { id: 'contest', text: 'Remporte un palier du concours de saison', reward: 120, done: (s) => (s.contest?.claimed ?? 0) >= 1 || (s.stats.contests ?? 0) >= 1 },
   { id: 'stars60', text: 'Cumule 60 étoiles dans l\'almanach', reward: 800, done: (s) => collection(s).stars >= 60 },
   { id: 'disc14', text: 'Complète l\'almanach', reward: 1000, done: (s) => collection(s).bloomed >= SPECIES.length },
 ];
@@ -859,7 +914,7 @@ export function load(now: number): State {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const s = JSON.parse(raw) as State;
-      if (s.v === 1 && Array.isArray(s.slots) && s.slots.length === SLOT_COUNT) {
+      if (s.v === 1 && Array.isArray(s.slots) && s.slots.length >= BASE_SLOTS) {
         // Sauvegarde de la première version : on garde tout et on ouvre les zones déjà utilisées.
         s.v = 2;
         s.packetIn = PACKET_EVERY;
@@ -869,7 +924,7 @@ export function load(now: number): State {
         s.zonesOpen = ZONE_PRICES.map((p, z) => p === 0 || s.slots.slice(z * SLOTS_PER_ZONE, (z + 1) * SLOTS_PER_ZONE).some((x) => x.pot));
         for (const d of Object.values(s.disc)) d.bestQ = d.bloomed ? 60 : 0;
       }
-      if (s.v === 2 && Array.isArray(s.slots) && s.slots.length === SLOT_COUNT) {
+      if (s.v === 2 && Array.isArray(s.slots) && s.slots.length >= BASE_SLOTS) {
         // Sauvegarde de la deuxième version : on complète avec les nouveautés.
         const base = newState(now);
         Object.assign(s, { ...base, ...s, v: SAVE_VERSION, market: { ...base.market, ...s.market }, upgrades: { ...base.upgrades, ...s.upgrades } });
@@ -878,7 +933,7 @@ export function load(now: number): State {
         for (const h of s.stock) h.vr = 0;
         for (const d of Object.values(s.disc)) d.vars = [d.bloomed, false, false];
       }
-      if (s.v === 3 && Array.isArray(s.slots) && s.slots.length === SLOT_COUNT) {
+      if (s.v === 3 && Array.isArray(s.slots) && s.slots.length >= BASE_SLOTS) {
         // Troisième version : atelier, commandes, nouvelle famille. Les pots s'adaptent aux plantes en place.
         const base = newState(now);
         Object.assign(s, { ...base, ...s, v: SAVE_VERSION, market: { ...base.market, ...s.market }, stats: { ...base.stats, ...s.stats } });
@@ -887,7 +942,11 @@ export function load(now: number): State {
           if (need > 1) sl.pd = { size: need, glaze: 0, pat: 0 };
         }
       }
-      if (s.v === SAVE_VERSION && Array.isArray(s.slots) && s.slots.length === SLOT_COUNT) return s;
+      if (s.v === SAVE_VERSION && Array.isArray(s.slots) && s.slots.length >= BASE_SLOTS) {
+        // Les suspensions sont arrivées après : on complète sans rien toucher d'autre.
+        while (s.slots.length < SLOT_COUNT) s.slots.push({ pot: false, plant: null });
+        return s;
+      }
     }
   } catch { /* sauvegarde illisible : on repart de zéro */ }
   return newState(now);

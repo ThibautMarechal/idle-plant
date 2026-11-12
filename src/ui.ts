@@ -1,4 +1,4 @@
-import { FAMILIES, FAMILY_IDS, GLAZES, LEVEL_WORDS, PATTERNS, POT_SIZES, RARITIES, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, STAGES, ZONES } from './data';
+import { BASE_SLOTS, SEASONS, FAMILIES, FAMILY_IDS, GLAZES, LEVEL_WORDS, PATTERNS, POT_SIZES, RARITIES, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, STAGES, ZONES } from './data';
 import type { Family, Species } from './data';
 import type { Scene3D } from './scene';
 import { STYLES } from './styles';
@@ -18,7 +18,7 @@ const EMOJI: Record<string, string> = {
 };
 const ZONE_SHORT = ['Ombre', 'Bassin', 'Porte', 'Plein sud'];
 
-type SheetKind = 'trophies' | 'atelier' | 'paint' | 'vitrine' | 'none' | 'seed' | 'buypot' | 'plant' | 'harvest' | 'packets' | 'market' | 'shop' | 'almanac' | 'fiche' | 'zone';
+type SheetKind = 'season' | 'trophies' | 'atelier' | 'paint' | 'vitrine' | 'none' | 'seed' | 'buypot' | 'plant' | 'harvest' | 'packets' | 'market' | 'shop' | 'almanac' | 'fiche' | 'zone';
 
 const $ = (id: string) => document.getElementById(id)!;
 const fmt = (n: number) => Math.round(n).toLocaleString('fr-FR');
@@ -206,7 +206,7 @@ export class UI {
     this.scene.dragTo(x, y);
     let best = -1, bestD = Infinity;
     this.s.slots.forEach((_, i) => {
-      if (!this.s.zonesOpen[sim.zoneIndexOfSlot(i)]) return;
+      if (!sim.slotOpen(this.s, i)) return;
       const r = this.scene.slotRect(i);
       const d = Math.hypot(r.x - x, r.bottom - r.unit * 0.45 - y);
       if (d < bestD && d < r.unit * 0.95) { bestD = d; best = i; }
@@ -242,6 +242,7 @@ export class UI {
     const p = slot.plant;
     const z = sim.zoneIndexOfSlot(i);
     if (!s.zonesOpen[z]) return this.open('zone', z);
+    if (!sim.slotOpen(s, i)) return;
     if (this.crossing >= 0) {
       const from = this.crossing;
       if (from === i) { this.crossing = -1; this.refresh(true); return; }
@@ -329,6 +330,15 @@ export class UI {
         setMuted(s.mute);
         if (!s.mute) play('tap');
         break;
+      case 'extra':
+        if (sim.buyExtra(s, n)) { this.toast(`Suspension installée : ${this.zname(n)} gagne un emplacement.`); play('craft'); this.buzz(25); this.close(); this.goZone(n); }
+        else this.toast(s.zonesOpen[n] ? 'Pas assez de pièces.' : 'Aménage d\'abord cette zone.');
+        break;
+      case 'contest': {
+        const r = sim.claimContest(s);
+        if (r) { this.toast(`Palier ${r.label} : +${fmt(r.coins)} 🪙 et +${r.clay} argile !`); play('rare'); this.bumpCoins(); this.buzz(40); }
+        break;
+      }
       case 'cancelmove': this.moving = -1; this.crossing = -1; break;
       case 'cross':
         this.crossing = this.arg;
@@ -618,7 +628,7 @@ export class UI {
       const badge = el.firstElementChild as HTMLElement;
       const bar = el.lastElementChild as HTMLElement;
       const p = slot.plant;
-      const open = s.zonesOpen[sim.zoneIndexOfSlot(i)];
+      const open = sim.slotOpen(s, i);
       el.hidden = !open;
       let cls = 'badge', txt = '';
       if (this.drag >= 0) {
@@ -663,7 +673,7 @@ export class UI {
     const col = sim.collection(s);
     const cur = this.scene.currentZone;
     const tabs = [`<button class="tab${cur < 0 ? ' on' : ''}" data-act="view" data-arg="-1">${themeOf(this.scene.themeId).all}</button>`].concat(ZONES.map((z, r) => {
-      const care = s.zonesOpen[r] && [0, 1, 2].some((c) => this.needsCare(r * SLOTS_PER_ZONE + c));
+      const care = s.zonesOpen[r] && [r * SLOTS_PER_ZONE, r * SLOTS_PER_ZONE + 1, r * SLOTS_PER_ZONE + 2, BASE_SLOTS + r].some((i) => this.needsCare(i));
       return `<button class="tab${cur === r ? ' on' : ''}${s.zonesOpen[r] ? '' : ' off'}" data-act="view" data-arg="${r}">${s.zonesOpen[r] ? z.icon : '🔒'} ${ZONE_SHORT[r]}${care ? '<i class="care"></i>' : ''}</button>`;
     })).join('');
     let info = '';
@@ -674,8 +684,11 @@ export class UI {
       info = `<div class="zinfo"><b>${this.zname(cur)}</b> ☀️ ${LEVEL_WORDS.light[c.light]} · 🌡️ ${LEVEL_WORDS.temp[c.temp]} · 💧 ${LEVEL_WORDS.hum[c.hum]}</div>`;
     }
     const lv = sim.levelOf(s);
+    const se = sim.seasonOf(s);
+    const ct = sim.contestOf(s);
+    const prize = !!sim.CONTEST[ct.claimed] && ct.blooms >= sim.CONTEST[ct.claimed].need;
     const ready = sim.TROPHIES.filter((x) => sim.trophyReady(s, x)).length;
-    const hud = `<div class="hudrow"><div class="pill coins">🪙 ${fmt(s.coins)}</div><button class="pill lvl" data-act="nav" data-arg="trophies">🎓 ${lv.level}<i class="xp"><i style="width:${Math.round(100 * lv.into / lv.span)}%"></i></i>${ready ? `<i class="dot">${ready}</i>` : ''}</button><button class="pill" data-act="nav" data-arg="almanac">📖 ${col.bloomed}/${SPECIES.length} <small>⭐ ${col.stars}</small></button></div><div class="tabs">${tabs}</div>${info}`;
+    const hud = `<div class="hudrow"><div class="pill coins">🪙 ${fmt(s.coins)}</div><button class="pill season" data-act="nav" data-arg="season">${SEASONS[se.index].icon}${prize ? '<i class="dot">!</i>' : ''}</button><button class="pill lvl" data-act="nav" data-arg="trophies">🎓 ${lv.level}<i class="xp"><i style="width:${Math.round(100 * lv.into / lv.span)}%"></i></i>${ready ? `<i class="dot">${ready}</i>` : ''}</button><button class="pill" data-act="nav" data-arg="almanac">📖 ${col.bloomed}/${SPECIES.length} <small>⭐ ${col.stars}</small></button></div><div class="tabs">${tabs}</div>${info}`;
     if (hud !== this.lastHud && (force || !this.pointerDown)) { $('hud').innerHTML = hud; this.lastHud = hud; }
 
     // Nouvelles fiches à fêter
@@ -742,6 +755,7 @@ export class UI {
       case 'vitrine': return this.vitrineHtml();
       case 'atelier': return this.atelierHtml();
       case 'trophies': return this.trophiesHtml();
+      case 'season': return this.seasonHtml();
       case 'paint': return this.paintHtml();
       default: return '';
     }
@@ -859,7 +873,7 @@ export class UI {
     const list = ids.map((id) => {
       const sp = SPECIES_BY_ID[id];
       const small = sim.sizeOf(sp) > size;
-      return `<button class="card" data-act="plant" data-arg="${id}" ${small ? 'disabled style="opacity:.55"' : ''}><div class="ico">${EMOJI[id]}</div><div class="mid"><div class="nm">${esc(sp.name)} ${rarTag(sp)}</div>${small ? `<div class="ds">🏺 Il lui faut un ${POT_SIZES[sim.sizeOf(sp) - 1].name.toLowerCase()} : façonne-le à l'atelier.</div>` : needsChips(sp, c)}</div><div class="end">×${s.seeds[id]}</div></button>`;
+      return `<button class="card" data-act="plant" data-arg="${id}" ${small ? 'disabled style="opacity:.55"' : ''}><div class="ico">${EMOJI[id]}</div><div class="mid"><div class="nm">${esc(sp.name)} ${rarTag(sp)}</div>${sim.inSeason(s, sp) ? `<div class="ds">${SEASONS[sim.seasonOf(s).index].icon} De saison : pousse plus vite</div>` : ''}${small ? `<div class="ds">🏺 Il lui faut un ${POT_SIZES[sim.sizeOf(sp) - 1].name.toLowerCase()} : façonne-le à l'atelier.</div>` : needsChips(sp, c)}</div><div class="end">×${s.seeds[id]}</div></button>`;
     }).join('');
     const empty = `<p class="sub">Tu n'as plus de graines.</p>${s.packets > 0
       ? '<button class="btn gold wide" data-act="free">🎁 Ouvrir un sachet gratuit</button>'
@@ -976,6 +990,9 @@ export class UI {
       ${gear('♨️', 'Radiateur', 'Zone fraîche : tempéré au lieu de frais.', 'heat')}
       ${gear('🌀', 'Ventilateur', 'Zone plein sud : tempéré au lieu de chaud. Pour lavande, thym et romarin.', 'fan')}
       ${s.stockCap < 10 ? item('📦', 'Réserve agrandie', `Deux places de plus (${s.stockCap} aujourd'hui).`, sim.PRICES.stock, 'upgrade', 'stock') : ''}
+      <h3>Agrandir la serre</h3>
+      <p class="sub">Une suspension ajoute un quatrième emplacement à une zone aménagée.</p>
+      ${ZONES.map((z, r) => item(z.icon, `Suspension · ${this.zname(r)}`, s.zonesOpen[r] ? 'Un emplacement de plus, en hauteur.' : 'Aménage d\'abord cette zone.', sim.EXTRA_PRICES[r], 'extra', String(r), !!s.extra?.[r])).join('')}
       <h3>Atelier</h3>
       ${item('🔥', 'Four à double foyer', 'Les pots cuisent deux fois plus vite.', sim.PRICES.fastKiln, 'upgrade', 'fastKiln', !!s.upgrades.fastKiln)}
       ${item('🧱', 'Grand bac d\'argile', 'Le bac contient deux fois plus d\'argile.', sim.PRICES.bigClay, 'upgrade', 'bigClay', !!s.upgrades.bigClay)}
@@ -984,6 +1001,30 @@ export class UI {
       ${item('🎁', 'Sachet mystère', 'Trois graines de toutes familles.', sim.PRICES.packet, 'buypacket', '')}
       ${FAMILY_IDS.map((f) => item(FAMILIES[f].icon, `Sachet ${FAMILIES[f].name.toLowerCase()}`, 'Trois graines de cette famille.', sim.PRICES.familyPacket, 'buypacket', f)).join('')}
       <p class="sub">Pour un nouveau pot ou une nouvelle zone, touche un emplacement libre ou un cadenas dans la serre.</p></div>`;
+  }
+
+  private seasonHtml(): string {
+    const s = this.s;
+    const se = sim.seasonOf(s);
+    const season = SEASONS[se.index];
+    const next = SEASONS[(se.index + 1) % SEASONS.length];
+    const ct = sim.contestOf(s);
+    const tiers = sim.CONTEST.map((c, k) => {
+      const end = k < ct.claimed ? '<span class="chip ok">Remporté</span>'
+        : k === ct.claimed && ct.blooms >= c.need ? `<button class="btn gold small" data-act="contest">Réclamer</button>`
+          : `<span class="chip">${Math.min(ct.blooms, c.need)} / ${c.need}</span>`;
+      return `<div class="card"><div class="ico">${['🥉', '🥈', '🥇'][k]}</div><div class="mid"><div class="nm">Palier ${c.label}</div><div class="ds">+${c.coins} 🪙 · +${c.clay} argile${k === 2 ? ' · 2 sachets' : ''}</div></div>${end}</div>`;
+    }).join('');
+    const fams = season.fams.map((f) => `${FAMILIES[f].icon} ${FAMILIES[f].name}`).join(' et ');
+    return this.head(`${season.icon} ${season.name}`) + `<div class="sh-body">
+      <p class="sub">${season.text}</p>
+      <div class="kv"><span>Familles de saison</span><b>${fams}</b></div>
+      <div class="kv"><span>Bonus</span><b>Croissance +${Math.round((sim.SEASON_SPEED - 1) * 100)} %</b></div>
+      <div class="kv"><span>Saison suivante</span><b>${next.icon} ${next.name} dans ${clock(se.left)}</b></div>
+      <h3>Concours de la saison</h3>
+      <p class="sub">Fais fleurir des plantes des familles de saison avant qu'elle ne se termine. Le compteur repart de zéro à chaque saison.</p>
+      <div class="big">${ct.blooms} 🌼</div>
+      ${tiers}</div>`;
   }
 
   private trophiesHtml(): string {

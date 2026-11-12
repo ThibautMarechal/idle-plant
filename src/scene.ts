@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { GLAZES, POT_SIZES, SLOT_COUNT, SLOTS_PER_ZONE, SPECIES_BY_ID, ZONES } from './data';
+import { BASE_SLOTS, GLAZES, POT_SIZES, SLOT_COUNT, SLOTS_PER_ZONE, SPECIES_BY_ID, ZONES } from './data';
 import { buildPlant, buildPot, mat, POT_TOP } from './plants3d';
-import { fitOf, stageOf, zoneClimate, zoneOfSlot } from './sim';
+import { fitOf, slotOpen, stageOf, zoneClimate, zoneOfSlot } from './sim';
 import type { State } from './sim';
 import { OutlineEffect } from 'three/examples/jsm/effects/OutlineEffect.js';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
@@ -17,6 +17,8 @@ interface SlotView {
   potKey: string;
   marker: THREE.Mesh;
   crate: THREE.Object3D;
+  /** Planche et cordes d'une suspension (emplacements 12 et plus). */
+  hanger: THREE.Object3D | null;
   drip: THREE.Object3D;
   plant: THREE.Group | null;
   key: string;
@@ -202,7 +204,7 @@ export class Scene3D {
     // Une zone pas encore aménagée est encombrée de caisses.
     const sz = 0.55 + (i % 3) * 0.1;
     const crate = new THREE.Group();
-    crate.add(box(sz, sz * 0.8, sz, i % 2 ? 0xb98a5a : 0xa9794f, 0, sz * 0.4, 0), box(sz * 1.04, 0.05, sz * 0.2, 0x8a5f3c, 0, sz * 0.8, 0));
+    if (i < BASE_SLOTS) crate.add(box(sz, sz * 0.8, sz, i % 2 ? 0xb98a5a : 0xa9794f, 0, sz * 0.4, 0), box(sz * 1.04, 0.05, sz * 0.2, 0x8a5f3c, 0, sz * 0.8, 0));
     crate.position.copy(base);
     crate.rotation.y = i * 0.5;
     crate.visible = false;
@@ -211,8 +213,16 @@ export class Scene3D {
     drip.add(box(0.04, 0.5, 0.04, 0xc98a4a, -0.47, 0.3, 0), box(0.16, 0.04, 0.04, 0xc98a4a, -0.41, 0.56, 0), box(0.05, 0.07, 0.05, 0x5a9fd4, -0.33, 0.53, 0));
     drip.visible = false;
     root.add(drip);
+    let hanger: THREE.Group | null = null;
+    if (i >= BASE_SLOTS) {
+      hanger = new THREE.Group();
+      hanger.add(box(0.95, 0.06, 0.6, 0xb98a5a, 0, -0.03, 0));
+      for (const sx of [-0.42, 0.42]) hanger.add(box(0.025, 1.9, 0.025, 0xe8dcc0, sx, 0.95, 0, false));
+      hanger.visible = false;
+      root.add(hanger);
+    }
     this.world.add(root, crate);
-    return { root, pot: null, potKey: '', marker, crate, drip, plant: null, key: '', pop: 0, base };
+    return { root, hanger, pot: null, potKey: '', marker, crate, drip, plant: null, key: '', pop: 0, base };
   }
 
   private cam(p: THREE.Vector3): THREE.Vector3 {
@@ -255,7 +265,7 @@ export class Scene3D {
       // Centré entre le bandeau du haut et la barre du bas.
       this.goal = { u, cx: (f.minX + f.maxX) / 2, cy: (f.minY + f.maxY) / 2, ay: 135 + room / 2 };
     } else {
-      const pts = this.slots.slice(zone * SLOTS_PER_ZONE, (zone + 1) * SLOTS_PER_ZONE)
+      const pts = this.slots.slice(zone * SLOTS_PER_ZONE, (zone + 1) * SLOTS_PER_ZONE).concat(this.slots[BASE_SLOTS + zone])
         .flatMap((s) => [s.base, s.base.clone().setY(s.base.y + 1.5)]);
       const f = this.frame(pts);
       const u = Math.min(this.w / 4.1, this.w / (f.maxX - f.minX + 1.5), (this.h - 330) / (f.maxY - f.minY + 0.5));
@@ -294,8 +304,9 @@ export class Scene3D {
     });
     s.slots.forEach((slot, i) => {
       const v = this.slots[i];
-      const open = s.zonesOpen[Math.floor(i / SLOTS_PER_ZONE)];
-      v.crate.visible = !open;
+      const open = slotOpen(s, i);
+      v.crate.visible = !open && i < BASE_SLOTS;
+      if (v.hanger) v.hanger.visible = open;
       v.marker.visible = !slot.pot && open;
       v.drip.visible = slot.pot && s.upgrades.water;
       // Le pot : taille, émail et motif viennent de l'atelier ; sans dessin, c'est le pot du décor.
@@ -393,7 +404,7 @@ export class Scene3D {
     this.bugs.forEach((b) => {
       const n = b.userData.k as number;
       const a = t * 0.35 + n * 1.9;
-      const home = this.slots[(n * 5 + 1) % SLOT_COUNT].base;
+      const home = this.slots[(n * 5 + 1) % BASE_SLOTS].base;
       b.position.set(home.x + Math.cos(a) * 0.45, home.y + 0.05, home.z + Math.sin(a) * 0.45);
     });
     if (this.fanBlades) this.fanBlades.rotation.z = t * 9;

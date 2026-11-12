@@ -252,7 +252,10 @@ export const ZONES: Zone[] = [
   { id: 'sud', name: 'Table plein sud', icon: '☀️', light: 3, temp: 3, hum: 1, desc: 'Baignée de soleil, air sec' },
 ];
 export const SLOTS_PER_ZONE = 3;
-export const SLOT_COUNT = ZONES.length * SLOTS_PER_ZONE;
+/** Emplacements au sol : trois par zone. */
+export const BASE_SLOTS = ZONES.length * SLOTS_PER_ZONE;
+/** S'y ajoute une suspension par zone (emplacements 12 à 15), à acheter. */
+export const SLOT_COUNT = BASE_SLOTS + ZONES.length;
 
 export const STAGES = ['Graine', 'Pousse', 'Végétatif', 'Boutons', 'Floraison'];
 export const LEVEL_WORDS = {
@@ -301,3 +304,12 @@ export const GLAZES = [
 ];
 export const PATTERNS = ['Uni', 'Bandes', 'Pois'];
 export const CLIENTS = ['Mme Rosier', 'M. Dubois', 'Léa la fleuriste', 'Le café du coin', 'Mamie Jeanne', 'L\'école du quartier', 'Dr Lambert', 'La mairie'];
+
+/** Saisons : chacune dure SEASON_LENGTH secondes de jeu et favorise deux familles. */
+export const SEASON_LENGTH = 20 * 60;
+export const SEASONS: { name: string; icon: string; fams: Family[]; text: string }[] = [
+  { name: 'Printemps', icon: '🌸', fams: ['fleurs', 'aromatiques'], text: 'Tout bourgeonne : les fleurs et les aromatiques poussent plus vite.' },
+  { name: 'Été', icon: '☀️', fams: ['succulentes', 'tropicales'], text: 'Chaleur et lumière : les succulentes et les tropicales sont à la fête.' },
+  { name: 'Automne', icon: '🍂', fams: ['arbustes', 'fougeres'], text: 'Air doux et humide : les arbustes et les fougères en profitent.' },
+  { name: 'Hiver', icon: '❄️', fams: ['orchidees', 'carnivores'], text: 'Au chaud dans la serre, les orchidées et les carnivores s\'épanouissent.' },
+];
