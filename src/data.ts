@@ -1,0 +1,133 @@
+export type Family = 'succulentes' | 'aromatiques' | 'fougeres' | 'orchidees' | 'fleurs';
+export type Rarity = 'commun' | 'rare' | 'exotique' | 'legendaire';
+export type Shape = 'rosette' | 'aloe' | 'bush' | 'fern' | 'orchid' | 'paradise';
+
+export interface Species {
+  id: string;
+  name: string;
+  latin: string;
+  family: Family;
+  rarity: Rarity;
+  origin: string;
+  /** Besoins sur une échelle 1..3 */
+  light: number;
+  temp: number;
+  hum: number;
+  /** Secondes pour atteindre la floraison dans des conditions idéales */
+  grow: number;
+  value: number;
+  shape: Shape;
+  leaf: number;
+  flower: number;
+  fact: string;
+  tip: string;
+}
+
+export const FAMILIES: Record<Family, { name: string; icon: string; color: string }> = {
+  succulentes: { name: 'Succulentes', icon: '🌵', color: '#6fbf8f' },
+  aromatiques: { name: 'Aromatiques', icon: '🌿', color: '#8fc45a' },
+  fougeres: { name: 'Fougères', icon: '🍃', color: '#3f9d6b' },
+  orchidees: { name: 'Orchidées', icon: '🌸', color: '#d78ad0' },
+  fleurs: { name: 'Fleurs', icon: '🌼', color: '#f2b441' },
+};
+export const FAMILY_IDS = Object.keys(FAMILIES) as Family[];
+
+export const RARITIES: Record<Rarity, { name: string; color: string; weight: number }> = {
+  commun: { name: 'Commun', color: '#8a9a86', weight: 70 },
+  rare: { name: 'Rare', color: '#4a90d9', weight: 22 },
+  exotique: { name: 'Exotique', color: '#b05fd6', weight: 7 },
+  legendaire: { name: 'Légendaire', color: '#f0a020', weight: 1 },
+};
+
+export const SPECIES: Species[] = [
+  { id: 'echeveria', name: 'Echeveria', latin: 'Echeveria elegans', family: 'succulentes', rarity: 'commun', origin: 'Mexique',
+    light: 3, temp: 3, hum: 1, grow: 110, value: 12, shape: 'rosette', leaf: 0x8fcfb0, flower: 0xff8f7a,
+    fact: 'Sa rosette serrée guide la moindre goutte de rosée vers ses racines.',
+    tip: 'Arrose seulement quand la terre est sèche en profondeur : trop d\'eau la tue plus sûrement que l\'oubli.' },
+  { id: 'aloe', name: 'Aloe vera', latin: 'Aloe vera', family: 'succulentes', rarity: 'commun', origin: 'Péninsule arabique',
+    light: 3, temp: 3, hum: 1, grow: 140, value: 15, shape: 'aloe', leaf: 0x6fae7a, flower: 0xf6c343,
+    fact: 'Ses feuilles stockent un gel utilisé depuis l\'Égypte antique.',
+    tip: 'Un pot en terre cuite et un terreau très drainant : elle déteste avoir les racines mouillées.' },
+  { id: 'lithops', name: 'Plante caillou', latin: 'Lithops', family: 'succulentes', rarity: 'rare', origin: 'Afrique australe',
+    light: 3, temp: 3, hum: 1, grow: 300, value: 55, shape: 'rosette', leaf: 0xb7a98c, flower: 0xfff2a8,
+    fact: 'Elle imite un galet pour échapper aux herbivores du désert.',
+    tip: 'Aucun arrosage en hiver : elle vit sur ses réserves.' },
+  { id: 'basilic', name: 'Basilic', latin: 'Ocimum basilicum', family: 'aromatiques', rarity: 'commun', origin: 'Asie tropicale',
+    light: 3, temp: 3, hum: 2, grow: 100, value: 10, shape: 'bush', leaf: 0x59b947, flower: 0xffffff,
+    fact: 'Son nom vient du grec « basilikon », la plante royale.',
+    tip: 'Pince les tiges au-dessus d\'une paire de feuilles : il se ramifie au lieu de monter en graines.' },
+  { id: 'menthe', name: 'Menthe verte', latin: 'Mentha spicata', family: 'aromatiques', rarity: 'commun', origin: 'Europe',
+    light: 2, temp: 1, hum: 2, grow: 100, value: 10, shape: 'bush', leaf: 0x3fa35c, flower: 0xc9a6e8,
+    fact: 'Ses tiges souterraines peuvent coloniser un jardin entier en une saison.',
+    tip: 'Cultive-la toujours en pot, même au jardin, sinon elle envahit tout.' },
+  { id: 'lavande', name: 'Lavande', latin: 'Lavandula angustifolia', family: 'aromatiques', rarity: 'rare', origin: 'Bassin méditerranéen',
+    light: 3, temp: 2, hum: 1, grow: 260, value: 42, shape: 'bush', leaf: 0x8fa58b, flower: 0x8b6fd6,
+    fact: 'Les Romains en parfumaient leurs bains : son nom vient de « lavare », laver.',
+    tip: 'Taille-la juste après la floraison, sans jamais couper dans le vieux bois.' },
+  { id: 'boston', name: 'Fougère de Boston', latin: 'Nephrolepis exaltata', family: 'fougeres', rarity: 'commun', origin: 'Régions tropicales',
+    light: 1, temp: 2, hum: 3, grow: 130, value: 14, shape: 'fern', leaf: 0x4fa85a, flower: 0x4fa85a,
+    fact: 'Les fougères existaient déjà 100 millions d\'années avant les dinosaures.',
+    tip: 'Brumise son feuillage : l\'air sec fait brunir le bout des frondes.' },
+  { id: 'capillaire', name: 'Capillaire', latin: 'Adiantum raddianum', family: 'fougeres', rarity: 'rare', origin: 'Amérique du Sud',
+    light: 1, temp: 2, hum: 3, grow: 280, value: 48, shape: 'fern', leaf: 0x7fcf7a, flower: 0x7fcf7a,
+    fact: 'Ses frondes repoussent l\'eau : les gouttes y perlent sans les mouiller.',
+    tip: 'Ne laisse jamais sécher sa motte, même une seule journée.' },
+  { id: 'pensee', name: 'Pensée', latin: 'Viola × wittrockiana', family: 'fleurs', rarity: 'commun', origin: 'Europe (hybride horticole)',
+    light: 2, temp: 1, hum: 2, grow: 120, value: 13, shape: 'bush', leaf: 0x4f9d4a, flower: 0x7a4fd0,
+    fact: 'Ses fleurs sont comestibles et décorent les salades.',
+    tip: 'Retire les fleurs fanées : elle refleurit pendant des mois.' },
+  { id: 'pelargonium', name: 'Géranium des balcons', latin: 'Pelargonium × hortorum', family: 'fleurs', rarity: 'commun', origin: 'Afrique du Sud',
+    light: 3, temp: 2, hum: 1, grow: 130, value: 14, shape: 'bush', leaf: 0x5aa64f, flower: 0xe8433f,
+    fact: 'Ce n\'est pas un vrai géranium : les botanistes l\'ont séparé du genre Geranium dès 1789.',
+    tip: 'Rentre-le au frais et au sec en hiver, il repartira au printemps.' },
+  { id: 'strelitzia', name: 'Oiseau de paradis', latin: 'Strelitzia reginae', family: 'fleurs', rarity: 'exotique', origin: 'Afrique du Sud',
+    light: 3, temp: 3, hum: 2, grow: 460, value: 140, shape: 'paradise', leaf: 0x3f8f5f, flower: 0xff8a1f,
+    fact: 'Sa fleur s\'ouvre sous le poids des oiseaux qui viennent la polliniser.',
+    tip: 'Elle ne fleurit qu\'à l\'étroit : ne la rempote pas trop souvent.' },
+  { id: 'phalaenopsis', name: 'Orchidée papillon', latin: 'Phalaenopsis amabilis', family: 'orchidees', rarity: 'rare', origin: 'Asie du Sud-Est',
+    light: 2, temp: 3, hum: 3, grow: 320, value: 60, shape: 'orchid', leaf: 0x3f8f55, flower: 0xf5e9f7,
+    fact: 'Dans la nature elle vit accrochée aux arbres, les racines à l\'air libre.',
+    tip: 'Trempe le pot dix minutes une fois par semaine, puis laisse bien égoutter.' },
+  { id: 'paphiopedilum', name: 'Sabot de Vénus', latin: 'Paphiopedilum', family: 'orchidees', rarity: 'exotique', origin: 'Asie du Sud-Est',
+    light: 1, temp: 2, hum: 3, grow: 480, value: 150, shape: 'orchid', leaf: 0x4a8a4a, flower: 0xc9d85a,
+    fact: 'Son labelle en forme de sabot piège les insectes pour les forcer à la polliniser.',
+    tip: 'Contrairement aux autres orchidées, garde son substrat toujours légèrement frais.' },
+  { id: 'fantome', name: 'Orchidée fantôme', latin: 'Dendrophylax lindenii', family: 'orchidees', rarity: 'legendaire', origin: 'Floride et Cuba',
+    light: 1, temp: 3, hum: 3, grow: 720, value: 420, shape: 'orchid', leaf: 0x7fae8a, flower: 0xffffff,
+    fact: 'Elle n\'a pas de feuilles : ce sont ses racines vertes qui font la photosynthèse.',
+    tip: 'Presque impossible à cultiver chez soi : elle se contemple en serre botanique.' },
+];
+export const SPECIES_BY_ID: Record<string, Species> = Object.fromEntries(SPECIES.map((s) => [s.id, s]));
+
+export interface Zone { id: string; name: string; icon: string; light: number; temp: number; hum: number; desc: string }
+export const ZONES: Zone[] = [
+  { id: 'ombre', name: 'Sous l\'étagère', icon: '🌑', light: 1, temp: 2, hum: 2, desc: 'Ombre fraîche du fond de la serre' },
+  { id: 'bassin', name: 'Près du bassin', icon: '💦', light: 2, temp: 3, hum: 3, desc: 'Air chaud et humide' },
+  { id: 'porte', name: 'Près de la porte', icon: '🚪', light: 2, temp: 1, hum: 2, desc: 'Courant d\'air frais' },
+  { id: 'sud', name: 'Table plein sud', icon: '☀️', light: 3, temp: 3, hum: 1, desc: 'Baignée de soleil, air sec' },
+];
+export const SLOTS_PER_ZONE = 3;
+export const SLOT_COUNT = ZONES.length * SLOTS_PER_ZONE;
+
+export const STAGES = ['Graine', 'Pousse', 'Végétatif', 'Boutons', 'Floraison'];
+export const LEVEL_WORDS = {
+  light: ['', 'Ombre', 'Mi-ombre', 'Plein soleil'],
+  temp: ['', 'Frais', 'Tempéré', 'Chaud'],
+  hum: ['', 'Air sec', 'Air moyen', 'Air humide'],
+};
+
+export interface NewsTemplate { family: Family; dir: 1 | -1; text: string }
+export const NEWS: NewsTemplate[] = [
+  { family: 'succulentes', dir: 1, text: 'Un magazine déco consacre sa une aux mini-jardins de succulentes.' },
+  { family: 'succulentes', dir: -1, text: 'Les jardineries bradent leurs stocks de succulentes après un arrivage massif.' },
+  { family: 'aromatiques', dir: 1, text: 'Une émission de cuisine fait exploser la demande d\'herbes fraîches.' },
+  { family: 'aromatiques', dir: -1, text: 'Récolte record chez les maraîchers : les aromatiques inondent les étals.' },
+  { family: 'fougeres', dir: 1, text: 'Un grand hôtelier végétalise ses halls : les fougères sont recherchées.' },
+  { family: 'fougeres', dir: -1, text: 'La mode du « tout minéral » détourne les décorateurs des fougères.' },
+  { family: 'orchidees', dir: 1, text: 'Salon international de l\'orchidée : les collectionneurs s\'arrachent les beaux spécimens.' },
+  { family: 'orchidees', dir: -1, text: 'Un producteur néerlandais casse les prix des orchidées en grande surface.' },
+  { family: 'fleurs', dir: 1, text: 'Saison des mariages : les fleuristes cherchent des fleurs en pot.' },
+  { family: 'fleurs', dir: -1, text: 'Semaine pluvieuse annoncée : les balcons attendront, les fleurs se vendent mal.' },
+  { family: 'succulentes', dir: 1, text: 'Les succulentes font le buzz sur les réseaux : tout le monde en veut sur son bureau.' },
+  { family: 'orchidees', dir: 1, text: 'Fête des mères en approche : l\'orchidée reste le cadeau préféré.' },
+];
