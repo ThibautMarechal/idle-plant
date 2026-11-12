@@ -10,11 +10,12 @@ const EMOJI: Record<string, string> = {
 };
 const ZONE_SHORT = ['Ombre', 'Bassin', 'Porte', 'Plein sud'];
 
-type SheetKind = 'none' | 'seed' | 'buypot' | 'plant' | 'harvest' | 'packets' | 'market' | 'shop' | 'almanac' | 'fiche';
+type SheetKind = 'none' | 'seed' | 'buypot' | 'plant' | 'harvest' | 'packets' | 'market' | 'shop' | 'almanac' | 'fiche' | 'zone';
 
 const $ = (id: string) => document.getElementById(id)!;
 const fmt = (n: number) => Math.round(n).toLocaleString('fr-FR');
 const mult = (p: number) => '×' + p.toFixed(2).replace('.', ',');
+const stars = (n: number) => '⭐'.repeat(n) + '☆'.repeat(3 - n);
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
 
 function rarTag(sp: Species): string {
@@ -74,61 +75,97 @@ export class UI {
   private lastNewsT = 0;
   private pointerDown = false;
   private slotEls: HTMLButtonElement[] = [];
-  private zoneEls: HTMLElement[] = [];
+  private lockEls: HTMLButtonElement[] = [];
   private toastTimer = 0;
   private resetAskedAt = 0;
+  /** Emplacement du pot en cours de déplacement, ou -1. */
+  private moving = -1;
+  private swipedAt = 0;
+  private celebrate: string[] = [];
 
   constructor(private s: State, private scene: Scene3D, private onReset: () => void) {
     const overlay = $('overlay');
-    ZONES.forEach((z, r) => {
-      const el = document.createElement('div');
-      el.className = 'zlabel';
-      el.textContent = `${z.icon} ${ZONE_SHORT[r]}`;
-      el.onclick = () => this.toast(`${z.name} : ${z.desc.toLowerCase()}.`);
-      overlay.appendChild(el);
-      this.zoneEls.push(el);
+    ZONES.forEach((_, r) => {
+      const b = document.createElement('button');
+      b.className = 'zlock';
+      b.onclick = () => { if (Date.now() - this.swipedAt > 350) this.open('zone', r); };
+      overlay.appendChild(b);
+      this.lockEls.push(b);
     });
     this.s.slots.forEach((_, i) => {
       const b = document.createElement('button');
       b.className = 'slot';
       b.innerHTML = '<div class="badge hidden"></div><div class="bar"><i></i></div>';
-      b.onclick = () => this.tapSlot(i);
+      b.onclick = () => { if (Date.now() - this.swipedAt > 350) this.tapSlot(i); };
       overlay.appendChild(b);
       this.slotEls.push(b);
     });
     const app = $('app');
-    app.addEventListener('pointerdown', () => { this.pointerDown = true; });
-    for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) app.addEventListener(ev, () => { this.pointerDown = false; });
+    let sx = 0, sy = 0, st = 0, onScene = false;
+    app.addEventListener('pointerdown', (e) => {
+      this.pointerDown = true;
+      sx = e.clientX; sy = e.clientY; st = Date.now();
+      onScene = !(e.target as HTMLElement).closest('#sheet, #modal, #bottom, #hud, #backdrop');
+    });
+    app.addEventListener('pointerup', (e) => {
+      this.pointerDown = false;
+      const dx = e.clientX - sx, dy = e.clientY - sy;
+      if (!onScene || Date.now() - st > 900 || Math.max(Math.abs(dx), Math.abs(dy)) < 45) return;
+      // Balayer vers la gauche ou vers le haut avance d'une zone ; l'inverse recule.
+      const dir = Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 1 : -1) : (dy < 0 ? 1 : -1);
+      this.swipedAt = Date.now();
+      this.goZone(Math.max(-1, Math.min(ZONES.length - 1, this.scene.currentZone + dir)));
+    });
+    for (const ev of ['pointercancel', 'pointerleave']) app.addEventListener(ev, () => { this.pointerDown = false; });
     app.addEventListener('click', (e) => {
       const t = (e.target as HTMLElement).closest('[data-act]') as HTMLElement | null;
       if (t && !t.hasAttribute('disabled')) this.act(t.dataset.act!, t.dataset.arg ?? '');
     });
     $('backdrop').onclick = () => this.close();
-    this.lastNewsT = this.s.news[0]?.t ?? 0;
+  }
+
+  private goZone(z: number): void {
+    this.scene.setView(z);
+    this.refresh(true);
   }
 
   setState(s: State): void {
     this.s = s;
+    this.moving = -1;
     this.close();
   }
 
   // ---------- interactions ----------
 
   private tapSlot(i: number): void {
-    const slot = this.s.slots[i];
+    const s = this.s;
+    const slot = s.slots[i];
     const p = slot.plant;
+    const z = sim.zoneIndexOfSlot(i);
+    if (!s.zonesOpen[z]) return this.open('zone', z);
+    if (this.moving >= 0) {
+      const from = this.moving;
+      this.moving = -1;
+      if (from !== i && sim.movePot(s, from, i)) {
+        this.scene.pop(i);
+        this.float(i, '🪴');
+        this.buzz(15);
+      }
+      this.refresh(true);
+      return;
+    }
     if (!slot.pot) return this.open('buypot', i);
     if (!p) return this.open('seed', i);
     if (p.pests > 0) {
-      sim.squash(this.s, i);
+      sim.squash(s, i);
       this.scene.pop(i);
       this.float(i, p.pests > 0 ? '🐛' : '✨ Propre !');
       this.buzz(15);
       return;
     }
     if (p.prog >= 1) return this.open('harvest', i);
-    if (p.water < 0.5 && !this.s.upgrades.water) {
-      sim.water(this.s, i);
+    if (p.water < 0.5 && !s.upgrades.water) {
+      sim.water(s, i);
       this.scene.pop(i);
       this.float(i, '💧');
       this.buzz(10);
@@ -143,6 +180,17 @@ export class UI {
     switch (name) {
       case 'close': this.close(); break;
       case 'nav': this.open(arg as SheetKind); break;
+      case 'view': this.goZone(n); break;
+      case 'move':
+        this.moving = this.arg;
+        this.close();
+        this.toast('Touche l\'emplacement où poser ce pot. Balaye pour changer de zone.');
+        break;
+      case 'cancelmove': this.moving = -1; break;
+      case 'openzone':
+        if (sim.openZone(s, this.arg)) { this.toast(`${ZONES[this.arg].name} : zone aménagée !`); this.buzz(30); this.close(); this.goZone(this.arg); }
+        else this.toast('Pas assez de pièces.');
+        break;
       case 'plant':
         if (sim.plantSeed(s, this.arg, arg)) { this.scene.pop(this.arg); this.float(this.arg, '🌱'); this.buzz(12); this.close(); }
         break;
@@ -270,57 +318,101 @@ export class UI {
     };
   }
 
+  private showBloom(id: string): void {
+    const sp = SPECIES_BY_ID[id];
+    const d = this.s.disc[id];
+    const n = sim.starsOf(d);
+    const m = $('modal');
+    m.innerHTML = `<div class="mtitle">${n === 1 ? 'Nouvelle espèce dans l\'almanach !' : n === 3 ? 'Spécimen d\'exposition !' : 'Encore plus belle !'}</div>
+      <div class="rc solo" style="border-color:${RARITIES[sp.rarity].color}"><span class="e">${EMOJI[id]}</span>${esc(sp.name)}<i>${esc(sp.latin)}</i><span class="st">${stars(n)}</span></div>
+      <div class="fact">${esc(sp.fact)}</div>
+      <button class="btn primary" data-act="closemodal">Continuer</button>`;
+    m.classList.add('on');
+    this.buzz(40);
+  }
+
   // ---------- rendu ----------
+
+  /** Recale les zones tactiles sur le décor. Appelé à chaque image : la caméra peut être en mouvement. */
+  layout(): void {
+    this.s.slots.forEach((_, i) => {
+      const el = this.slotEls[i];
+      const r = this.scene.slotRect(i);
+      el.style.left = r.x + 'px';
+      el.style.top = r.top + 'px';
+      el.style.width = r.unit * 1.25 + 'px';
+      el.style.height = r.bottom - r.top + 'px';
+    });
+    this.lockEls.forEach((el, r) => {
+      const c = this.scene.zoneCenter(r);
+      el.style.left = c.x + 'px';
+      el.style.top = c.y + 'px';
+    });
+  }
+
+  private needsCare(i: number): boolean {
+    const p = this.s.slots[i].plant;
+    return !!p && (p.pests > 0 || p.prog >= 1 || (p.water < 0.5 && !this.s.upgrades.water));
+  }
 
   refresh(force = false): void {
     const s = this.s;
+    this.layout();
     // Emplacements
     s.slots.forEach((slot, i) => {
       const el = this.slotEls[i];
-      const r = this.scene.slotRect(i);
-      const hgt = r.bottom - r.top;
-      el.style.left = r.x + 'px';
-      el.style.top = r.top + 'px';
-      el.style.width = r.unit * 1.5 + 'px';
-      el.style.height = hgt + 'px';
       const badge = el.firstElementChild as HTMLElement;
       const bar = el.lastElementChild as HTMLElement;
       const p = slot.plant;
+      const open = s.zonesOpen[sim.zoneIndexOfSlot(i)];
+      el.hidden = !open;
       let cls = 'badge', txt = '';
-      if (!slot.pot) {
-        const price = sim.potPrice(s);
-        cls += ' price' + (s.coins >= price ? ' can' : '');
-        txt = `+ ${fmt(price)}🪙`;
-        badge.style.marginTop = hgt * 0.52 + 'px';
-      } else {
-        badge.style.marginTop = '0px';
-        if (!p) { cls += ' plus'; txt = '+'; badge.style.marginTop = hgt * 0.25 + 'px'; }
-        else if (p.pests > 0) { cls += ' alert'; txt = '🐛'.repeat(p.pests); }
-        else if (p.prog >= 1) { cls += ' ready'; txt = '🪙'; }
-        else if (p.water < 0.5 && !s.upgrades.water) { cls += ' alert'; txt = '💧'; }
-        else cls += ' hidden';
-      }
+      if (this.moving >= 0) {
+        if (i === this.moving) { cls += ' alert'; txt = '✋'; }
+        else if (!slot.pot) { cls += ' plus'; txt = '⬇'; }
+        else { cls += ' swap'; txt = '⇄'; }
+      } else if (!slot.pot) { cls += ' ghost'; txt = '+'; }
+      else if (!p) { cls += ' plus'; txt = '🌱'; }
+      else if (p.pests > 0) { cls += ' alert'; txt = '🐛'.repeat(p.pests); }
+      else if (p.prog >= 1) { cls += ' ready'; txt = '🌸'; }
+      else if (p.water < 0.5 && !s.upgrades.water) { cls += ' alert'; txt = '💧'; }
+      else cls += ' hidden';
+      cls += slot.pot ? '' : ' low';
       if (badge.className !== cls) badge.className = cls;
       if (badge.textContent !== txt) badge.textContent = txt;
       const showBar = !!p && p.prog < 1;
-      bar.style.display = showBar ? 'block' : 'none';
+      bar.hidden = !showBar;
       if (showBar) {
         bar.className = 'bar' + (p!.water <= 0 ? ' dry' : '');
         (bar.firstElementChild as HTMLElement).style.width = Math.round(p!.prog * 100) + '%';
       }
     });
-    this.zoneEls.forEach((el, r) => { el.style.top = this.scene.zoneLabelY(r) + 'px'; });
+    this.lockEls.forEach((el, r) => {
+      el.hidden = s.zonesOpen[r];
+      const txt = `🔒 ${fmt(sim.ZONE_PRICES[r])} 🪙`;
+      if (el.textContent !== txt) el.textContent = txt;
+      el.classList.toggle('can', s.coins >= sim.ZONE_PRICES[r]);
+    });
 
     // Haut d'écran
-    const news = s.news[0];
-    const hud = `<div class="hudrow"><div class="pill coins">🪙 ${fmt(s.coins)}</div><div class="title">LE GRAINIER</div></div>` +
-      (news ? `<button class="ticker" data-act="nav" data-arg="market"><b class="${news.dir > 0 ? 'up' : 'down'}">${FAMILIES[news.family].icon}${news.dir > 0 ? '▲' : '▼'}</b><span>${esc(news.text)}</span></button>` : '');
-    if (hud !== this.lastHud) { $('hud').innerHTML = hud; this.lastHud = hud; }
-    if (news && news.t !== this.lastNewsT) {
-      this.lastNewsT = news.t;
-      document.querySelector('.ticker')?.classList.add('flash');
-      this.buzz(15);
+    const col = sim.collection(s);
+    const cur = this.scene.currentZone;
+    const tabs = [`<button class="tab${cur < 0 ? ' on' : ''}" data-act="view" data-arg="-1">Serre</button>`].concat(ZONES.map((z, r) => {
+      const care = s.zonesOpen[r] && [0, 1, 2].some((c) => this.needsCare(r * SLOTS_PER_ZONE + c));
+      return `<button class="tab${cur === r ? ' on' : ''}${s.zonesOpen[r] ? '' : ' off'}" data-act="view" data-arg="${r}">${s.zonesOpen[r] ? z.icon : '🔒'} ${ZONE_SHORT[r]}${care ? '<i class="care"></i>' : ''}</button>`;
+    })).join('');
+    let info = '';
+    if (this.moving >= 0) info = `<div class="ticker"><span>Où poser ce pot ?</span><button class="btn small" data-act="cancelmove">Annuler</button></div>`;
+    else if (cur >= 0) {
+      const c = sim.zoneClimate(s, ZONES[cur]);
+      info = `<div class="zinfo"><b>${ZONES[cur].name}</b> ☀️ ${LEVEL_WORDS.light[c.light]} · 🌡️ ${LEVEL_WORDS.temp[c.temp]} · 💧 ${LEVEL_WORDS.hum[c.hum]}</div>`;
     }
+    const hud = `<div class="hudrow"><div class="pill coins">🪙 ${fmt(s.coins)}</div><button class="pill" data-act="nav" data-arg="almanac">📖 ${col.bloomed}/${SPECIES.length} <small>⭐ ${col.stars}</small></button></div><div class="tabs">${tabs}</div>${info}`;
+    if (hud !== this.lastHud && (force || !this.pointerDown)) { $('hud').innerHTML = hud; this.lastHud = hud; }
+
+    // Nouvelles fiches à fêter
+    if (s.fresh.length) { this.celebrate.push(...s.fresh); s.fresh = []; }
+    if (this.celebrate.length && !$('modal').classList.contains('on') && this.kind === 'none') this.showBloom(this.celebrate.shift()!);
 
     // Objectif
     const q = sim.currentQuest(s);
@@ -331,12 +423,14 @@ export class UI {
 
     // Navigation
     const seeds = Object.values(s.seeds).reduce((a, b) => a + b, 0);
-    const ripe = s.stock.length;
+    const wait = Math.max(0, Math.ceil(s.packetIn));
+    const timer = `${Math.floor(wait / 60)}:${String(wait % 60).padStart(2, '0')}`;
+    const hot = FAMILY_IDS.some((f) => s.market[f].p >= 1.25) && s.stock.length > 0;
     const nav = [
-      ['packets', '🎁', 'Sachets', s.packets > 0 ? String(s.packets) : seeds > 0 ? '' : '', s.packets > 0 && seeds === 0],
-      ['market', '📈', 'Marché', ripe > 0 ? String(ripe) : '', false],
-      ['shop', '🛒', 'Boutique', '', false],
+      ['packets', '🎁', s.packets > 0 ? 'Sachets' : timer, s.packets > 0 ? String(s.packets) : '', s.packets > 0 && seeds === 0],
       ['almanac', '📖', 'Almanach', '', false],
+      ['shop', '🛒', 'Boutique', '', false],
+      ['market', '📈', 'Marché', hot ? '!' : '', false],
     ].map(([k, e, l, d, pulse]) => `<button class="navb${pulse ? ' pulse' : ''}" data-act="nav" data-arg="${k}"><span>${e}</span>${l}${d ? `<i class="dot">${d}</i>` : ''}</button>`).join('');
     if (nav !== this.lastNav && (force || !this.pointerDown)) { $('nav').innerHTML = nav; this.lastNav = nav; }
 
@@ -370,6 +464,7 @@ export class UI {
       case 'shop': return this.shopHtml();
       case 'almanac': return this.almanacHtml();
       case 'fiche': return this.ficheHtml(SPECIES_BY_ID[this.argId]);
+      case 'zone': return this.zoneHtml();
       default: return '';
     }
     void s;
@@ -381,11 +476,26 @@ export class UI {
     return `<p class="sub">${z.icon} <b>${z.name}</b> : ${LEVEL_WORDS.light[c.light].toLowerCase()}, ${LEVEL_WORDS.temp[c.temp].toLowerCase()}, ${LEVEL_WORDS.hum[c.hum].toLowerCase()}.</p>`;
   }
 
+  private zoneHtml(): string {
+    const s = this.s;
+    const z = ZONES[this.arg];
+    const price = sim.ZONE_PRICES[this.arg];
+    const can = s.coins >= price;
+    const c = sim.zoneClimate(s, z);
+    const fans = SPECIES.filter((sp) => sim.fitOf(sp, c) >= 1 && s.disc[sp.id]?.seen).map((sp) => `${EMOJI[sp.id]} ${sp.name}`);
+    return this.head(`${z.icon} ${z.name}`) + `<div class="sh-body">
+      <p class="sub">Cette partie de la serre est encore encombrée. Aménage-la pour gagner trois emplacements au climat différent.</p>
+      ${this.zoneLine(this.arg * SLOTS_PER_ZONE)}
+      <p class="sub">${fans.length ? 'Parfaite pour : ' + fans.join(', ') + '.' : 'Aucune de tes espèces connues n\'y serait parfaitement à l\'aise pour l\'instant.'}</p>
+      <button class="btn primary wide" data-act="openzone" ${can ? '' : 'disabled'}>Aménager · ${fmt(price)} 🪙</button>
+      ${can ? '' : `<p class="sub center">Il te manque ${fmt(price - s.coins)} 🪙.</p>`}</div>`;
+  }
+
   private buyPotHtml(): string {
     const price = sim.potPrice(this.s);
     const can = this.s.coins >= price;
-    return this.head('Nouveau pot') + `<div class="sh-body">${this.zoneLine(this.arg)}
-      <p class="sub">Chaque coin de la serre a son climat. Choisis l'emplacement selon les plantes que tu veux y cultiver.</p>
+    return this.head('Emplacement libre') + `<div class="sh-body">${this.zoneLine(this.arg)}
+      <p class="sub">Achète un pot pour le poser ici. Tu pourras le déplacer ensuite, avec sa plante, vers n'importe quel emplacement libre.</p>
       <button class="btn primary wide" data-act="buypot" ${can ? '' : 'disabled'}>Acheter un pot · ${fmt(price)} 🪙</button>
       ${can ? '' : `<p class="sub center">Il te manque ${fmt(price - this.s.coins)} 🪙.</p>`}</div>`;
   }
@@ -401,7 +511,7 @@ export class UI {
     const empty = `<p class="sub">Tu n'as plus de graines.</p>${s.packets > 0
       ? '<button class="btn gold wide" data-act="free">🎁 Ouvrir un sachet gratuit</button>'
       : `<button class="btn primary wide" data-act="buypacket" ${s.coins >= sim.PRICES.packet ? '' : 'disabled'}>Sachet mystère · ${sim.PRICES.packet} 🪙</button>`}`;
-    return this.head('Que semer ici ?') + `<div class="sh-body">${this.zoneLine(this.arg)}${ids.length ? `<p class="sub">En vert : ce qui convient à cet emplacement.</p>${list}` : empty}</div>`;
+    return this.head('Que semer ici ?') + `<div class="sh-body">${this.zoneLine(this.arg)}${ids.length ? `<p class="sub">En vert : ce qui convient à cet emplacement.</p>${list}` : empty}<button class="btn wide" data-act="move">✋ Déplacer ce pot</button></div>`;
   }
 
   private plantHtml(): string {
@@ -419,7 +529,7 @@ export class UI {
       <div class="kv"><span>Qualité</span><b>${sim.qualityWord(p.q)}</b></div>
       <div class="kv"><span>Arrosage</span><b>${s.upgrades.water ? 'Automatique' : p.water > 0 ? Math.round(p.water * 100) + ' %' : 'À sec : elle tourne au ralenti'}</b></div>
       ${this.zoneLine(this.arg)}${conditions(sp, c)}
-      <div class="row">${s.upgrades.water ? '' : `<button class="btn primary" data-act="water" ${p.water > 0.95 ? 'disabled' : ''}>💧 Arroser</button>`}<button class="btn" data-act="fiche" data-arg="${sp.id}">📖 Fiche</button></div></div>`;
+      <div class="row">${s.upgrades.water ? '' : `<button class="btn primary" data-act="water" ${p.water > 0.95 ? 'disabled' : ''}>💧 Arroser</button>`}<button class="btn" data-act="move">✋ Déplacer</button><button class="btn" data-act="fiche" data-arg="${sp.id}">📖 Fiche</button></div></div>`;
   }
 
   private marketHint(p: number): string {
@@ -435,27 +545,29 @@ export class UI {
     const sp = SPECIES_BY_ID[p.sp];
     const m = s.market[sp.family];
     const full = s.stock.length >= s.stockCap;
+    const d = s.disc[sp.id];
+    const n = sim.starsOf(d);
+    const next = n >= 3 ? 'Fiche complète : tu as obtenu un spécimen d\'exposition.' : 'Pour une étoile de plus, fais-la pousser dans un coin qui lui convient parfaitement, bien arrosée et sans pucerons.';
     return this.head(`${EMOJI[sp.id]} ${esc(sp.name)} en fleur`) + `<div class="sh-body">
-      <div class="big">${fmt(sim.saleValue(s, p))} 🪙</div>
-      <div class="kv"><span>Qualité</span><b>${sim.qualityWord(p.q)} (${mult(sim.qualityMult(p.q))})</b></div>
-      <div class="kv"><span>Cours ${FAMILIES[sp.family].name.toLowerCase()}</span><b class="${level(m.p)}">${mult(m.p)} ${trend(m.hist).arrow}</b></div>
-      <p class="sub center">${this.marketHint(m.p)}</p>
-      <button class="btn primary wide" data-act="sell">Vendre maintenant</button>
-      <button class="btn wide" data-act="store" ${full ? 'disabled' : ''}>📦 Garder en réserve (${s.stock.length}/${s.stockCap})</button></div>`;
+      <div class="big">${stars(n)}</div>
+      <div class="kv"><span>Ce spécimen</span><b>${sim.qualityWord(p.q)}</b></div>
+      <p class="sub">${next}</p>
+      <button class="btn primary wide" data-act="sell">Récolter et vendre · ${fmt(sim.saleValue(s, p))} 🪙</button>
+      <p class="sub center">Cours ${FAMILIES[sp.family].name.toLowerCase()} : <b class="${level(m.p)}">${mult(m.p)}</b>. ${this.marketHint(m.p)}</p>
+      <div class="row"><button class="btn small" data-act="store" ${full ? 'disabled' : ''}>📦 Réserve (${s.stock.length}/${s.stockCap})</button><button class="btn small" data-act="move">✋ Déplacer</button><button class="btn small" data-act="fiche" data-arg="${sp.id}">📖 Fiche</button></div></div>`;
   }
 
   private packetsHtml(): string {
     const s = this.s;
-    const now = new Date();
-    const mid = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime() - now.getTime();
-    const hh = Math.floor(mid / 3600000), mm = Math.floor((mid % 3600000) / 60000);
+    const wait = Math.max(0, Math.ceil(s.packetIn));
+    const timer = `${Math.floor(wait / 60)} min ${String(wait % 60).padStart(2, '0')}`;
     const seeds = Object.keys(s.seeds).map((id) => {
       const sp = SPECIES_BY_ID[id];
       return `<button class="card" data-act="fiche" data-arg="${id}"><div class="ico">${EMOJI[id]}</div><div class="mid"><div class="nm">${esc(sp.name)} ${rarTag(sp)}</div>${needsChips(sp)}</div><div class="end">×${s.seeds[id]}</div></button>`;
     }).join('');
     return this.head('🎁 Sachets de graines') + `<div class="sh-body">
-      <p class="sub">Un sachet gratuit chaque jour. Ils se cumulent jusqu'à ${sim.MAX_PACKETS} si tu rates un jour.</p>
-      <button class="btn gold wide" data-act="free" ${s.packets > 0 ? '' : 'disabled'}>${s.packets > 0 ? `Ouvrir un sachet gratuit (${s.packets})` : `Prochain sachet dans ${hh} h ${String(mm).padStart(2, '0')}`}</button>
+      <p class="sub">Un sachet gratuit toutes les ${Math.round(sim.PACKET_EVERY / 60)} minutes, même en ton absence. Ils se cumulent jusqu'à ${sim.MAX_PACKETS}.</p>
+      <button class="btn gold wide" data-act="free" ${s.packets > 0 ? '' : 'disabled'}>${s.packets > 0 ? `Ouvrir un sachet gratuit (${s.packets})` : `Prochain sachet dans ${timer}`}</button>
       <button class="btn wide" data-act="buypacket" ${s.coins >= sim.PRICES.packet ? '' : 'disabled'}>Sachet mystère · ${sim.PRICES.packet} 🪙</button>
       <h3>Mes graines</h3>${seeds || '<p class="sub">Aucune graine en attente. Touche un pot vide dans la serre pour semer.</p>'}</div>`;
   }
@@ -473,7 +585,7 @@ export class UI {
     }).join('');
     const news = s.news.slice(0, 6).map((n) => `<div class="news"><b class="${n.dir > 0 ? 'up' : 'down'}">${FAMILIES[n.family].icon} ${n.dir > 0 ? '▲' : '▼'}</b> ${esc(n.text)}</div>`).join('');
     return this.head('📈 Marché') + `<div class="sh-body">
-      <p class="sub">Le prix de vente suit le cours de la famille. ×1,00 est le prix normal.</p>${rows}
+      <p class="sub">Vendre finance ta collection. Le prix suit le cours de la famille : ×1,00 est le prix normal.</p>${rows}
       <h3>Réserve (${s.stock.length}/${s.stockCap})</h3>${stock || '<p class="sub">Vide. Quand un cours est bas, garde tes plantes en fleur ici et vends au prochain pic.</p>'}
       <h3>Dernières nouvelles</h3>${news || '<p class="sub">Le marché est calme pour l\'instant.</p>'}</div>`;
   }
@@ -494,19 +606,21 @@ export class UI {
       <h3>Graines</h3>
       ${item('🎁', 'Sachet mystère', 'Trois graines de toutes familles.', sim.PRICES.packet, 'buypacket', '')}
       ${FAMILY_IDS.map((f) => item(FAMILIES[f].icon, `Sachet ${FAMILIES[f].name.toLowerCase()}`, 'Trois graines de cette famille.', sim.PRICES.familyPacket, 'buypacket', f)).join('')}
-      <p class="sub">Pour un nouveau pot, touche un emplacement libre dans la serre.</p></div>`;
+      <p class="sub">Pour un nouveau pot ou une nouvelle zone, touche un emplacement libre ou un cadenas dans la serre.</p></div>`;
   }
 
   private almanacHtml(): string {
     const s = this.s;
-    const seen = SPECIES.filter((sp) => s.disc[sp.id]?.seen).length;
+    const col = sim.collection(s);
     const cells = SPECIES.map((sp) => {
       const d = s.disc[sp.id];
       if (!d?.seen) return '<div class="sp locked"><span class="e">❔</span>???</div>';
-      return `<button class="sp" data-act="fiche" data-arg="${sp.id}" style="border-color:${RARITIES[sp.rarity].color}55"><span class="e">${EMOJI[sp.id]}</span>${esc(sp.name)}${d.bloomed ? '' : '<span class="chip">à faire fleurir</span>'}</button>`;
+      return `<button class="sp" data-act="fiche" data-arg="${sp.id}" style="border-color:${RARITIES[sp.rarity].color}55"><span class="e">${EMOJI[sp.id]}</span>${esc(sp.name)}${d.bloomed ? `<span class="st">${stars(sim.starsOf(d))}</span>` : '<span class="chip">à faire fleurir</span>'}</button>`;
     }).join('');
     return this.head('📖 Almanach') + `<div class="sh-body">
-      <p class="sub">${seen} espèces découvertes sur ${SPECIES.length}. Fais fleurir une plante pour compléter sa fiche.</p>
+      <div class="big">${col.bloomed} / ${SPECIES.length}</div>
+      <p class="sub center">espèces fleuries · ⭐ ${col.stars} sur ${SPECIES.length * 3}</p>
+      <p class="sub">Chaque floraison ajoute l'espèce à ta collection. Les plus beaux spécimens gagnent jusqu'à trois étoiles.</p>
       <div class="grid">${cells}</div>
       <div class="kv"><span>Plantes vendues</span><b>${fmt(s.stats.sold)}</b></div>
       <div class="kv"><span>Pièces gagnées</span><b>${fmt(s.stats.earned)} 🪙</b></div>
@@ -519,7 +633,7 @@ export class UI {
     const mins = Math.round(sp.grow / 60 * 10) / 10;
     return this.head(`${EMOJI[sp.id]} ${esc(sp.name)}`) + `<div class="sh-body">
       <p class="sub"><i>${esc(sp.latin)}</i> · ${FAMILIES[sp.family].name} · ${esc(sp.origin)}</p>
-      <div>${rarTag(sp)}</div>
+      <div>${rarTag(sp)} <span class="st">${stars(sim.starsOf(d))}</span></div>
       <h3>Ce qu'elle aime</h3>${needsChips(sp)}
       <p class="sub">Idéal : ${ZONES.filter((z) => sim.fitOf(sp, sim.zoneClimate(this.s, z)) >= 1).map((z) => z.name).join(', ') || 'aucun coin parfait pour l\'instant, cherche le moins mauvais ou équipe la serre'}.</p>
       <h3>Dans le jeu</h3>

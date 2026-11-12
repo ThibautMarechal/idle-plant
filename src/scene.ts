@@ -40,6 +40,10 @@ export class Scene3D {
   private w = 1;
   private h = 1;
   private unit = 50;
+  private view = { u: 50, cx: 0, cy: 0, ay: 100 };
+  private goal = { u: 50, cx: 0, cy: 0, ay: 100 };
+  private zone = -1;
+  private crates: THREE.Group[] = [];
 
   constructor(private canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
@@ -67,7 +71,10 @@ export class Scene3D {
     const target = new THREE.Vector3(0, 0, 0);
     this.camera.position.copy(target).addScaledVector(dir, 30);
     this.camera.lookAt(target);
+    this.camera.updateMatrixWorld(true);
     this.resize();
+    this.view = { ...this.goal };
+    this.applyView();
   }
 
   private buildRoom(): void {
@@ -145,6 +152,25 @@ export class Scene3D {
     s.add(box(W * 2 - 0.5, 0.12, 1.2, 0xc99a66, 0, TABLE_Y - 0.06, tz));
     for (const x of [-W + 0.45, W - 0.45]) for (const z of [tz - 0.45, tz + 0.45]) s.add(box(0.12, TABLE_Y - 0.12, 0.12, 0xa9794f, x, (TABLE_Y - 0.12) / 2, z));
 
+    // Caisses et bâche : une zone pas encore aménagée est encombrée.
+    ROW_Z.forEach((z, r) => {
+      const g = new THREE.Group();
+      const y = r === 3 ? TABLE_Y : 0;
+      COL_X.forEach((x, c) => {
+        const sz = 0.55 + ((r + c) % 3) * 0.12;
+        const crate = box(sz, sz * 0.8, sz, c % 2 ? 0xb98a5a : 0xa9794f, x + (c - 1) * 0.1, y + sz * 0.4, z);
+        crate.rotation.y = (r * 3 + c) * 0.5;
+        g.add(crate);
+        g.add(box(sz * 1.04, 0.05, sz * 0.2, 0x8a5f3c, x + (c - 1) * 0.1, y + sz * 0.8, z));
+      });
+      const tarp = new THREE.Mesh(new THREE.BoxGeometry(W * 2 - 0.3, 0.03, 1.6), new THREE.MeshStandardMaterial({ color: 0x6b6f66, transparent: true, opacity: 0.45 }));
+      tarp.position.set(0, 0.03, z);
+      if (r !== 3) g.add(tarp);
+      g.visible = false;
+      this.crates.push(g);
+      s.add(g);
+    });
+
     // Arrosoir décoratif.
     const can = new THREE.Group();
     const body = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.22, 0.34, 8), mat(0x5a9fd4));
@@ -181,22 +207,47 @@ export class Scene3D {
     this.w = Math.max(1, rect.width);
     this.h = Math.max(1, rect.height);
     this.renderer.setSize(this.w, this.h, false);
-    // Le décor occupe ~6,7 unités de large et ~8,6 de haut à l'écran ; on le cale sous le bandeau du haut.
-    const unit = Math.min(this.w / 6.7, (this.h - 240) / 8.6);
-    this.unit = unit;
-    const halfW = this.w / (2 * unit);
-    this.camera.left = -halfW + 0.25;
-    this.camera.right = halfW + 0.25;
-    this.camera.top = 5.05 + 108 / unit;
-    this.camera.bottom = this.camera.top - this.h / unit;
+    this.setView(this.zone);
+    this.view = { ...this.goal };
+    this.applyView();
+  }
+
+  /** Cadre la vue d'ensemble (-1) ou une zone (0..3). La caméra y glisse en douceur. */
+  setView(zone: number): void {
+    this.zone = zone;
+    if (zone < 0) {
+      // Le décor occupe ~6,7 unités de large et ~8,6 de haut à l'écran ; on le cale sous le bandeau du haut.
+      this.goal = { u: Math.min(this.w / 6.7, (this.h - 290) / 8.6), cx: 0.25, cy: 5.05, ay: 150 };
+    } else {
+      const c = new THREE.Vector3(0, (zone === 3 ? TABLE_Y : 0) + 0.75, ROW_Z[zone]).applyMatrix4(this.camera.matrixWorldInverse);
+      this.goal = { u: Math.min(this.w / 4.1, (this.h - 300) / 3.4), cx: c.x, cy: c.y, ay: this.h * 0.46 };
+    }
+  }
+
+  get currentZone(): number {
+    return this.zone;
+  }
+
+  private applyView(): void {
+    const v = this.view;
+    this.unit = v.u;
+    this.camera.left = v.cx - this.w / (2 * v.u);
+    this.camera.right = v.cx + this.w / (2 * v.u);
+    this.camera.top = v.cy + v.ay / v.u;
+    this.camera.bottom = this.camera.top - this.h / v.u;
     this.camera.updateProjectionMatrix();
   }
 
   /** Aligne le décor sur l'état du jeu. Ne reconstruit un modèle que si son aspect change. */
   sync(s: State): void {
+    this.crates.forEach((c, z) => { c.visible = !s.zonesOpen[z]; });
     s.slots.forEach((slot, i) => {
       const v = this.slots[i];
-      v.marker.visible = !slot.pot;
+      v.marker.visible = !slot.pot && s.zonesOpen[Math.floor(i / SLOTS_PER_ZONE)];
+      if (!slot.pot && v.pot) {
+        v.root.remove(v.pot);
+        v.pot = null;
+      }
       if (slot.pot && !v.pot) {
         v.pot = buildPot();
         v.root.add(v.pot);
@@ -232,6 +283,12 @@ export class Scene3D {
   }
 
   render(t: number, dt: number): void {
+    const k = Math.min(1, dt * 7);
+    const v = this.view, g = this.goal;
+    if (Math.abs(v.u - g.u) + Math.abs(v.cx - g.cx) + Math.abs(v.cy - g.cy) + Math.abs(v.ay - g.ay) > 0.01) {
+      v.u += (g.u - v.u) * k; v.cx += (g.cx - v.cx) * k; v.cy += (g.cy - v.cy) * k; v.ay += (g.ay - v.ay) * k;
+      this.applyView();
+    }
     this.slots.forEach((v, i) => {
       v.pop = Math.max(0, v.pop - dt * 2.6);
       const bounce = 1 + Math.sin(v.pop * Math.PI) * 0.22;
@@ -267,9 +324,10 @@ export class Scene3D {
     };
   }
 
-  zoneLabelY(r: number): number {
-    const p = new THREE.Vector3(-HALF_W, 0, ROW_Z[r] + 0.6).project(this.camera);
-    return (1 - (p.y * 0.5 + 0.5)) * this.h;
+  /** Position écran du centre d'une zone, pour y accrocher un cadenas. */
+  zoneCenter(r: number): { x: number; y: number } {
+    const p = new THREE.Vector3(0, (r === 3 ? TABLE_Y : 0) + 0.9, ROW_Z[r]).project(this.camera);
+    return { x: (p.x * 0.5 + 0.5) * this.w, y: (1 - (p.y * 0.5 + 0.5)) * this.h };
   }
 }
 export const ZONE_COUNT = ZONES.length;

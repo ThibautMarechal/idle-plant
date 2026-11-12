@@ -7,7 +7,7 @@ export interface Harvest { sp: string; q: number }
 export interface MarketLine { p: number; hist: number[]; drift: number; driftLeft: number }
 export interface NewsItem { t: number; family: Family; dir: 1 | -1; text: string }
 export interface Upgrades { water: boolean; bugs: boolean; mist: boolean }
-export interface Disc { seen: boolean; bloomed: boolean; sold: number }
+export interface Disc { seen: boolean; bloomed: boolean; sold: number; bestQ: number }
 
 export interface State {
   v: number;
@@ -17,7 +17,13 @@ export interface State {
   stock: Harvest[];
   stockCap: number;
   packets: number;
-  lastPacketDay: number;
+  /** Secondes avant le prochain sachet gratuit. */
+  packetIn: number;
+  /** Zones aménagées, dans l'ordre de ZONES. */
+  zonesOpen: boolean[];
+  /** Espèces dont la fiche vient de progresser, en attente d'être fêtées par l'interface. */
+  fresh: string[];
+  moved: number;
   market: Record<Family, MarketLine>;
   marketAcc: number;
   news: NewsItem[];
@@ -30,7 +36,7 @@ export interface State {
   lastTick: number;
 }
 
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 export const MARKET_TICK = 20; // secondes
 export const NEWS_EVERY = 210;
 export const WATER_DURATION = 160;
@@ -38,6 +44,8 @@ export const PRICE_MIN = 0.5;
 export const PRICE_MAX = 2.0;
 export const PACKET_SIZE = 3;
 export const MAX_PACKETS = 3;
+export const PACKET_EVERY = 300;
+export const ZONE_PRICES = [150, 400, 0, 0];
 export const MAX_OFFLINE = 12 * 3600;
 
 export const PRICES = {
@@ -51,14 +59,9 @@ export const PRICES = {
 
 export type Rng = () => number;
 
-export function dayOf(now: number): number {
-  const d = new Date(now);
-  return Math.floor((d.getTime() - d.getTimezoneOffset() * 60000) / 86400000);
-}
-
 export function newState(now: number): State {
   const slots: Slot[] = [];
-  for (let i = 0; i < SLOT_COUNT; i++) slots.push({ pot: i % SLOTS_PER_ZONE === 1, plant: null });
+  for (let i = 0; i < SLOT_COUNT; i++) slots.push({ pot: i === 7 || i === 9 || i === 10, plant: null });
   const market = {} as Record<Family, MarketLine>;
   for (const f of FAMILY_IDS) market[f] = { p: 1, hist: [1, 1], drift: 0, driftLeft: 0 };
   return {
@@ -69,7 +72,10 @@ export function newState(now: number): State {
     stock: [],
     stockCap: 4,
     packets: 2,
-    lastPacketDay: dayOf(now),
+    packetIn: PACKET_EVERY,
+    zonesOpen: ZONE_PRICES.map((p) => p === 0),
+    fresh: [],
+    moved: 0,
     market,
     marketAcc: 0,
     news: [],
@@ -120,7 +126,7 @@ export function saleValue(s: State, h: Harvest): number {
 
 export function potPrice(s: State): number {
   const n = s.slots.filter((x) => x.pot).length;
-  return Math.round(40 * Math.pow(1.45, n - 4));
+  return Math.round(40 * Math.pow(1.4, Math.max(0, n - 3)));
 }
 
 function clamp(x: number, a: number, b: number): number {
@@ -145,7 +151,13 @@ function stepPlants(s: State, dt: number, rng: Rng, offline: boolean): void {
       p.prog = Math.min(1, p.prog + (dt / sp.grow) * speed);
       const target = 100 * fit * (wet ? 1 : 0.6) * (p.pests > 0 ? 0.5 : 1);
       p.q += (target - p.q) * Math.min(1, (dt / sp.grow) * 2.2);
-      if (p.prog >= 1) discOf(s, p.sp).bloomed = true;
+      if (p.prog >= 1) {
+        const d = discOf(s, p.sp);
+        const before = starsOf(d);
+        d.bloomed = true;
+        d.bestQ = Math.max(d.bestQ, p.q);
+        if (starsOf(d) > before) s.fresh.push(p.sp);
+      }
     } else if (p.pests > 0) {
       p.q = Math.max(10, p.q - dt * 0.05);
     }
@@ -209,16 +221,36 @@ export function advance(s: State, now: number, rng: Rng = Math.random): number {
       fireNews(s, now - dt * 1000, rng);
     }
   }
-  const day = dayOf(now);
-  if (day > s.lastPacketDay) {
-    s.packets = Math.min(MAX_PACKETS, s.packets + (day - s.lastPacketDay));
-    s.lastPacketDay = day;
+  if (s.packets >= MAX_PACKETS) {
+    s.packetIn = PACKET_EVERY;
+  } else {
+    s.packetIn -= total;
+    while (s.packetIn <= 0 && s.packets < MAX_PACKETS) {
+      s.packets++;
+      s.packetIn += PACKET_EVERY;
+    }
+    if (s.packets >= MAX_PACKETS) s.packetIn = PACKET_EVERY;
   }
   return total;
 }
 
 export function discOf(s: State, id: string): Disc {
-  return (s.disc[id] ??= { seen: false, bloomed: false, sold: 0 });
+  return (s.disc[id] ??= { seen: false, bloomed: false, sold: 0, bestQ: 0 });
+}
+
+/** Étoiles d'une fiche : 1 à la première floraison, 2 pour un beau spécimen, 3 pour un spécimen d'exposition. */
+export function starsOf(d: Disc | undefined): number {
+  if (!d || !d.bloomed) return 0;
+  return d.bestQ >= 88 ? 3 : d.bestQ >= 70 ? 2 : 1;
+}
+
+export function collection(s: State): { seen: number; bloomed: number; stars: number } {
+  const all = Object.values(s.disc);
+  return {
+    seen: all.filter((d) => d.seen).length,
+    bloomed: all.filter((d) => d.bloomed).length,
+    stars: all.reduce((a, d) => a + starsOf(d), 0),
+  };
 }
 
 function rollRarity(rng: Rng): Rarity {
@@ -268,7 +300,7 @@ export function openFreePacket(s: State, rng: Rng = Math.random) {
   s.packets--;
   s.stats.opened++;
   // Le tout premier sachet garantit de quoi démarrer dans de bonnes conditions.
-  const ids = s.stats.opened === 1 ? ['basilic', 'menthe', 'boston'] : rollSeeds(s, rng);
+  const ids = s.stats.opened === 1 ? ['basilic', 'menthe', 'pensee'] : rollSeeds(s, rng);
   return grant(s, ids);
 }
 
@@ -283,6 +315,7 @@ export function buyPacket(s: State, rng: Rng = Math.random, family?: Family) {
 export function plantSeed(s: State, i: number, id: string): boolean {
   const slot = s.slots[i];
   if (!slot.pot || slot.plant || !(s.seeds[id] > 0)) return false;
+  discOf(s, id).seen = true;
   s.seeds[id]--;
   if (s.seeds[id] === 0) delete s.seeds[id];
   slot.plant = { sp: id, prog: 0, water: 1, pests: 0, q: 50 };
@@ -340,9 +373,32 @@ export function sellStock(s: State, k: number): number {
   return sell(s, h);
 }
 
+export function zoneIndexOfSlot(i: number): number {
+  return Math.floor(i / SLOTS_PER_ZONE);
+}
+
+/** Déplace un pot (et sa plante) vers un autre emplacement ; échange si la cible est occupée. */
+export function movePot(s: State, from: number, to: number): boolean {
+  if (from === to || !s.slots[from].pot || !s.zonesOpen[zoneIndexOfSlot(to)]) return false;
+  const tmp = s.slots[to];
+  s.slots[to] = s.slots[from];
+  s.slots[from] = tmp;
+  s.moved++;
+  return true;
+}
+
+/** Aménage une nouvelle zone de la serre. */
+export function openZone(s: State, z: number): boolean {
+  const price = ZONE_PRICES[z];
+  if (s.zonesOpen[z] || s.coins < price) return false;
+  s.coins -= price;
+  s.zonesOpen[z] = true;
+  return true;
+}
+
 export function buyPot(s: State, i: number): boolean {
   const price = potPrice(s);
-  if (s.slots[i].pot || s.coins < price) return false;
+  if (s.slots[i].pot || s.coins < price || !s.zonesOpen[zoneIndexOfSlot(i)]) return false;
   s.coins -= price;
   s.slots[i].pot = true;
   return true;
@@ -366,15 +422,18 @@ export interface Quest { id: string; text: string; reward: number; done: (s: Sta
 export const QUESTS: Quest[] = [
   { id: 'open', text: 'Ouvre ton premier sachet de graines', reward: 10, done: (s) => s.stats.opened >= 1 },
   { id: 'plant', text: 'Sème une graine dans un pot', reward: 10, done: (s) => s.stats.planted >= 1 },
-  { id: 'sell', text: 'Vends ta première plante', reward: 20, done: (s) => s.stats.sold >= 1 },
-  { id: 'pots6', text: 'Possède 6 pots', reward: 40, done: (s) => s.slots.filter((x) => x.pot).length >= 6 },
-  { id: 'peak', text: 'Vends quand un cours dépasse ×1,25', reward: 60, done: (s) => s.stats.bestMult >= 1.25 },
-  { id: 'disc6', text: 'Découvre 6 espèces', reward: 60, done: (s) => Object.values(s.disc).filter((d) => d.seen).length >= 6 },
-  { id: 'rare', text: 'Fais fleurir une plante rare', reward: 80,
+  { id: 'bloom1', text: 'Fais fleurir ta première plante', reward: 20, done: (s) => collection(s).bloomed >= 1 },
+  { id: 'move', text: 'Déplace un pot vers un meilleur emplacement', reward: 20, done: (s) => s.moved >= 1 },
+  { id: 'bloom3', text: 'Ajoute 3 espèces à l\'almanach', reward: 50, done: (s) => collection(s).bloomed >= 3 },
+  { id: 'zone1', text: 'Aménage une nouvelle zone de la serre', reward: 60, done: (s) => s.zonesOpen.filter(Boolean).length >= 3 },
+  { id: 'star3', text: 'Obtiens un spécimen d\'exposition ⭐⭐⭐', reward: 80, done: (s) => Object.values(s.disc).some((d) => starsOf(d) >= 3) },
+  { id: 'bloom6', text: 'Ajoute 6 espèces à l\'almanach', reward: 100, done: (s) => collection(s).bloomed >= 6 },
+  { id: 'rare', text: 'Fais fleurir une plante rare', reward: 120,
     done: (s) => Object.entries(s.disc).some(([id, d]) => d.bloomed && SPECIES_BY_ID[id].rarity !== 'commun') },
-  { id: 'earn1000', text: 'Gagne 1 000 pièces au total', reward: 150, done: (s) => s.stats.earned >= 1000 },
-  { id: 'pots12', text: 'Remplis toute la serre : 12 pots', reward: 300, done: (s) => s.slots.every((x) => x.pot) },
-  { id: 'disc14', text: 'Complète l\'almanach', reward: 1000, done: (s) => Object.values(s.disc).filter((d) => d.bloomed).length >= SPECIES.length },
+  { id: 'zone2', text: 'Aménage toute la serre', reward: 150, done: (s) => s.zonesOpen.every(Boolean) },
+  { id: 'stars20', text: 'Cumule 20 étoiles dans l\'almanach', reward: 250, done: (s) => collection(s).stars >= 20 },
+  { id: 'bloom10', text: 'Ajoute 10 espèces à l\'almanach', reward: 300, done: (s) => collection(s).bloomed >= 10 },
+  { id: 'disc14', text: 'Complète l\'almanach', reward: 1000, done: (s) => collection(s).bloomed >= SPECIES.length },
 ];
 
 export function currentQuest(s: State): Quest | null {
@@ -398,6 +457,16 @@ export function load(now: number): State {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const s = JSON.parse(raw) as State;
+      if (s.v === 1 && Array.isArray(s.slots) && s.slots.length === SLOT_COUNT) {
+        // Sauvegarde de la première version : on garde tout et on ouvre les zones déjà utilisées.
+        s.v = SAVE_VERSION;
+        s.packetIn = PACKET_EVERY;
+        s.fresh = [];
+        s.moved = 0;
+        s.quests = {};
+        s.zonesOpen = ZONE_PRICES.map((p, z) => p === 0 || s.slots.slice(z * SLOTS_PER_ZONE, (z + 1) * SLOTS_PER_ZONE).some((x) => x.pot));
+        for (const d of Object.values(s.disc)) d.bestQ = d.bloomed ? 60 : 0;
+      }
       if (s.v === SAVE_VERSION && Array.isArray(s.slots) && s.slots.length === SLOT_COUNT) return s;
     }
   } catch { /* sauvegarde illisible : on repart de zéro */ }

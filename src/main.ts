@@ -38,6 +38,7 @@ function frame(nowMs: number): void {
   sim.advance(state, clock());
   scene.sync(state);
   scene.render(nowMs / 1000, dt);
+  ui.layout();
   uiAcc += dt;
   if (uiAcc > 0.25) { uiAcc = 0; ui.refresh(); }
   saveAcc += dt;
