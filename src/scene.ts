@@ -9,6 +9,7 @@ const COL_X = [-1.3, 0, 1.3];
 const HALF_W = 2.8;
 const HALF_D = 3.9;
 const BASIN_X = 2.25;
+const SHOW_X = [-1.95, -0.65, 0.65, 1.95];
 const TABLE_Y = 0.62;
 const ZONE_COLORS = [0x6f7f8f, 0x6fae8a, 0x9fb4c4, 0xf2d68a];
 
@@ -44,6 +45,11 @@ export class Scene3D {
   private goal = { u: 50, cx: 0, cy: 0, ay: 100 };
   private zone = -1;
   private crates: THREE.Group[] = [];
+  private shows: { root: THREE.Group; plant: THREE.Group | null; key: string }[] = [];
+  private gear: Record<string, THREE.Group> = {};
+  private bugs: THREE.Mesh[] = [];
+  private fanBlades: THREE.Group | null = null;
+  private lifted = -1;
 
   constructor(private canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
@@ -111,16 +117,14 @@ export class Scene3D {
     const sz = wz + 0.5;
     s.add(box(W * 2 - 0.2, 0.1, 0.9, 0xa9794f, 0, 2.15, sz));
     for (const x of [-W + 0.3, 0, W - 0.3]) s.add(box(0.08, 0.5, 0.08, 0x8a5f3c, x, 1.9, wz + 0.15));
-    const decoColors = [0x5aa64f, 0x3f9d6b, 0x8fcfb0, 0x59b947];
-    [-2.1, -0.75, 0.6, 1.95].forEach((x, k) => {
-      s.add(box(0.34, 0.26, 0.34, k % 2 ? 0xe9dcc6 : 0xc9714a, x, 2.33, sz));
-      const leaf = new THREE.Mesh(new THREE.IcosahedronGeometry(0.26, 0), mat(decoColors[k]));
-      leaf.position.set(x, 2.6, sz);
-      leaf.castShadow = true;
-      s.add(leaf);
-      const trail = new THREE.Mesh(new THREE.IcosahedronGeometry(0.13, 0), mat(decoColors[k]));
-      trail.position.set(x + 0.12, 2.3, sz + 0.38);
-      s.add(trail);
+    // La vitrine : quatre socles blancs sur l'étagère.
+    SHOW_X.forEach((x) => {
+      const root = new THREE.Group();
+      root.position.set(x, 2.2, sz);
+      root.scale.setScalar(0.72);
+      root.add(buildPot(0xf4efe4, 0xffffff));
+      s.add(root);
+      this.shows.push({ root, plant: null, key: '' });
     });
 
     // Bassin et brume.
@@ -171,6 +175,8 @@ export class Scene3D {
       s.add(g);
     });
 
+    this.buildGear();
+
     // Arrosoir décoratif.
     const can = new THREE.Group();
     const body = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.22, 0.34, 8), mat(0x5a9fd4));
@@ -183,6 +189,65 @@ export class Scene3D {
     can.position.set(BASIN_X, 0, ROW_Z[2]);
     can.rotation.y = 2.4;
     s.add(can);
+  }
+
+  /** Équipements : invisibles tant qu'ils ne sont pas achetés. */
+  private buildGear(): void {
+    const s = this.scene;
+    const W = HALF_W, D = HALF_D;
+    const add = (name: string, ...parts: THREE.Object3D[]) => {
+      const g = new THREE.Group();
+      if (parts.length) g.add(...parts);
+      g.visible = false;
+      this.gear[name] = g;
+      s.add(g);
+      return g;
+    };
+    // Arrosage automatique : une conduite le long du mur de gauche, un goutteur par rangée.
+    const pipes: THREE.Object3D[] = [box(0.07, 0.07, D * 2 - 0.4, 0xc98a4a, -W + 0.12, 0.75, 0)];
+    ROW_Z.forEach((z, r) => {
+      const y = r === 3 ? TABLE_Y : 0;
+      COL_X.forEach((x) => {
+        pipes.push(box(0.04, 0.5, 0.04, 0xc98a4a, x - 0.47, y + 0.3, z));
+        pipes.push(box(0.16, 0.04, 0.04, 0xc98a4a, x - 0.41, y + 0.56, z));
+        pipes.push(box(0.05, 0.07, 0.05, 0x5a9fd4, x - 0.33, y + 0.53, z));
+      });
+    });
+    add('water', ...pipes);
+    // Coccinelles.
+    const bugGroup = add('bugs');
+    for (let k = 0; k < 6; k++) {
+      const b = new THREE.Mesh(new THREE.IcosahedronGeometry(0.07, 0), mat(0xe2382f));
+      b.scale.y = 0.6;
+      b.userData.k = k;
+      this.bugs.push(b);
+      bugGroup.add(b);
+    }
+    // Brumisateur sous l'étagère.
+    add('mist', box(0.5, 0.16, 0.2, 0xe8eef0, -1.3, 1.95, -D + 0.25), box(0.5, 0.16, 0.2, 0xe8eef0, 1.3, 1.95, -D + 0.25),
+      box(2.6, 0.04, 0.04, 0xb0c4cc, 0, 1.95, -D + 0.25));
+    // Lampe horticole au-dessus de la rangée de la porte.
+    const glow = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.04, 0.26), new THREE.MeshBasicMaterial({ color: 0xff9ad8 }));
+    glow.position.set(-W + 0.75, 1.86, ROW_Z[2] - 0.75);
+    add('lamp', box(0.6, 0.1, 0.34, 0x4a4a52, -W + 0.75, 1.93, ROW_Z[2] - 0.75), glow, box(0.5, 0.05, 0.05, 0x4a4a52, -W + 0.25, 1.95, ROW_Z[2] - 0.75));
+    // Radiateur près de la porte.
+    const fins: THREE.Object3D[] = [];
+    for (let k = 0; k < 5; k++) fins.push(box(0.1, 0.5, 0.3, 0xf2efe6, -W + 0.35, 0.3, ROW_Z[2] + 0.85 + k * 0.13 - 0.26));
+    fins.push(box(0.06, 0.06, 0.06, 0xe2604f, -W + 0.35, 0.6, ROW_Z[2] + 0.55));
+    add('heat', ...fins);
+    // Ventilateur au bout de la table.
+    const blades = new THREE.Group();
+    for (let k = 0; k < 3; k++) {
+      const bl = box(0.3, 0.07, 0.02, 0xdfe6e8, 0.15, 0, 0, false);
+      const arm = new THREE.Group();
+      arm.rotation.z = (k / 3) * Math.PI * 2;
+      arm.add(bl);
+      blades.add(arm);
+    }
+    blades.position.set(BASIN_X + 0.05, TABLE_Y + 0.5, ROW_Z[3]);
+    blades.rotation.y = -Math.PI / 2;
+    this.fanBlades = blades;
+    add('fan', box(0.08, 0.5, 0.08, 0x7a8288, BASIN_X + 0.1, TABLE_Y + 0.25, ROW_Z[3]), box(0.3, 0.05, 0.3, 0x7a8288, BASIN_X + 0.1, TABLE_Y + 0.03, ROW_Z[3]), blades);
   }
 
   private buildSlot(i: number): SlotView {
@@ -241,6 +306,19 @@ export class Scene3D {
   /** Aligne le décor sur l'état du jeu. Ne reconstruit un modèle que si son aspect change. */
   sync(s: State): void {
     this.crates.forEach((c, z) => { c.visible = !s.zonesOpen[z]; });
+    for (const k of Object.keys(this.gear)) this.gear[k].visible = !!s.upgrades[k as keyof State['upgrades']];
+    s.showcase.forEach((h, k) => {
+      const v = this.shows[k];
+      const key = h ? `${h.sp}|${h.vr}` : '';
+      if (key === v.key) return;
+      if (v.plant) v.root.remove(v.plant);
+      v.plant = h ? buildPlant(SPECIES_BY_ID[h.sp], 4, 1, h.vr) : null;
+      if (v.plant) {
+        v.plant.position.y = POT_TOP;
+        v.root.add(v.plant);
+      }
+      v.key = key;
+    });
     s.slots.forEach((slot, i) => {
       const v = this.slots[i];
       v.marker.visible = !slot.pot && s.zonesOpen[Math.floor(i / SLOTS_PER_ZONE)];
@@ -259,10 +337,10 @@ export class Scene3D {
         const sp = SPECIES_BY_ID[p.sp];
         const fit = fitOf(sp, zoneClimate(s, zoneOfSlot(i)));
         const health = Math.min(fit, p.water > 0 ? 1 : 0.75) * (p.pests > 0 ? 0.8 : 1);
-        key = `${p.sp}|${stageOf(p.prog)}|${Math.round(health * 5)}`;
+        key = `${p.sp}|${stageOf(p.prog)}|${Math.round(health * 5)}|${stageOf(p.prog) >= 2 ? p.vr : 0}`;
         if (key !== v.key) {
           if (v.plant) v.root.remove(v.plant);
-          v.plant = buildPlant(sp, stageOf(p.prog), health);
+          v.plant = buildPlant(sp, stageOf(p.prog), health, stageOf(p.prog) >= 2 ? p.vr : 0);
           v.plant.position.y = POT_TOP;
           v.root.add(v.plant);
           if (v.key.split('|')[1] !== key.split('|')[1]) v.pop = 1;
@@ -276,6 +354,11 @@ export class Scene3D {
       }
       v.key = key;
     });
+  }
+
+  /** Soulève un pot pendant qu'on le déplace (-1 pour tout reposer). */
+  lift(i: number): void {
+    this.lifted = i;
   }
 
   pop(i: number): void {
@@ -293,6 +376,7 @@ export class Scene3D {
       v.pop = Math.max(0, v.pop - dt * 2.6);
       const bounce = 1 + Math.sin(v.pop * Math.PI) * 0.22;
       v.root.scale.set(bounce, 1 + Math.sin(v.pop * Math.PI) * 0.3, bounce);
+      v.root.position.y += ((v.base.y + (this.lifted === i ? 0.45 : 0)) - v.root.position.y) * Math.min(1, dt * 12);
       if (v.plant) {
         const g = (v.plant.userData.grow as number) ?? 1;
         v.plant.scale.setScalar(1.25 * g);
@@ -308,6 +392,13 @@ export class Scene3D {
       (m.material as THREE.MeshBasicMaterial).opacity = 0.34 * Math.sin(ph * Math.PI);
     });
     this.water.position.y = 0.27 + Math.sin(t * 1.5) * 0.008;
+    this.bugs.forEach((b) => {
+      const k = b.userData.k as number;
+      const a = t * 0.35 + k * 1.9;
+      b.position.set(COL_X[k % 3] + Math.cos(a) * 0.42, (k >= 3 ? 0 : 0) + 0.05, ROW_Z[(k * 2 + 1) % 3] + Math.sin(a) * 0.42);
+    });
+    if (this.fanBlades) this.fanBlades.rotation.x = t * 9;
+    this.shows.forEach((v, k) => { if (v.plant) v.plant.rotation.z = Math.sin(t * 1.1 + k) * 0.03; });
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -322,6 +413,12 @@ export class Scene3D {
       top: (1 - (head.y * 0.5 + 0.5)) * this.h,
       unit: this.unit,
     };
+  }
+
+  /** Position écran d'un socle de la vitrine. */
+  showRect(k: number): { x: number; y: number } {
+    const p = new THREE.Vector3(SHOW_X[k], 3.55, -HALF_D + 0.4).project(this.camera);
+    return { x: (p.x * 0.5 + 0.5) * this.w, y: (1 - (p.y * 0.5 + 0.5)) * this.h };
   }
 
   /** Position écran du centre d'une zone, pour y accrocher un cadenas. */

@@ -6,16 +6,20 @@ import type { State } from './sim';
 
 const EMOJI: Record<string, string> = {
   echeveria: '🪴', aloe: '🌵', lithops: '🪨', basilic: '🌿', menthe: '🍃', lavande: '🪻', boston: '☘️', capillaire: '🍀',
-  pensee: '🌼', pelargonium: '🌺', strelitzia: '🦜', phalaenopsis: '🌸', paphiopedilum: '🌷', fantome: '👻',
+  pensee: '🌼', pelargonium: '🌺', strelitzia: '🦜', phalaenopsis: '🌸', paphiopedilum: '🥿', fantome: '👻',
+  haworthia: '🦓', echinocactus: '🌵', opuntia: '🌵', thym: '🌿', romarin: '🌿', ciboulette: '🧅', platycerium: '🦌', asplenium: '🪺',
+  cattleya: '💮', dendrobium: '🌸', tournesol: '🌻', tulipe: '🌷', hibiscus: '🌺', semper: '🌷', monstera: '🌴', calathea: '🍃',
+  pilea: '🪙', chlorophytum: '🕷️', anthurium: '❤️', dionee: '🪤', drosera: '💧', sarracenia: '🏺',
 };
 const ZONE_SHORT = ['Ombre', 'Bassin', 'Porte', 'Plein sud'];
 
-type SheetKind = 'none' | 'seed' | 'buypot' | 'plant' | 'harvest' | 'packets' | 'market' | 'shop' | 'almanac' | 'fiche' | 'zone';
+type SheetKind = 'vitrine' | 'none' | 'seed' | 'buypot' | 'plant' | 'harvest' | 'packets' | 'market' | 'shop' | 'almanac' | 'fiche' | 'zone';
 
 const $ = (id: string) => document.getElementById(id)!;
 const fmt = (n: number) => Math.round(n).toLocaleString('fr-FR');
 const mult = (p: number) => '×' + p.toFixed(2).replace('.', ',');
 const stars = (n: number) => '⭐'.repeat(n) + '☆'.repeat(3 - n);
+const vname = (sp: Species, vr: number) => sp.name + (vr ? ' ' + sim.VARIANTS[vr] : '');
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
 
 function rarTag(sp: Species): string {
@@ -82,6 +86,12 @@ export class UI {
   private moving = -1;
   private swipedAt = 0;
   private celebrate: string[] = [];
+  private drag = -1;
+  private dragTarget = -1;
+  private holdTimer = 0;
+  private holdAt: { x: number; y: number } | null = null;
+  private edgeAt = 0;
+  private showEl!: HTMLButtonElement;
 
   constructor(private s: State, private scene: Scene3D, private onReset: () => void) {
     const overlay = $('overlay');
@@ -97,9 +107,35 @@ export class UI {
       b.className = 'slot';
       b.innerHTML = '<div class="badge hidden"></div><div class="bar"><i></i></div>';
       b.onclick = () => { if (Date.now() - this.swipedAt > 350) this.tapSlot(i); };
+      // Appui long : on soulève le pot pour le glisser ailleurs.
+      b.addEventListener('pointerdown', (e) => {
+        clearTimeout(this.holdTimer);
+        if (!this.s.slots[i].pot || this.moving >= 0) return;
+        const x0 = e.clientX, y0 = e.clientY;
+        this.holdAt = { x: x0, y: y0 };
+        this.holdTimer = window.setTimeout(() => {
+          this.drag = i;
+          this.dragTarget = -1;
+          this.scene.lift(i);
+          this.buzz(25);
+          const g = $('ghost');
+          g.hidden = false;
+          this.moveGhost(x0, y0);
+          this.refresh(true);
+        }, 380);
+      });
       overlay.appendChild(b);
       this.slotEls.push(b);
     });
+    this.showEl = document.createElement('button');
+    this.showEl.className = 'showb';
+    this.showEl.onclick = () => { if (Date.now() - this.swipedAt > 350) this.open('vitrine'); };
+    overlay.appendChild(this.showEl);
+    const ghost = document.createElement('div');
+    ghost.id = 'ghost';
+    ghost.hidden = true;
+    ghost.textContent = '🪴';
+    $('fx').appendChild(ghost);
     const app = $('app');
     let sx = 0, sy = 0, st = 0, onScene = false;
     app.addEventListener('pointerdown', (e) => {
@@ -107,8 +143,35 @@ export class UI {
       sx = e.clientX; sy = e.clientY; st = Date.now();
       onScene = !(e.target as HTMLElement).closest('#sheet, #modal, #bottom, #hud, #backdrop');
     });
+    app.addEventListener('pointermove', (e) => {
+      if (this.drag < 0) {
+        if (this.holdAt && Math.hypot(e.clientX - this.holdAt.x, e.clientY - this.holdAt.y) > 12) clearTimeout(this.holdTimer);
+        return;
+      }
+      this.moveGhost(e.clientX, e.clientY);
+      // Près du bord haut ou bas, on change de zone sans lâcher le pot.
+      const rect = app.getBoundingClientRect();
+      const y = e.clientY - rect.top;
+      if (this.scene.currentZone >= 0 && Date.now() - this.edgeAt > 800 && (y < 170 || y > rect.height - 200)) {
+        this.edgeAt = Date.now();
+        this.goZone(Math.max(0, Math.min(ZONES.length - 1, this.scene.currentZone + (y < 170 ? -1 : 1))));
+      }
+    });
     app.addEventListener('pointerup', (e) => {
       this.pointerDown = false;
+      clearTimeout(this.holdTimer);
+      this.holdAt = null;
+      if (this.drag >= 0) {
+        const from = this.drag, to = this.dragTarget;
+        this.endDrag();
+        this.swipedAt = Date.now();
+        if (to >= 0 && to !== from && sim.movePot(this.s, from, to)) {
+          this.scene.pop(to);
+          this.buzz(15);
+        }
+        this.refresh(true);
+        return;
+      }
       const dx = e.clientX - sx, dy = e.clientY - sy;
       if (!onScene || Date.now() - st > 900 || Math.max(Math.abs(dx), Math.abs(dy)) < 45) return;
       // Balayer vers la gauche ou vers le haut avance d'une zone ; l'inverse recule.
@@ -116,12 +179,35 @@ export class UI {
       this.swipedAt = Date.now();
       this.goZone(Math.max(-1, Math.min(ZONES.length - 1, this.scene.currentZone + dir)));
     });
-    for (const ev of ['pointercancel', 'pointerleave']) app.addEventListener(ev, () => { this.pointerDown = false; });
+    for (const ev of ['pointercancel', 'pointerleave']) app.addEventListener(ev, () => { this.pointerDown = false; clearTimeout(this.holdTimer); if (this.drag >= 0) { this.endDrag(); this.refresh(true); } });
     app.addEventListener('click', (e) => {
       const t = (e.target as HTMLElement).closest('[data-act]') as HTMLElement | null;
       if (t && !t.hasAttribute('disabled')) this.act(t.dataset.act!, t.dataset.arg ?? '');
     });
     $('backdrop').onclick = () => this.close();
+  }
+
+  private endDrag(): void {
+    this.drag = -1;
+    this.dragTarget = -1;
+    this.scene.lift(-1);
+    $('ghost').hidden = true;
+  }
+
+  private moveGhost(cx: number, cy: number): void {
+    const rect = $('app').getBoundingClientRect();
+    const x = cx - rect.left, y = cy - rect.top;
+    const g = $('ghost');
+    g.style.left = x + 'px';
+    g.style.top = y - 46 + 'px';
+    let best = -1, bestD = Infinity;
+    this.s.slots.forEach((_, i) => {
+      if (!this.s.zonesOpen[sim.zoneIndexOfSlot(i)]) return;
+      const r = this.scene.slotRect(i);
+      const d = Math.hypot(r.x - x, r.bottom - r.unit * 0.45 - y);
+      if (d < bestD && d < r.unit * 0.95) { bestD = d; best = i; }
+    });
+    if (best !== this.dragTarget) { this.dragTarget = best; this.refresh(true); }
   }
 
   private goZone(z: number): void {
@@ -181,6 +267,28 @@ export class UI {
       case 'close': this.close(); break;
       case 'nav': this.open(arg as SheetKind); break;
       case 'view': this.goZone(n); break;
+      case 'show':
+        if (sim.harvestShow(s, this.arg)) { this.float(this.arg, '🏛️'); this.buzz(20); this.close(); }
+        else this.toast('La vitrine est pleine.');
+        break;
+      case 'unshow': {
+        const gain = sim.sellShowcase(s, n);
+        if (gain) { this.toast(`Vendu ! +${fmt(gain)} 🪙`); this.bumpCoins(); }
+        break;
+      }
+      case 'tips': {
+        const got = sim.collectTips(s);
+        if (got) { this.toast(`Les visiteurs ont laissé ${fmt(got)} 🪙`); this.bumpCoins(); this.buzz(20); }
+        break;
+      }
+      case 'compost':
+        if (sim.compost(s, arg)) { this.toast('Compostée : +1 dose d\'engrais 🧪'); this.buzz(10); }
+        break;
+      case 'fert':
+        if (sim.fertilize(s, this.arg)) { this.scene.pop(this.arg); this.float(this.arg, '🧪'); this.buzz(15); }
+        break;
+      case 'gear': sim.toggleGear(s, arg as sim.ClimateGear); break;
+      case 'flip': this.flipNext(); break;
       case 'move':
         this.moving = this.arg;
         this.close();
@@ -215,8 +323,9 @@ export class UI {
         break;
       }
       case 'free': {
+        const chained = $('modal').classList.contains('on');
         const got = sim.openFreePacket(s);
-        if (got) this.showPacket(got);
+        if (got) this.showPacket(got, chained);
         break;
       }
       case 'buypacket': {
@@ -299,33 +408,60 @@ export class UI {
     this.buzz(25);
   }
 
-  private showPacket(got: { id: string; isNew: boolean }[]): void {
+  private pack: { id: string; isNew: boolean }[] = [];
+  private flipped = 0;
+
+  /** Ouverture façon paquet de cartes : on déchire, puis on retourne les graines une à une. */
+  private showPacket(got: { id: string; isNew: boolean }[], chained = false): void {
     this.close();
+    this.pack = got;
+    this.flipped = 0;
     const m = $('modal');
-    m.innerHTML = `<div class="mtitle">Ton sachet de graines</div><button class="packet" id="pk"><span>🌱</span>Touche pour ouvrir</button>`;
+    m.innerHTML = `<div class="mtitle">Ton sachet de graines</div><button class="packet" id="pk"><span>🌱</span>${chained ? '' : 'Touche pour ouvrir'}</button>`;
     m.classList.add('on');
-    $('pk').onclick = () => {
+    const tear = () => {
+      if ($('pk').classList.contains('open')) return;
       $('pk').classList.add('open');
       this.buzz(40);
-      setTimeout(() => {
-        const best = got.some((g) => SPECIES_BY_ID[g.id].rarity !== 'commun');
-        m.innerHTML = `<div class="mtitle">${best ? 'Belle trouvaille !' : 'Voilà tes graines'}</div><div class="reveal">${got.map((g, k) => {
-          const sp = SPECIES_BY_ID[g.id];
-          const col = RARITIES[sp.rarity].color;
-          return `<div class="rc" style="border-color:${col};animation-delay:${k * 0.35}s">${g.isNew ? '<span class="new">NOUVEAU</span>' : ''}<span class="e">${EMOJI[sp.id]}</span>${esc(sp.name)}${rarTag(sp)}</div>`;
-        }).join('')}</div><button class="btn primary" data-act="closemodal">Au jardin !</button>`;
-      }, 520);
+      setTimeout(() => this.renderPack(), 480);
     };
+    $('pk').onclick = tear;
+    if (chained) setTimeout(tear, 350);
   }
 
-  private showBloom(id: string): void {
+  private renderPack(): void {
+    const s = this.s;
+    const done = this.flipped >= this.pack.length;
+    const cards = this.pack.map((g, k) => {
+      const sp = SPECIES_BY_ID[g.id];
+      const col = RARITIES[sp.rarity].color;
+      if (k >= this.flipped) return `<button class="rc back${k === this.flipped ? ' next' : ''}" data-act="flip"><span class="e">🌱</span>?</button>`;
+      return `<div class="rc${k === this.flipped - 1 ? ' pop' : ''}${sp.rarity !== 'commun' ? ' glow' : ''}" style="border-color:${col};--glow:${col}">${g.isNew ? '<span class="new">NOUVEAU</span>' : ''}<span class="e">${EMOJI[sp.id]}</span>${esc(sp.name)}${rarTag(sp)}</div>`;
+    }).join('');
+    const best = this.pack.slice(0, this.flipped).some((g) => SPECIES_BY_ID[g.id].rarity !== 'commun');
+    $('modal').innerHTML = `<div class="mtitle">${done ? (best ? 'Belle trouvaille !' : 'Voilà tes graines') : 'Retourne tes graines'}</div><div class="reveal" data-act="flip">${cards}</div>${done
+      ? `<div class="mrowb">${s.packets > 0 ? `<button class="btn gold" data-act="free">🎁 Sachet suivant (${s.packets})</button>` : ''}<button class="btn primary" data-act="closemodal">Au jardin !</button></div>`
+      : '<p class="sub">Touche une graine pour la retourner.</p>'}`;
+  }
+
+  private flipNext(): void {
+    if (this.flipped >= this.pack.length) return;
+    const sp = SPECIES_BY_ID[this.pack[this.flipped].id];
+    this.flipped++;
+    this.buzz(sp.rarity === 'commun' ? 12 : 60);
+    this.renderPack();
+  }
+
+  private showBloom(key: string): void {
+    const [id, v] = key.split(':');
+    const vr = Number(v) || 0;
     const sp = SPECIES_BY_ID[id];
     const d = this.s.disc[id];
     const n = sim.starsOf(d);
     const m = $('modal');
-    m.innerHTML = `<div class="mtitle">${n === 1 ? 'Nouvelle espèce dans l\'almanach !' : n === 3 ? 'Spécimen d\'exposition !' : 'Encore plus belle !'}</div>
-      <div class="rc solo" style="border-color:${RARITIES[sp.rarity].color}"><span class="e">${EMOJI[id]}</span>${esc(sp.name)}<i>${esc(sp.latin)}</i><span class="st">${stars(n)}</span></div>
-      <div class="fact">${esc(sp.fact)}</div>
+    m.innerHTML = `<div class="mtitle">${vr ? `Variante ${sim.VARIANTS[vr]} !` : n === 1 ? 'Nouvelle espèce dans l\'almanach !' : n === 3 ? 'Spécimen d\'exposition !' : 'Encore plus belle !'}</div>
+      <div class="rc solo" style="border-color:${RARITIES[sp.rarity].color}"><span class="e">${EMOJI[id]}</span>${esc(vname(sp, vr))}<i>${esc(sp.latin)}</i><span class="st">${stars(n)}</span></div>
+      <div class="fact">${vr ? (vr === 2 ? 'Une variante dorée, rarissime : elle vaut six fois plus et fera venir les visiteurs en vitrine.' : 'Une variante panachée : son feuillage marbré de crème vaut deux fois et demie le prix normal.') : esc(sp.fact)}</div>
       <button class="btn primary" data-act="closemodal">Continuer</button>`;
     m.classList.add('on');
     this.buzz(40);
@@ -343,6 +479,9 @@ export class UI {
       el.style.width = r.unit * 1.25 + 'px';
       el.style.height = r.bottom - r.top + 'px';
     });
+    const sr = this.scene.showRect(1), sr2 = this.scene.showRect(2);
+    this.showEl.style.left = (sr.x + sr2.x) / 2 + 'px';
+    this.showEl.style.top = sr.y + 'px';
     this.lockEls.forEach((el, r) => {
       const c = this.scene.zoneCenter(r);
       el.style.left = c.x + 'px';
@@ -367,7 +506,12 @@ export class UI {
       const open = s.zonesOpen[sim.zoneIndexOfSlot(i)];
       el.hidden = !open;
       let cls = 'badge', txt = '';
-      if (this.moving >= 0) {
+      if (this.drag >= 0) {
+        if (i === this.drag) cls += ' hidden';
+        else if (i === this.dragTarget) { cls += ' ready'; txt = slot.pot ? '⇄' : '⬇'; }
+        else if (!slot.pot) { cls += ' ghost'; txt = '+'; }
+        else cls += ' hidden';
+      } else if (this.moving >= 0) {
         if (i === this.moving) { cls += ' alert'; txt = '✋'; }
         else if (!slot.pot) { cls += ' plus'; txt = '⬇'; }
         else { cls += ' swap'; txt = '⇄'; }
@@ -393,6 +537,12 @@ export class UI {
       if (el.textContent !== txt) el.textContent = txt;
       el.classList.toggle('can', s.coins >= sim.ZONE_PRICES[r]);
     });
+
+    const tips = Math.floor(s.tips);
+    const shown = s.showcase.filter(Boolean).length;
+    const st = `🏛️ Vitrine ${shown}/${sim.SHOWCASE_SIZE}${tips > 0 ? ` · +${fmt(tips)} 🪙` : ''}`;
+    if (this.showEl.textContent !== st) this.showEl.textContent = st;
+    this.showEl.classList.toggle('can', tips >= 5);
 
     // Haut d'écran
     const col = sim.collection(s);
@@ -465,6 +615,7 @@ export class UI {
       case 'almanac': return this.almanacHtml();
       case 'fiche': return this.ficheHtml(SPECIES_BY_ID[this.argId]);
       case 'zone': return this.zoneHtml();
+      case 'vitrine': return this.vitrineHtml();
       default: return '';
     }
     void s;
@@ -474,6 +625,24 @@ export class UI {
     const z = sim.zoneOfSlot(i);
     const c = sim.zoneClimate(this.s, z);
     return `<p class="sub">${z.icon} <b>${z.name}</b> : ${LEVEL_WORDS.light[c.light].toLowerCase()}, ${LEVEL_WORDS.temp[c.temp].toLowerCase()}, ${LEVEL_WORDS.hum[c.hum].toLowerCase()}.</p>`;
+  }
+
+  private vitrineHtml(): string {
+    const s = this.s;
+    const tips = Math.floor(s.tips);
+    const perMin = sim.showcaseRate(s) * 60;
+    const rows = s.showcase.map((h, k) => {
+      if (!h) return '<div class="card"><div class="ico">▫️</div><div class="mid"><div class="nm">Socle libre</div><div class="ds">Expose une plante en fleur au lieu de la vendre.</div></div></div>';
+      const sp = SPECIES_BY_ID[h.sp];
+      const rate = sp.value * sim.qualityMult(h.q) * sim.VARIANT_MULT[h.vr] * sim.TIP_RATE * 60;
+      return `<div class="card"><div class="ico">${EMOJI[sp.id]}</div><div class="mid"><div class="nm">${esc(vname(sp, h.vr))}</div><div class="ds">${sim.qualityWord(h.q)} · ${rate.toFixed(1).replace('.', ',')} 🪙 par minute</div></div><button class="btn small" data-act="unshow" data-arg="${k}">Vendre ${fmt(sim.saleValue(s, h))} 🪙</button></div>`;
+    }).join('');
+    return this.head('🏛️ Vitrine') + `<div class="sh-body">
+      <p class="sub">Tes plus beaux spécimens exposés sur l'étagère attirent des visiteurs, qui laissent des pourboires même en ton absence. Les plantes rares, les variantes et les belles qualités rapportent le plus.</p>
+      <div class="kv"><span>Visiteurs accueillis</span><b>${fmt(s.visitors)}</b></div>
+      <div class="kv"><span>Pourboires</span><b>${perMin.toFixed(1).replace('.', ',')} 🪙 par minute</b></div>
+      <button class="btn gold wide" data-act="tips" ${tips > 0 ? '' : 'disabled'}>Ramasser les pourboires · ${fmt(tips)} 🪙</button>
+      ${rows}</div>`;
   }
 
   private zoneHtml(): string {
@@ -523,13 +692,15 @@ export class UI {
     const fit = sim.fitOf(sp, c);
     const left = ((1 - p.prog) * sp.grow) / (fit * (p.water > 0 ? 1 : 0.25) * (p.pests > 0 ? 0.5 : 1));
     const eta = left < 60 ? `${Math.ceil(left)} s` : `${Math.ceil(left / 60)} min`;
-    return this.head(`${EMOJI[sp.id]} ${esc(sp.name)}`) + `<div class="sh-body">
+    const vr = sim.stageOf(p.prog) >= 2 ? p.vr : 0;
+    return this.head(`${EMOJI[sp.id]} ${esc(vname(sp, vr))}`) + `<div class="sh-body">
       <div class="kv"><span>${STAGES[sim.stageOf(p.prog)]}</span><b>${p.prog >= 1 ? 'Prête' : 'encore ' + eta}</b></div>
       <div class="prog"><i style="width:${Math.round(p.prog * 100)}%"></i></div>
       <div class="kv"><span>Qualité</span><b>${sim.qualityWord(p.q)}</b></div>
       <div class="kv"><span>Arrosage</span><b>${s.upgrades.water ? 'Automatique' : p.water > 0 ? Math.round(p.water * 100) + ' %' : 'À sec : elle tourne au ralenti'}</b></div>
       ${this.zoneLine(this.arg)}${conditions(sp, c)}
-      <div class="row">${s.upgrades.water ? '' : `<button class="btn primary" data-act="water" ${p.water > 0.95 ? 'disabled' : ''}>💧 Arroser</button>`}<button class="btn" data-act="move">✋ Déplacer</button><button class="btn" data-act="fiche" data-arg="${sp.id}">📖 Fiche</button></div></div>`;
+      <div class="row">${s.upgrades.water ? '' : `<button class="btn primary" data-act="water" ${p.water > 0.95 ? 'disabled' : ''}>💧 Arroser</button>`}<button class="btn" data-act="fert" ${s.fert > 0 && p.prog < 1 ? '' : 'disabled'}>🧪 Engrais (${s.fert})</button></div>
+      <div class="row"><button class="btn small" data-act="move">✋ Déplacer</button><button class="btn small" data-act="fiche" data-arg="${sp.id}">📖 Fiche</button></div></div>`;
   }
 
   private marketHint(p: number): string {
@@ -548,12 +719,14 @@ export class UI {
     const d = s.disc[sp.id];
     const n = sim.starsOf(d);
     const next = n >= 3 ? 'Fiche complète : tu as obtenu un spécimen d\'exposition.' : 'Pour une étoile de plus, fais-la pousser dans un coin qui lui convient parfaitement, bien arrosée et sans pucerons.';
-    return this.head(`${EMOJI[sp.id]} ${esc(sp.name)} en fleur`) + `<div class="sh-body">
+    const freeShow = s.showcase.some((h) => !h);
+    return this.head(`${EMOJI[sp.id]} ${esc(vname(sp, p.vr))} en fleur`) + `<div class="sh-body">
       <div class="big">${stars(n)}</div>
       <div class="kv"><span>Ce spécimen</span><b>${sim.qualityWord(p.q)}</b></div>
       <p class="sub">${next}</p>
       <button class="btn primary wide" data-act="sell">Récolter et vendre · ${fmt(sim.saleValue(s, p))} 🪙</button>
       <p class="sub center">Cours ${FAMILIES[sp.family].name.toLowerCase()} : <b class="${level(m.p)}">${mult(m.p)}</b>. ${this.marketHint(m.p)}</p>
+      <button class="btn gold wide" data-act="show" ${freeShow ? '' : 'disabled'}>🏛️ Exposer en vitrine${freeShow ? '' : ' (pleine)'}</button>
       <div class="row"><button class="btn small" data-act="store" ${full ? 'disabled' : ''}>📦 Réserve (${s.stock.length}/${s.stockCap})</button><button class="btn small" data-act="move">✋ Déplacer</button><button class="btn small" data-act="fiche" data-arg="${sp.id}">📖 Fiche</button></div></div>`;
   }
 
@@ -563,13 +736,13 @@ export class UI {
     const timer = `${Math.floor(wait / 60)} min ${String(wait % 60).padStart(2, '0')}`;
     const seeds = Object.keys(s.seeds).map((id) => {
       const sp = SPECIES_BY_ID[id];
-      return `<button class="card" data-act="fiche" data-arg="${id}"><div class="ico">${EMOJI[id]}</div><div class="mid"><div class="nm">${esc(sp.name)} ${rarTag(sp)}</div>${needsChips(sp)}</div><div class="end">×${s.seeds[id]}</div></button>`;
+      return `<div class="card"><button class="ico" data-act="fiche" data-arg="${id}">${EMOJI[id]}</button><div class="mid"><div class="nm">${esc(sp.name)} ×${s.seeds[id]}</div><div class="ds">${rarTag(sp)}</div></div><button class="btn small" data-act="compost" data-arg="${id}">🧪 Composter</button></div>`;
     }).join('');
     return this.head('🎁 Sachets de graines') + `<div class="sh-body">
       <p class="sub">Un sachet gratuit toutes les ${Math.round(sim.PACKET_EVERY / 60)} minutes, même en ton absence. Ils se cumulent jusqu'à ${sim.MAX_PACKETS}.</p>
       <button class="btn gold wide" data-act="free" ${s.packets > 0 ? '' : 'disabled'}>${s.packets > 0 ? `Ouvrir un sachet gratuit (${s.packets})` : `Prochain sachet dans ${timer}`}</button>
       <button class="btn wide" data-act="buypacket" ${s.coins >= sim.PRICES.packet ? '' : 'disabled'}>Sachet mystère · ${sim.PRICES.packet} 🪙</button>
-      <h3>Mes graines</h3>${seeds || '<p class="sub">Aucune graine en attente. Touche un pot vide dans la serre pour semer.</p>'}</div>`;
+      <h3>Mes graines</h3><p class="sub">Une graine en trop ? Composte-la : elle devient une dose d'engrais (tu en as ${s.fert}), qui fait gagner un quart de la croissance.</p>${seeds || '<p class="sub">Aucune graine en attente. Touche un pot vide dans la serre pour semer.</p>'}</div>`;
   }
 
   private marketHtml(): string {
@@ -581,7 +754,7 @@ export class UI {
     }).join('');
     const stock = s.stock.map((h, k) => {
       const sp = SPECIES_BY_ID[h.sp];
-      return `<div class="card"><div class="ico">${EMOJI[sp.id]}</div><div class="mid"><div class="nm">${esc(sp.name)}</div><div class="ds">${sim.qualityWord(h.q)} · cours ${mult(s.market[sp.family].p)}</div></div><button class="btn primary small" data-act="sellstock" data-arg="${k}">Vendre ${fmt(sim.saleValue(s, h))} 🪙</button></div>`;
+      return `<div class="card"><div class="ico">${EMOJI[sp.id]}</div><div class="mid"><div class="nm">${esc(vname(sp, h.vr))}</div><div class="ds">${sim.qualityWord(h.q)} · cours ${mult(s.market[sp.family].p)}</div></div><button class="btn primary small" data-act="sellstock" data-arg="${k}">Vendre ${fmt(sim.saleValue(s, h))} 🪙</button></div>`;
     }).join('');
     const news = s.news.slice(0, 6).map((n) => `<div class="news"><b class="${n.dir > 0 ? 'up' : 'down'}">${FAMILIES[n.family].icon} ${n.dir > 0 ? '▲' : '▼'}</b> ${esc(n.text)}</div>`).join('');
     return this.head('📈 Marché') + `<div class="sh-body">
@@ -596,12 +769,19 @@ export class UI {
       `<div class="card"><div class="ico">${ico}</div><div class="mid"><div class="nm">${nm}</div><div class="ds">${ds}</div></div>${owned
         ? '<span class="chip ok">Installé</span>'
         : `<button class="btn ${s.coins >= price ? 'primary' : ''} small" data-act="${act}" data-arg="${arg}" ${s.coins >= price ? '' : 'disabled'}>${fmt(price)} 🪙</button>`}</div>`;
+    const gear = (ico: string, nm: string, ds: string, k: sim.ClimateGear) => !s.upgrades[k] ? item(ico, nm, ds, sim.PRICES[k], 'upgrade', k)
+      : `<div class="card"><div class="ico">${ico}</div><div class="mid"><div class="nm">${nm}</div><div class="ds">${ds}</div></div><button class="btn small ${s.off[k] ? '' : 'primary'}" data-act="gear" data-arg="${k}">${s.off[k] ? 'Éteint' : 'Allumé'}</button></div>`;
     return this.head('🛒 Boutique') + `<div class="sh-body">
       <p class="sub">Tout s'achète avec les pièces gagnées en vendant tes plantes.</p>
       <h3>Équipement</h3>
       ${item('🚿', 'Arrosage automatique', 'Plus jamais de pot à sec, même en ton absence.', sim.PRICES.water, 'upgrade', 'water', s.upgrades.water)}
       ${item('🐞', 'Lâcher de coccinelles', 'Elles mangent les pucerons à ta place.', sim.PRICES.bugs, 'upgrade', 'bugs', s.upgrades.bugs)}
-      ${item('🌫️', 'Brumisateur', 'L\'ombre de l\'étagère devient humide : idéal pour les fougères.', sim.PRICES.mist, 'upgrade', 'mist', s.upgrades.mist)}
+      <h3>Climat</h3>
+      <p class="sub">Ces appareils changent le climat d'une zone. Tu peux les éteindre et les rallumer à volonté.</p>
+      ${gear('🌫️', 'Brumisateur', 'Sous l\'étagère : l\'air devient humide. Pour les fougères.', 'mist')}
+      ${gear('💡', 'Lampe horticole', 'Près de la porte : plein soleil. Pour les tulipes.', 'lamp')}
+      ${gear('♨️', 'Radiateur', 'Près de la porte : tempéré au lieu de frais.', 'heat')}
+      ${gear('🌀', 'Ventilateur', 'Table plein sud : tempéré au lieu de chaud. Pour lavande, thym et romarin.', 'fan')}
       ${s.stockCap < 10 ? item('📦', 'Réserve agrandie', `Deux places de plus (${s.stockCap} aujourd'hui).`, sim.PRICES.stock, 'upgrade', 'stock') : ''}
       <h3>Graines</h3>
       ${item('🎁', 'Sachet mystère', 'Trois graines de toutes familles.', sim.PRICES.packet, 'buypacket', '')}
@@ -615,12 +795,13 @@ export class UI {
     const cells = SPECIES.map((sp) => {
       const d = s.disc[sp.id];
       if (!d?.seen) return '<div class="sp locked"><span class="e">❔</span>???</div>';
-      return `<button class="sp" data-act="fiche" data-arg="${sp.id}" style="border-color:${RARITIES[sp.rarity].color}55"><span class="e">${EMOJI[sp.id]}</span>${esc(sp.name)}${d.bloomed ? `<span class="st">${stars(sim.starsOf(d))}</span>` : '<span class="chip">à faire fleurir</span>'}</button>`;
+      return `<button class="sp" data-act="fiche" data-arg="${sp.id}" style="border-color:${RARITIES[sp.rarity].color}55"><span class="e">${EMOJI[sp.id]}</span>${esc(sp.name)}${d.bloomed ? `<span class="st">${stars(sim.starsOf(d))}${d.vars[1] ? '🤍' : ''}${d.vars[2] ? '💛' : ''}</span>` : '<span class="chip">à faire fleurir</span>'}</button>`;
     }).join('');
     return this.head('📖 Almanach') + `<div class="sh-body">
       <div class="big">${col.bloomed} / ${SPECIES.length}</div>
-      <p class="sub center">espèces fleuries · ⭐ ${col.stars} sur ${SPECIES.length * 3}</p>
-      <p class="sub">Chaque floraison ajoute l'espèce à ta collection. Les plus beaux spécimens gagnent jusqu'à trois étoiles.</p>
+      <p class="sub center">espèces fleuries · ⭐ ${col.stars} sur ${SPECIES.length * 3} · ✨ ${col.variants} variantes sur ${SPECIES.length * 2}</p>
+      <p class="sub">Chaque floraison ajoute l'espèce à ta collection. Les plus beaux spécimens gagnent jusqu'à trois étoiles, et il arrive qu'une graine donne une variante panachée 🤍 ou dorée 💛.</p>
+      <button class="btn wide" data-act="nav" data-arg="vitrine">🏛️ Voir la vitrine</button>
       <div class="grid">${cells}</div>
       <div class="kv"><span>Plantes vendues</span><b>${fmt(s.stats.sold)}</b></div>
       <div class="kv"><span>Pièces gagnées</span><b>${fmt(s.stats.earned)} 🪙</b></div>
@@ -636,6 +817,11 @@ export class UI {
       <div>${rarTag(sp)} <span class="st">${stars(sim.starsOf(d))}</span></div>
       <h3>Ce qu'elle aime</h3>${needsChips(sp)}
       <p class="sub">Idéal : ${ZONES.filter((z) => sim.fitOf(sp, sim.zoneClimate(this.s, z)) >= 1).map((z) => z.name).join(', ') || 'aucun coin parfait pour l\'instant, cherche le moins mauvais ou équipe la serre'}.</p>
+      <div class="kv"><span>Taille adulte</span><b>${esc(sp.height)}</b></div>
+      ${sp.pets ? `<div class="kv"><span>Chats et chiens</span><b>${sp.pets === 'ok' ? 'Sans danger' : 'Toxique si mâchouillée'}</b></div>` : ''}
+      <h3>Dans ta collection</h3>
+      <div class="kv"><span>Variantes obtenues</span><b>${d?.bloomed ? 'Normale' : 'Aucune'}${d?.vars[1] ? ' · Panachée 🤍' : ''}${d?.vars[2] ? ' · Dorée 💛' : ''}</b></div>
+      <div class="kv"><span>Spécimens vendus</span><b>${fmt(d?.sold ?? 0)}</b></div>
       <h3>Dans le jeu</h3>
       <div class="kv"><span>Valeur de base</span><b>${fmt(sp.value)} 🪙</b></div>
       <div class="kv"><span>Croissance idéale</span><b>${String(mins).replace('.', ',')} min</b></div>

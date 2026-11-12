@@ -271,10 +271,283 @@ function buildParadise(sp: Species, f: number, buds: boolean, bloom: boolean, le
   }
 }
 
+function buildCactus(sp: Species, f: number, buds: boolean, bloom: boolean, leaf: number, g: THREE.Group, rnd: () => number): void {
+  const tops: THREE.Vector3[] = [];
+  if (sp.id === 'opuntia') {
+    const pad = (x: number, y: number, rot: number, sc: number) => {
+      const m = mesh(GEO.blob, leaf, 0.17 * sc, 0.22 * sc, 0.045 * sc);
+      m.position.set(x, y, 0);
+      m.rotation.z = rot;
+      m.rotation.y = rnd() * 0.8 - 0.4;
+      g.add(m);
+      tops.push(new THREE.Vector3(x - Math.sin(rot) * 0.2 * sc, y + Math.cos(rot) * 0.2 * sc, 0));
+    };
+    pad(0, 0.2 * f, 0, f);
+    pad(-0.13 * f, 0.5 * f, 0.5, f * 0.8);
+    if (f > 0.7) pad(0.14 * f, 0.5 * f, -0.55, f * 0.75);
+    if (f > 0.9) pad(-0.26 * f, 0.76 * f, 0.8, f * 0.55);
+  } else {
+    const r = 0.27 * f;
+    const ball = mesh(GEO.blob, leaf, r, r * 0.92, r);
+    ball.position.y = r * 0.8;
+    g.add(ball);
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2;
+      const rib = mesh(GEO.blob, 0xf0e6a0, 0.02, r * 0.85, 0.02);
+      rib.position.set(Math.cos(a) * r * 0.93, r * 0.8, Math.sin(a) * r * 0.93);
+      rib.rotation.z = -Math.cos(a) * 0.5;
+      rib.rotation.x = Math.sin(a) * 0.5;
+      g.add(rib);
+    }
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2;
+      tops.push(new THREE.Vector3(Math.cos(a) * r * 0.35, r * 1.68, Math.sin(a) * r * 0.35));
+    }
+  }
+  if (buds || bloom) tops.forEach((t, i) => {
+    if (bloom) {
+      const fl = flower(sp.flower, 0xfff2a8, 0.1);
+      fl.position.copy(t);
+      g.add(fl);
+    } else if (i % 2 === 0) {
+      const b = mesh(GEO.blob, sp.flower, 0.03, 0.045, 0.03);
+      b.position.copy(t);
+      g.add(b);
+    }
+  });
+}
+
+function buildGrass(sp: Species, f: number, buds: boolean, bloom: boolean, leaf: number, g: THREE.Group, rnd: () => number): void {
+  const wide = sp.id === 'chlorophytum';
+  const n = Math.round(9 + f * 9);
+  for (let i = 0; i < n; i++) {
+    const len = (0.35 + rnd() * 0.3) * f + 0.08;
+    const blade = new THREE.Group();
+    blade.rotation.order = 'YXZ';
+    blade.rotation.y = (i / n) * Math.PI * 2 + rnd() * 0.5;
+    blade.rotation.z = -(0.15 + rnd() * (wide ? 1.0 : 0.6));
+    blade.add(mesh(GEO.cone, i % 3 === 0 && wide ? tint(0xe9f2c0, 1) : leaf, wide ? 0.035 : 0.018, len, 0.012));
+    if (sp.id === 'drosera') {
+      const dew = mesh(GEO.blob, 0xd0405a, 0.022, 0.05, 0.022);
+      dew.position.y = len * 0.85;
+      blade.add(dew);
+    }
+    g.add(blade);
+  }
+  if (buds || bloom) {
+    const k = bloom ? 4 : 2;
+    for (let i = 0; i < k; i++) {
+      const st = new THREE.Group();
+      st.rotation.order = 'YXZ';
+      st.rotation.y = i * 1.7;
+      st.rotation.z = -(wide ? 0.9 : 0.15 + i * 0.08);
+      const h = (wide ? 0.6 : 0.55) * f;
+      st.add(stalk(wide ? 0xd9d08a : 0x6f9f5a, h, 0.01));
+      const head = bloom && sp.id !== 'ciboulette' ? flower(sp.flower, 0xf6d04a, 0.07) : mesh(GEO.blob, sp.flower, bloom ? 0.065 : 0.03, bloom ? 0.065 : 0.04, bloom ? 0.065 : 0.03);
+      head.position.y = h;
+      st.add(head);
+      g.add(st);
+    }
+  }
+}
+
+function buildBigLeaf(sp: Species, f: number, buds: boolean, bloom: boolean, leaf: number, g: THREE.Group, rnd: () => number): void {
+  const n = Math.round(3 + f * 3);
+  const round = sp.id === 'calathea';
+  for (let i = 0; i < n; i++) {
+    const p = new THREE.Group();
+    p.rotation.order = 'YXZ';
+    p.rotation.y = (i / n) * Math.PI * 2 + rnd() * 0.6;
+    p.rotation.z = -(0.25 + rnd() * 0.45);
+    const h = (0.3 + rnd() * 0.35) * f + 0.08;
+    p.add(stalk(0x4f8f55, h, 0.016));
+    const w = (round ? 0.19 : 0.17) * f + 0.03;
+    const blade = mesh(GEO.blob, leaf, w, 0.018, w * (round ? 0.95 : 1.15));
+    blade.position.set(-0.05, h + 0.02, 0);
+    blade.rotation.z = 1.0;
+    p.add(blade);
+    if (round) {
+      const stripe = mesh(GEO.blob, tint(0xcfe8c0, 1), w * 0.55, 0.02, w * 0.3);
+      stripe.position.copy(blade.position).setY(h + 0.03);
+      stripe.rotation.z = 1.0;
+      p.add(stripe);
+    } else if (sp.id === 'monstera' && f > 0.7) {
+      for (const sgn of [-1, 1]) {
+        const hole = mesh(GEO.rough, 0x1f5f3a, w * 0.16, 0.022, w * 0.3);
+        hole.position.copy(blade.position).setZ(sgn * w * 0.55);
+        hole.rotation.z = 1.0;
+        p.add(hole);
+      }
+    }
+    g.add(p);
+  }
+  if (buds || bloom) {
+    const k = bloom ? (sp.id === 'anthurium' ? 3 : 1) : 1;
+    for (let i = 0; i < k; i++) {
+      const st = new THREE.Group();
+      st.rotation.order = 'YXZ';
+      st.rotation.y = 0.8 + i * 2.1;
+      st.rotation.z = -0.2;
+      const h = (bloom ? 0.62 : 0.4) * f;
+      st.add(stalk(0x6f8f4f, h, 0.014));
+      const spathe = mesh(GEO.blob, sp.flower, bloom ? 0.1 : 0.04, bloom ? 0.13 : 0.06, 0.018);
+      spathe.position.y = h + 0.05;
+      st.add(spathe);
+      if (bloom) {
+        const spadix = mesh(GEO.cyl, 0xf6d04a, 0.016, 0.12, 0.016);
+        spadix.position.set(0, h + 0.02, 0.03);
+        spadix.rotation.x = 0.4;
+        st.add(spadix);
+      }
+      g.add(st);
+    }
+  }
+}
+
+function buildCoin(sp: Species, f: number, buds: boolean, bloom: boolean, leaf: number, g: THREE.Group, rnd: () => number): void {
+  g.add(stalk(0x7a6a4a, 0.3 * f, 0.022));
+  const n = Math.round(6 + f * 8);
+  for (let i = 0; i < n; i++) {
+    const p = new THREE.Group();
+    p.rotation.order = 'YXZ';
+    p.rotation.y = i * 2.4;
+    p.rotation.z = -(0.5 + rnd() * 0.7);
+    p.position.y = (0.08 + (i / n) * 0.22) * f;
+    const h = (0.2 + rnd() * 0.16) * f + 0.04;
+    p.add(stalk(0x8fb46a, h, 0.008));
+    const disc = mesh(GEO.cyl, leaf, 0.085 * f + 0.02, 0.012, 0.085 * f + 0.02);
+    disc.position.y = h;
+    disc.rotation.z = 0.9;
+    p.add(disc);
+    g.add(p);
+  }
+  if (buds || bloom) {
+    const b = mesh(GEO.blob, sp.flower, bloom ? 0.05 : 0.025, bloom ? 0.05 : 0.03, bloom ? 0.05 : 0.025);
+    b.position.y = 0.34 * f;
+    g.add(b);
+  }
+}
+
+function buildTrap(sp: Species, f: number, buds: boolean, bloom: boolean, leaf: number, g: THREE.Group, rnd: () => number): void {
+  const n = Math.round(4 + f * 4);
+  for (let i = 0; i < n; i++) {
+    const p = new THREE.Group();
+    p.rotation.order = 'YXZ';
+    p.rotation.y = (i / n) * Math.PI * 2 + rnd() * 0.4;
+    p.rotation.z = -(0.7 + rnd() * 0.5);
+    const h = (0.2 + rnd() * 0.14) * f + 0.05;
+    const petiole = mesh(GEO.blob, leaf, 0.03, h * 0.55, 0.012);
+    petiole.position.y = h * 0.5;
+    p.add(petiole);
+    for (const sgn of [-1, 1]) {
+      const jaw = mesh(GEO.blob, sgn > 0 ? tint(0xd0607a, 1) : leaf, 0.07 * f + 0.015, 0.05 * f + 0.012, 0.014);
+      jaw.position.set(0, h + 0.04, sgn * 0.028);
+      jaw.rotation.x = sgn * 0.55;
+      p.add(jaw);
+    }
+    g.add(p);
+  }
+  if (buds || bloom) {
+    const h = bloom ? 0.55 : 0.32;
+    g.add(stalk(0x6f8f4f, h, 0.01));
+    const head = bloom ? flower(sp.flower, 0xf6d04a, 0.08) : mesh(GEO.blob, sp.flower, 0.03, 0.04, 0.03);
+    head.position.y = h;
+    g.add(head);
+  }
+}
+
+function buildPitcher(sp: Species, f: number, buds: boolean, bloom: boolean, leaf: number, g: THREE.Group, rnd: () => number): void {
+  const n = Math.round(3 + f * 4);
+  const tube = new THREE.CylinderGeometry(1, 0.35, 1, 7);
+  tube.translate(0, 0.5, 0);
+  for (let i = 0; i < n; i++) {
+    const p = new THREE.Group();
+    p.rotation.order = 'YXZ';
+    p.rotation.y = (i / n) * Math.PI * 2 + rnd() * 0.4;
+    p.rotation.z = -(0.2 + rnd() * 0.45);
+    const h = (0.3 + rnd() * 0.2) * f + 0.06;
+    p.add(mesh(tube, leaf, 0.06 * f + 0.015, h, 0.06 * f + 0.015));
+    const hood = mesh(GEO.blob, sp.flower, 0.07 * f + 0.015, 0.06 * f + 0.012, 0.02);
+    hood.position.set(0.04, h + 0.04, 0);
+    hood.rotation.z = -0.4;
+    p.add(hood);
+    g.add(p);
+  }
+  if (buds || bloom) {
+    const h = bloom ? 0.7 : 0.4;
+    g.add(stalk(0x8a5a4a, h, 0.012));
+    const head = mesh(GEO.blob, sp.flower, bloom ? 0.09 : 0.035, bloom ? 0.05 : 0.04, bloom ? 0.09 : 0.035);
+    head.position.y = h;
+    g.add(head);
+  }
+}
+
+function buildStem(sp: Species, f: number, buds: boolean, bloom: boolean, leaf: number, g: THREE.Group, rnd: () => number): void {
+  const sun = sp.id === 'tournesol';
+  const h = (sun ? 1.0 : 0.55) * f + 0.08;
+  g.add(stalk(0x5f9f4f, h, sun ? 0.024 : 0.016));
+  const n = sun ? Math.round(3 + f * 3) : 3;
+  for (let i = 0; i < n; i++) {
+    const l = mesh(GEO.blob, leaf, sun ? 0.13 * f : 0.05, sun ? 0.016 : 0.24 * f + 0.04, sun ? 0.08 * f : 0.022);
+    const a = i * 2.3 + rnd();
+    if (sun) {
+      l.position.set(Math.cos(a) * 0.12 * f, h * (0.25 + (i / n) * 0.5), Math.sin(a) * 0.12 * f);
+      l.rotation.y = -a;
+      l.rotation.z = 0.4;
+    } else {
+      l.position.set(Math.cos(a) * 0.05, 0.2 * f + 0.03, Math.sin(a) * 0.05);
+      l.rotation.order = 'YXZ';
+      l.rotation.y = -a;
+      l.rotation.z = -0.3;
+    }
+    g.add(l);
+  }
+  if (!(buds || bloom)) return;
+  if (sun) {
+    const head = bloom ? flower(sp.flower, 0x6a4326, 0.3) : mesh(GEO.blob, 0x7faf4a, 0.07, 0.07, 0.07);
+    head.position.set(0, h, 0.03);
+    head.rotation.x = bloom ? 1.0 : 0;
+    g.add(head);
+  } else {
+    const k = bloom ? 5 : 3;
+    for (let i = 0; i < k; i++) {
+      const a = (i / k) * Math.PI * 2;
+      const flame = sp.id === 'semper' && i % 2 === 1;
+      const petal = mesh(GEO.blob, bloom ? (flame ? 0xd0283a : sp.flower) : 0x8fbf6a, 0.045, bloom ? 0.1 : 0.06, 0.025);
+      petal.position.set(Math.cos(a) * 0.04, h + (bloom ? 0.07 : 0.04), Math.sin(a) * 0.04);
+      petal.rotation.order = 'YXZ';
+      petal.rotation.y = -a;
+      petal.rotation.z = bloom ? -0.25 : 0;
+      g.add(petal);
+    }
+  }
+}
+
+function buildNest(f: number, leaf: number, g: THREE.Group, rnd: () => number): void {
+  const n = Math.round(6 + f * 6);
+  for (let i = 0; i < n; i++) {
+    const len = (0.3 + rnd() * 0.2) * f + 0.06;
+    const p = new THREE.Group();
+    p.rotation.order = 'YXZ';
+    p.rotation.y = (i / n) * Math.PI * 2 + rnd() * 0.3;
+    p.rotation.z = -(0.25 + rnd() * 0.5);
+    const blade = mesh(GEO.blob, leaf, 0.065 * f + 0.015, len, 0.016);
+    blade.position.y = len;
+    p.add(blade);
+    const rib = mesh(GEO.cyl, 0x3f6f3a, 0.008, len * 1.8, 0.008);
+    rib.position.z = 0.012;
+    p.add(rib);
+    g.add(p);
+  }
+}
+
 /** Construit le modèle d'une plante. `stage` de 0 (graine) à 4 (floraison), `health` de 0 à 1. */
-export function buildPlant(sp: Species, stage: number, health: number): THREE.Group {
+export function buildPlant(sp: Species, stage: number, health: number, variant = 0): THREE.Group {
   const g = new THREE.Group();
-  const leaf = tint(sp.leaf, health);
+  const base = new THREE.Color(sp.leaf);
+  if (variant === 1) base.lerp(new THREE.Color(0xf4f2cf), 0.5);
+  if (variant === 2) base.lerp(new THREE.Color(0xf2b92e), 0.85);
+  const leaf = tint(base.getHex(), health);
   const rnd = seeded(hash(sp.id) + stage * 7);
   if (stage === 0) {
     const s = mesh(GEO.blob, 0x9fd06a, 0.035, 0.05, 0.035);
@@ -302,18 +575,26 @@ export function buildPlant(sp: Species, stage: number, health: number): THREE.Gr
     case 'fern': buildFern(f, leaf, g, rnd); break;
     case 'orchid': buildOrchid(sp, f, buds, bloom, leaf, g, rnd); break;
     case 'paradise': buildParadise(sp, f, buds, bloom, leaf, g, rnd); break;
+    case 'cactus': buildCactus(sp, f, buds, bloom, leaf, g, rnd); break;
+    case 'grass': buildGrass(sp, f, buds, bloom, leaf, g, rnd); break;
+    case 'bigleaf': buildBigLeaf(sp, f, buds, bloom, leaf, g, rnd); break;
+    case 'coin': buildCoin(sp, f, buds, bloom, leaf, g, rnd); break;
+    case 'trap': buildTrap(sp, f, buds, bloom, leaf, g, rnd); break;
+    case 'pitcher': buildPitcher(sp, f, buds, bloom, leaf, g, rnd); break;
+    case 'stem': buildStem(sp, f, buds, bloom, leaf, g, rnd); break;
+    case 'nest': buildNest(f, leaf, g, rnd); break;
   }
   g.scale.setScalar(1.25);
   return g;
 }
 
-export function buildPot(): THREE.Group {
+export function buildPot(color = 0xc9714a, rimColor = 0xd9825a): THREE.Group {
   const g = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.26, 0.42, 10), mat(0xc9714a));
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.26, 0.42, 10), mat(color));
   body.position.y = 0.21;
   body.castShadow = true;
   body.receiveShadow = true;
-  const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.09, 10), mat(0xd9825a));
+  const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.09, 10), mat(rimColor));
   rim.position.y = 0.43;
   rim.castShadow = true;
   const soil = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.03, 10), mat(0x4a3526));

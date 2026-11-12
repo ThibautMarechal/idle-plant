@@ -11,6 +11,33 @@ function rngOf(seed: number): sim.Rng {
 }
 
 describe('simulation', () => {
+  it('la vitrine rapporte des pourboires plafonnés, et un équipement change le climat', () => {
+    const s = sim.newState(0);
+    s.slots[10].plant = { sp: 'phalaenopsis', prog: 1, water: 1, pests: 0, q: 90, vr: 1 };
+    expect(sim.harvestShow(s, 10)).toBe(true);
+    sim.advance(s, 600 * 1000, rngOf(7));
+    expect(s.tips).toBeGreaterThan(15);
+    sim.advance(s, 10 * 3600 * 1000, rngOf(7));
+    expect(s.tips).toBeLessThanOrEqual(sim.showcaseRate(s) * sim.TIP_CAP_SECONDS + 1e-6);
+    const got = sim.collectTips(s);
+    expect(s.coins).toBe(50 + got);
+    s.upgrades.fan = true;
+    expect(sim.zoneClimate(s, ZONES[3]).temp).toBe(2);
+    sim.toggleGear(s, 'fan');
+    expect(sim.zoneClimate(s, ZONES[3]).temp).toBe(3);
+  });
+
+  it('composter donne de l\'engrais, qui accélère sans faire fleurir d\'un coup', () => {
+    const s = sim.newState(0);
+    s.seeds.basilic = 2;
+    expect(sim.compost(s, 'basilic')).toBe(true);
+    sim.plantSeed(s, 10, 'basilic', () => 0.5);
+    for (let k = 0; k < 2; k++) sim.fertilize(s, 10);
+    expect(s.fert).toBe(0);
+    expect(s.slots[10].plant!.prog).toBeCloseTo(0.5);
+    expect(s.slots[10].plant!.vr).toBe(0);
+  });
+
   it('un pot se déplace avec sa plante, et seulement vers une zone aménagée', () => {
     const s = sim.newState(0);
     s.seeds.menthe = 1;
@@ -61,7 +88,7 @@ describe('simulation', () => {
     expect(p.q).toBeGreaterThan(70);
     expect(s.disc.menthe.bloomed).toBe(true);
     expect(sim.starsOf(s.disc.menthe)).toBeGreaterThanOrEqual(2);
-    expect(s.fresh).toContain('menthe');
+    expect(s.fresh.some((f) => f.startsWith('menthe:'))).toBe(true);
   });
 
   it('une plante mal placée pousse plus lentement', () => {
@@ -84,18 +111,18 @@ describe('simulation', () => {
 
   it('vendre rapporte selon le cours et fait baisser ce cours', () => {
     const s = sim.newState(0);
-    s.slots[10].plant = { sp: 'boston', prog: 1, water: 1, pests: 0, q: 100 };
+    s.slots[10].plant = { sp: 'boston', prog: 1, water: 1, pests: 0, q: 100, vr: 0 };
     s.market.fougeres.p = 1.5;
     const gain = sim.harvestSell(s, 10);
     expect(gain).toBe(Math.round(14 * 1.5 * 1.5));
-    expect(s.coins).toBe(30 + gain);
+    expect(s.coins).toBe(50 + gain);
     expect(s.market.fougeres.p).toBeLessThan(1.5);
   });
 
   it('la réserve a une capacité limitée', () => {
     const s = sim.newState(0);
-    for (let k = 0; k < 4; k++) s.stock.push({ sp: 'aloe', q: 50 });
-    s.slots[10].plant = { sp: 'aloe', prog: 1, water: 1, pests: 0, q: 50 };
+    for (let k = 0; k < 4; k++) s.stock.push({ sp: 'aloe', q: 50, vr: 0 });
+    s.slots[10].plant = { sp: 'aloe', prog: 1, water: 1, pests: 0, q: 50, vr: 0 };
     expect(sim.harvestStore(s, 10)).toBe(false);
   });
 
