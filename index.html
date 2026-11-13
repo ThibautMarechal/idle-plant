@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#bfe6e0" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/icon.svg" />
+    <title>Le Grainier</title>
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="gl"></canvas>
+      <div id="overlay"></div>
+      <header id="hud"></header>
+      <div id="bottom">
+        <div id="dock"><div id="seeds"></div><div id="tools"></div></div>
+        <div id="order"></div>
+        <div id="quest"></div>
+        <nav id="nav"></nav>
+      </div>
+      <div id="fx"></div>
+      <div id="backdrop"></div>
+      <section id="sheet"></section>
+      <div id="studio"></div>
+      <div id="trek"></div>
+      <div id="stall"></div>
+      <div id="modal"></div>
+      <div id="toast"></div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
