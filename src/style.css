@@ -375,3 +375,7 @@ body[data-style="pixel"] .tile { border-radius: 0; }
 .pill.season { font-size: 15px; }
 #quest .qt { text-align: left; font: inherit; color: inherit; font-weight: 700; padding: 0; background: none; }
 #quest .qt b { color: var(--green-d); font-size: 16px; }
+body[data-style="pixel"] .hudrow { gap: 5px; }
+body[data-style="pixel"] .hudrow .pill { font-size: 13px; padding: 7px 7px; }
+body[data-style="pixel"] .hudrow .pill small { font-size: 10px; }
+body[data-style="pixel"] .tabs .tab { font-size: 10px; }

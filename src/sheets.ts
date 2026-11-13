@@ -45,18 +45,19 @@ export function vitrineHtml(ui: UI): string {
   const s = ui.s;
   const tips = Math.floor(s.tips);
   const perMin = sim.showcaseRate(s) * 60;
+  const free = s.showcase.filter((h) => !h).length;
   const rows = s.showcase.map((h, k) => {
-    if (!h) return '<div class="card"><div class="ico">▫️</div><div class="mid"><div class="nm">Socle libre</div><div class="ds">Expose une plante en fleur au lieu de la vendre.</div></div></div>';
+    if (!h) return '';
     const sp = SPECIES_BY_ID[h.sp];
     const rate = sp.value * sim.qualityMult(h.q) * sim.VARIANT_MULT[h.vr] * sim.TIP_RATE * 60;
     return `<div class="card"><div class="ico">${EMOJI[sp.id]}</div><div class="mid"><div class="nm">${esc(vname(sp, h.vr))}</div><div class="ds">${sim.qualityWord(h.q)} · ${rate.toFixed(1).replace('.', ',')} 🪙 par minute</div></div><button class="btn small" data-act="unshow" data-arg="${k}">Vendre ${fmt(sim.saleValue(s, h))} 🪙</button></div>`;
   }).join('');
   return head(ui, '🏛️ Vitrine') + `<div class="sh-body">
-    <p class="sub">Tes plus beaux spécimens exposés sur l'étagère attirent des visiteurs, qui laissent des pourboires même en ton absence. Les plantes rares, les variantes et les belles qualités rapportent le plus.</p>
-    <div class="kv"><span>Visiteurs accueillis</span><b>${fmt(s.visitors)}</b></div>
-    <div class="kv"><span>Pourboires</span><b>${perMin.toFixed(1).replace('.', ',')} 🪙 par minute</b></div>
+    <p class="sub">Les plantes exposées attirent des visiteurs qui laissent des pourboires, même en ton absence.</p>
+    <div class="facts"><span class="chip">👥 ${fmt(s.visitors)} visiteurs</span><span class="chip">🪙 ${perMin.toFixed(1).replace('.', ',')} par minute</span></div>
     <button class="btn gold wide" data-act="tips" ${tips > 0 ? '' : 'disabled'}>Ramasser les pourboires · ${fmt(tips)} 🪙</button>
-    ${rows}</div>`;
+    ${rows}
+    ${free ? `<p class="sub center">${free} socle${free > 1 ? 's' : ''} libre${free > 1 ? 's' : ''} : touche une plante en fleur, puis « Exposer ».</p>` : ''}</div>`;
 }
 
 export function zoneHtml(ui: UI): string {
@@ -263,7 +264,7 @@ export function seasonHtml(ui: UI): string {
     <div class="kv"><span>Bonus</span><b>Croissance +${Math.round((sim.SEASON_SPEED - 1) * 100)} %</b></div>
     <div class="kv"><span>Saison suivante</span><b>${next.icon} ${next.name} dans ${clock(se.left)}</b></div>
     <h3>Concours de la saison</h3>
-    <p class="sub">Fais fleurir des plantes des familles de saison avant qu'elle ne se termine. Le compteur repart de zéro à chaque saison.</p>
+    <p class="sub">Fais fleurir les familles de saison avant qu'elle ne se termine.</p>
     <div class="big">${ct.blooms} 🌼</div>
     ${tiers}</div>`;
 }
@@ -284,7 +285,7 @@ export function trophiesHtml(ui: UI): string {
   return head(ui, '🎓 Jardinier') + `<div class="sh-body">
     <div class="big">Niveau ${lv.level}</div>
     <div class="prog"><i style="width:${Math.round(100 * lv.into / lv.span)}%"></i></div>
-    <p class="sub center">${fmt(lv.into)} / ${fmt(lv.span)} points d'expérience. Chaque floraison, commande, croisement et pot façonné en rapporte. Un niveau gagné offre des pièces, de l'argile et un sachet.</p>
+    <p class="sub center">${fmt(lv.into)} / ${fmt(lv.span)} points avant le niveau suivant, qui offre des pièces, de l'argile et un sachet.</p>
     <h3>Trophées (${got}/${sim.TROPHIES.length})</h3>${rows}</div>`;
 }
 
