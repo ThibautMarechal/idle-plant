@@ -94,53 +94,58 @@ const rows = (xs: number[], pts: [number, number][]): V3[] => pts.flatMap(([y, z
 
 // ---------------------------------------------------------------- Verrière
 
-const V = { W: 2.8, D: 3.9, rowZ: [-2.85, -0.95, 0.95, 2.85], colX: [-1.3, 0, 1.3], table: 0.62, basin: 2.25 };
+const V = { W: 2.6, D: 3.6, rowZ: [-2.6, -0.87, 0.87, 2.6], colX: [-1.45, 0, 1.45], hangX: [-0.72, 0.72, 0.72, -0.72], table: 0.62 };
 
 const verriere: Theme = {
   id: 'verriere',
   all: 'Serre',
   zones: ['Sous l\'étagère', 'Près du bassin', 'Près de la porte', 'Table plein sud'],
   name: 'La verrière',
-  desc: 'Une serre vitrée vue de haut, rangée par rangée.',
+  desc: 'Une grande serre vitrée, vue de face, qui remplit tout l\'écran.',
   bg: 'linear-gradient(180deg, #a9dcd8 0%, #cfeadd 38%, #f6efd9 70%, #f3e6c4 100%)',
-  yaw: 0.2,
+  yaw: 0,
   pitch: 0.85,
+  // Les suspensions pendent entre deux colonnes, un peu en retrait : elles ne prennent pas de largeur.
   slots: [...rows(V.colX, [[0, V.rowZ[0]], [0, V.rowZ[1]], [0, V.rowZ[2]], [V.table, V.rowZ[3]]]),
-    ...V.rowZ.map((z, k): V3 => [-2.3, (k === 3 ? V.table : 0) + 1.05, z - 0.35])],
-  shows: [-1.95, -0.65, 0.65, 1.95].map((x): V3 => [x, 2.2, -V.D + 0.4]),
-  bounds: [[-3.1, 0, -4], [3.1, 0, -4], [-3.1, 3.3, -4], [3.1, 3.3, -4], [-3.1, -0.6, 4.1], [3.1, -0.6, 4.1]],
+    ...V.rowZ.map((z, k): V3 => [V.hangX[k], (k === 3 ? V.table : 0) + 1.15, z - (k ? 0.65 : 0.35)])],
+  shows: [-1.8, -0.6, 0.6, 1.8].map((x): V3 => [x, 2.2, -V.D + 0.4]),
+  bounds: [[-2.6, 0, -4], [2.6, 0, -4], [-2.6, 3.3, -4], [2.6, 3.3, -4], [-2.6, -0.2, 4.1], [2.6, -0.2, 4.1]],
   pot: [0xc9714a, 0xd9825a],
   showPot: [0xf4efe4, 0xffffff],
   hemi: [0xfff6e0, 0x8fae9a, 1.15],
   sun: [0xfff0d0, 2.1, [5, 9, 7]],
-  mist: [V.basin, 0.4, V.rowZ[1]],
-  mistDir: [-1.6, 1.1, 0],
-  gear: { mist: [0, 1.95, -V.D + 0.25], lamp: [-V.W + 0.75, 1.9, V.rowZ[2] - 0.75], heat: [-V.W + 0.35, 0, V.rowZ[2] + 0.85], fan: [V.basin + 0.1, V.table, V.rowZ[3]] },
+  mist: [2.1, 0.2, V.rowZ[1] - 0.87],
+  mistDir: [-1.3, 0.45, 0],
+  gear: { mist: [0, 1.95, -V.D + 0.25], lamp: [-0.55, 1.9, V.rowZ[2] - 0.85], heat: [-2.12, 0, V.rowZ[2] + 0.87], fan: [2.1, V.table, V.rowZ[3] - 0.35] },
   build(add) {
     const { W, D, rowZ } = V;
-    add(box(W * 2 + 0.4, 0.4, D * 2 + 0.4, 0xd8c3a0, 0, -0.2, 0, false), box(W * 2 + 0.7, 0.25, D * 2 + 0.7, 0x9a7b5a, 0, -0.5, 0, false));
+    // Le sol dépasse de l'écran sur les côtés et vers l'avant : on est dans la serre, pas devant une maquette.
+    add(box(18, 0.2, 14, 0xa9d39a, 0, -0.16, 0.5, false), box(W * 2 + 0.4, 0.4, D + 6.2, 0xd8c3a0, 0, -0.2, 1.1, false));
     [0x6f7f8f, 0x6fae8a, 0x9fb4c4, 0xf2d68a].forEach((c, r) => add(tinted(W * 2 - 0.3, 0.02, 1.6, c, 0.55, 0, 0.011, rowZ[r])));
-    const wx = -W - 0.1, wz = -D - 0.1;
-    add(box(W * 2 + 0.4, 0.6, 0.25, 0xe9dcc6, 0, 0.3, wz), box(0.25, 0.6, D * 2 + 0.4, 0xe9dcc6, wx, 0.3, 0));
-    add(glass(W * 2 + 0.2, 2.6, 0.05, 0, 1.9, wz), glass(0.05, 2.6, D * 2 + 0.2, wx, 1.9, 0));
-    for (let k = 0; k <= 3; k++) add(box(0.1, 2.7, 0.1, 0xfdfaf2, wx + (k * (W * 2 + 0.2)) / 3, 1.95, wz));
-    for (let k = 1; k <= 4; k++) add(box(0.1, 2.7, 0.1, 0xfdfaf2, wx, 1.95, wz + (k * (D * 2 + 0.2)) / 4));
-    add(box(W * 2 + 0.3, 0.1, 0.1, 0xfdfaf2, 0, 3.25, wz), box(0.1, 0.1, D * 2 + 0.3, 0xfdfaf2, wx, 3.25, 0));
-    add(box(W * 2 + 0.3, 0.07, 0.07, 0xfdfaf2, 0, 2.0, wz), box(0.07, 0.07, D * 2 + 0.3, 0xfdfaf2, wx, 2.0, 0));
+    const wx = W + 0.1, wz = -D - 0.1;
+    add(box(W * 2 + 0.4, 0.6, 0.25, 0xe9dcc6, 0, 0.3, wz), glass(W * 2 + 0.2, 2.6, 0.05, 0, 1.9, wz));
+    for (let k = 0; k <= 4; k++) add(box(0.1, 2.7, 0.1, 0xfdfaf2, -wx + (k * wx) / 2, 1.95, wz));
+    add(box(W * 2 + 0.3, 0.1, 0.1, 0xfdfaf2, 0, 3.25, wz), box(W * 2 + 0.3, 0.07, 0.07, 0xfdfaf2, 0, 2.0, wz));
+    for (const x of [-wx, wx]) add(box(0.25, 0.6, D + 6.2, 0xe9dcc6, x, 0.3, 1.1), glass(0.05, 2.6, D + 6, x, 1.9, 1.1), box(0.1, 0.1, D + 6.1, 0xfdfaf2, x, 3.25, 1.1));
+    // Le jardin, derrière la vitre du fond.
+    for (const [x, r, c] of [[-2.9, 0.75, 0x7fbf7a], [-1.5, 0.55, 0x93cc85], [0.9, 0.7, 0x86c47c], [2.5, 0.6, 0x9ad08c]] as const) add(blob(r, c, x, r * 0.6, wz - 1.5, 1));
     // Étagère du fond : elle porte la vitrine et fait de l'ombre aux pots du dessous.
     add(box(W * 2 - 0.2, 0.1, 0.9, 0xa9794f, 0, 2.15, wz + 0.5));
     for (const x of [-W + 0.3, 0, W - 0.3]) add(box(0.08, 0.5, 0.08, 0x8a5f3c, x, 1.9, wz + 0.15));
-    // Bassin.
-    add(cyl(0.44, 0.5, 0.28, 0xb9b2a6, V.basin, 0.14, rowZ[1], 12), water(0.36, V.basin, 0.27, rowZ[1]));
+    // Bassin : une rigole d'eau qui traverse la serre, derrière la deuxième rangée.
+    const bz = rowZ[1] - 0.87;
+    add(box(W * 2 - 0.3, 0.14, 0.42, 0xb9b2a6, 0, 0.07, bz, false));
+    const rill = new THREE.Mesh(new THREE.BoxGeometry(W * 2 - 0.5, 0.05, 0.26), new THREE.MeshStandardMaterial({ color: 0x6fc7e0, roughness: 0.15, flatShading: true }));
+    rill.position.set(0, 0.13, bz);
+    rill.userData.water = true;
+    add(rill);
     // Porte sur le mur de gauche.
     const dz = rowZ[2];
-    add(box(0.12, 2.3, 1.15, 0x5f9f8a, wx + 0.04, 1.15, dz), box(0.14, 0.9, 0.8, 0xcfeef5, wx + 0.06, 1.6, dz, false),
-      box(0.1, 0.08, 0.08, 0xf2c94c, wx + 0.14, 1.05, dz + 0.4, false), box(0.6, 0.03, 1.0, 0xb96f5a, wx + 0.5, 0.02, dz, false));
+    add(box(0.12, 2.3, 1.15, 0x5f9f8a, -wx + 0.04, 1.15, dz));
     // Table plein sud.
     const tz = rowZ[3];
     add(box(W * 2 - 0.5, 0.12, 1.2, 0xc99a66, 0, V.table - 0.06, tz));
     for (const x of [-W + 0.45, W - 0.45]) for (const z of [tz - 0.45, tz + 0.45]) add(box(0.12, V.table - 0.12, 0.12, 0xa9794f, x, (V.table - 0.12) / 2, z));
-    add(wateringCan(V.basin, 0, rowZ[2], 2.4));
   },
 };
 

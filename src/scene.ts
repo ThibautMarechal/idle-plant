@@ -260,7 +260,7 @@ export class Scene3D {
     const all = this.slots.map((s) => s.base.clone().setY(s.base.y + 1.4)).concat(this.slots.map((s) => s.base))
       .concat(this.theme.shows.map((p) => v3(p).setY(p[1] + 1.2)));
     const fa = this.frame(all);
-    const room = this.h - 215;
+    const room = this.h - 250;
     this.fit = { u: Math.min(this.w / (fa.maxX - fa.minX + 1.3), room / (fa.maxY - fa.minY + 0.6)), ...fa };
     if (zone < 0) {
       this.goal = { u: this.fit.u, cx: (fa.minX + fa.maxX) / 2, cy: (fa.minY + fa.maxY) / 2, ay: 70 + room / 2 };
