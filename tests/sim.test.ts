@@ -258,7 +258,7 @@ describe('simulation', () => {
 
   it('suspension : un emplacement de plus par zone aménagée', () => {
     const s = sim.newState(0);
-    expect(s.slots.length).toBe(16);
+    expect(s.slots.length).toBe(19);
     expect(sim.slotOpen(s, 14)).toBe(false);
     s.coins = 1000;
     expect(sim.buyExtra(s, 0)).toBe(false); // zone pas encore aménagée
