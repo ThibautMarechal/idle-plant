@@ -379,3 +379,13 @@ body[data-style="pixel"] .hudrow { gap: 5px; }
 body[data-style="pixel"] .hudrow .pill { font-size: 13px; padding: 7px 7px; }
 body[data-style="pixel"] .hudrow .pill small { font-size: 10px; }
 body[data-style="pixel"] .tabs .tab { font-size: 10px; }
+
+/* Vue libre de la serre : plus d'onglets, une étiquette de zone quand on est près */
+.zrow { display: flex; justify-content: center; align-items: center; gap: 6px; pointer-events: none; }
+.zrow > * { pointer-events: auto; }
+.zback { width: 30px; height: 30px; border-radius: 50%; background: var(--cream); box-shadow: var(--shadow); font-size: 15px; font-weight: 900; }
+.zrow .zinfo { white-space: nowrap; font-size: 11px; padding: 6px 10px; }
+.zrow { justify-content: flex-end; }
+.hudrow { gap: 6px; }
+.hudrow .pill { padding: 8px 9px; }
+body[data-style="bd"] .hudrow .pill { padding: 7px 8px; font-size: 14px; }

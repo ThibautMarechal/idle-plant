@@ -43,7 +43,6 @@ export class Scene3D {
   private unit = 50;
   private view = { u: 50, cx: 0, cy: 0, ay: 100 };
   private goal = { u: 50, cx: 0, cy: 0, ay: 100 };
-  private zone = -1;
   private shows: { root: THREE.Group; plant: THREE.Group | null; key: string }[] = [];
   private gear: Record<string, THREE.Object3D> = {};
   private bugs: THREE.Mesh[] = [];
@@ -247,24 +246,24 @@ export class Scene3D {
     this.renderer.setSize(this.w, this.h, false);
     this.composer?.setPixelRatio(this.renderer.getPixelRatio());
     this.composer?.setSize(this.w, this.h);
-    this.setView(this.zone);
+    this.setView(-1);
     this.view = { ...this.goal };
     this.applyView();
   }
 
+  /** Cadre de la vue d'ensemble : zoom minimal et limites de déplacement. */
+  private fit = { u: 50, minX: 0, maxX: 0, minY: 0, maxY: 0 };
+
   /** Cadre la vue d'ensemble (-1) ou une zone (0..3). La caméra y glisse en douceur. */
   setView(zone: number): void {
-    this.zone = zone;
+    // Vue d'ensemble : tous les pots et la vitrine, entre le bandeau du haut et la barre du bas.
+    const all = this.slots.map((s) => s.base.clone().setY(s.base.y + 1.4)).concat(this.slots.map((s) => s.base))
+      .concat(this.theme.shows.map((p) => v3(p).setY(p[1] + 1.2)));
+    const fa = this.frame(all);
+    const room = this.h - 215;
+    this.fit = { u: Math.min(this.w / (fa.maxX - fa.minX + 1.3), room / (fa.maxY - fa.minY + 0.6)), ...fa };
     if (zone < 0) {
-      // Tout le décor, calé sous le bandeau du haut et au-dessus de la barre du bas.
-      const pts = this.theme.bounds.map(v3)
-        .concat(this.slots.map((s) => s.base.clone().setY(s.base.y + 1.4)))
-        .concat(this.theme.shows.map((p) => v3(p).setY(p[1] + 1.2)));
-      const f = this.frame(pts);
-      const room = this.h - 290;
-      const u = Math.min(this.w / (f.maxX - f.minX + 0.9), room / (f.maxY - f.minY));
-      // Centré entre le bandeau du haut et la barre du bas.
-      this.goal = { u, cx: (f.minX + f.maxX) / 2, cy: (f.minY + f.maxY) / 2, ay: 135 + room / 2 };
+      this.goal = { u: this.fit.u, cx: (fa.minX + fa.maxX) / 2, cy: (fa.minY + fa.maxY) / 2, ay: 70 + room / 2 };
     } else {
       const pts = this.slots.slice(zone * SLOTS_PER_ZONE, (zone + 1) * SLOTS_PER_ZONE).concat(this.slots[BASE_SLOTS + zone])
         .flatMap((s) => [s.base, s.base.clone().setY(s.base.y + 1.5)]);
@@ -274,8 +273,49 @@ export class Scene3D {
     }
   }
 
-  get currentZone(): number {
-    return this.zone;
+  /** Garde la vue dans le décor, et revient pile sur la vue d'ensemble quand on dézoome à fond. */
+  private clampGoal(): void {
+    const g = this.goal, f = this.fit;
+    g.u = Math.max(f.u, Math.min(this.w / 4.4, g.u));
+    if (g.u <= f.u * 1.03) { this.setView(-1); return; }
+    g.cx = Math.max(f.minX, Math.min(f.maxX, g.cx));
+    // Centre visible en hauteur : cy + (ay - h/2) / u.
+    const off = (g.ay - this.h / 2) / g.u;
+    g.cy = Math.max(f.minY, Math.min(f.maxY, g.cy + off)) - off;
+  }
+
+  /** Déplace la vue du doigt : le décor suit exactement. */
+  panBy(dx: number, dy: number): void {
+    if (!this.zoomed) return;
+    const g = this.goal;
+    g.cx -= dx / g.u;
+    g.cy += dy / g.u;
+    this.clampGoal();
+    this.view = { ...this.goal };
+    this.applyView();
+  }
+
+  /** Zoome d'un facteur k en gardant fixe le point (sx, sy) de l'écran. `smooth` : la caméra y glisse. */
+  zoomAt(k: number, sx: number, sy: number, smooth = false): void {
+    const g = this.goal;
+    const u2 = Math.max(this.fit.u, Math.min(this.w / 4.4, g.u * k));
+    const X = g.cx - this.w / (2 * g.u) + sx / g.u;
+    const Y = g.cy + g.ay / g.u - sy / g.u;
+    g.cx = X + this.w / (2 * u2) - sx / u2;
+    g.cy = Y + sy / u2 - g.ay / u2;
+    g.u = u2;
+    this.clampGoal();
+    if (!smooth) { this.view = { ...this.goal }; this.applyView(); }
+  }
+
+  /** Double-touche : on s'approche de l'endroit touché, ou on revient à la vue d'ensemble. */
+  toggleZoom(sx: number, sy: number): void {
+    if (this.zoomed) this.setView(-1);
+    else this.zoomAt((this.w / 5.2) / this.goal.u, sx, sy, true);
+  }
+
+  get zoomed(): boolean {
+    return this.goal.u > this.fit.u * 1.25;
   }
 
   private applyView(): void {

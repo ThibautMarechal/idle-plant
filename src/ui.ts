@@ -1,4 +1,4 @@
-import { BASE_SLOTS, SEASONS, FAMILIES, FAMILY_IDS, GLAZES, LEVEL_WORDS, PAINTS, POT_SIZES, RARITIES, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, STAGES, ZONES } from './data';
+import { SEASONS, FAMILIES, FAMILY_IDS, GLAZES, PAINTS, POT_SIZES, RARITIES, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, STAGES, ZONES } from './data';
 import type { Family } from './data';
 import type { Scene3D } from './scene';
 import { buildPlant } from './plants3d';
@@ -9,7 +9,7 @@ import * as sim from './sim';
 import { play, setMuted, unlock } from './sound';
 import type { State } from './sim';
 
-import { EMOJI, ZONE_SHORT, SheetKind, $, fmt, stars, vname, hex, clock, potLabel, esc, rarTag } from './uikit';
+import { EMOJI, SheetKind, $, fmt, stars, vname, hex, clock, potLabel, esc, rarTag } from './uikit';
 import { sheetHtml, paintTarget } from './sheets';
 
 /** Pour chaque objectif : où emmener le joueur quand il le touche, et quoi lui dire. */
@@ -118,16 +118,49 @@ export class UI {
       if (chip) grab('seed:' + chip.dataset.id, EMOJI[chip.dataset.id!], chip, e);
     });
     const app = $('app');
-    let sx = 0, sy = 0, st = 0, onScene = false;
+    let sx = 0, sy = 0, onScene = false;
     setMuted(!!this.s.mute);
+    // Doigts posés sur la serre : un doigt déplace la vue, deux doigts zooment.
+    const fingers = new Map<number, { x: number; y: number }>();
+    let panning = false, pinch = 0, lastTap = 0;
+    const local = (x: number, y: number) => { const r = app.getBoundingClientRect(); return { x: x - r.left, y: y - r.top }; };
+    const spread = () => { const [a, b] = [...fingers.values()]; return { d: Math.hypot(a.x - b.x, a.y - b.y), ...local((a.x + b.x) / 2, (a.y + b.y) / 2) }; };
     app.addEventListener('pointerdown', (e) => {
       unlock();
       this.pointerDown = true;
-      sx = e.clientX; sy = e.clientY; st = Date.now();
+      sx = e.clientX; sy = e.clientY;
       onScene = !(e.target as HTMLElement).closest('#sheet, #modal, #bottom, #hud, #backdrop, #studio');
+      panning = false;
+      if (!onScene || this.tool) return;
+      fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (fingers.size === 2) {
+        // Un second doigt : on lâche le pot éventuel et on pince.
+        this.holdAt = null;
+        if (this.drag >= 0) { this.endDrag(); this.refresh(true); }
+        pinch = spread().d;
+      }
     });
     app.addEventListener('pointermove', (e) => {
       if (this.tool) { this.useTool(e.clientX, e.clientY); return; }
+      const f = fingers.get(e.pointerId);
+      if (fingers.size === 2 && f) {
+        const before = spread();
+        f.x = e.clientX; f.y = e.clientY;
+        const now = spread();
+        if (pinch > 0 && now.d > 0) this.scene.zoomAt(now.d / before.d, now.x, now.y);
+        this.scene.panBy(now.x - before.x, now.y - before.y);
+        this.swipedAt = Date.now();
+        return;
+      }
+      if (this.drag < 0 && !this.holdAt) {
+        // Un doigt sur le décor : la vue suit.
+        if (!f) return;
+        if (!panning && Math.hypot(e.clientX - sx, e.clientY - sy) < 8) return;
+        panning = true;
+        this.scene.panBy(e.clientX - f.x, e.clientY - f.y);
+        f.x = e.clientX; f.y = e.clientY;
+        return;
+      }
       if (this.drag < 0) {
         if (!this.holdAt || Math.hypot(e.clientX - this.holdAt.x, e.clientY - this.holdAt.y) < 10) return;
         this.drag = this.holdAt.i;
@@ -136,19 +169,22 @@ export class UI {
         this.buzz(20);
         this.refresh(true);
       }
-      this.moveGhost(e.clientX, e.clientY);
-      // Près du bord haut ou bas, on change de zone sans lâcher le pot.
+      // Près d'un bord, la vue glisse pour atteindre un emplacement plus loin sans lâcher le pot.
+      const at = local(e.clientX, e.clientY);
       const rect = app.getBoundingClientRect();
-      const y = e.clientY - rect.top;
-      if (this.scene.currentZone >= 0 && Date.now() - this.edgeAt > 800 && (y < 170 || y > rect.height - 200)) {
+      if (Date.now() - this.edgeAt > 30) {
         this.edgeAt = Date.now();
-        this.goZone(Math.max(0, Math.min(ZONES.length - 1, this.scene.currentZone + (y < 170 ? -1 : 1))));
+        const px = at.x < 44 ? 14 : at.x > rect.width - 44 ? -14 : 0;
+        const py = at.y < 150 ? 14 : at.y > rect.height - 190 ? -14 : 0;
+        if (px || py) this.scene.panBy(px, py);
       }
+      this.moveGhost(e.clientX, e.clientY);
     });
     app.addEventListener('pointerup', (e) => {
+      fingers.delete(e.pointerId);
+      pinch = 0;
       if (this.tool) { this.dropTool(); return; }
       this.pointerDown = false;
-      const onPot = !!this.holdAt;
       this.holdAt = null;
       if (this.drag >= 0) {
         const from = this.drag, to = this.dragTarget;
@@ -161,14 +197,19 @@ export class UI {
         this.refresh(true);
         return;
       }
-      const dx = e.clientX - sx, dy = e.clientY - sy;
-      if (onPot || !onScene || Date.now() - st > 900 || Math.max(Math.abs(dx), Math.abs(dy)) < 45) return;
-      // Balayer vers la gauche ou vers le haut avance d'une zone ; l'inverse recule.
-      const dir = Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 1 : -1) : (dy < 0 ? 1 : -1);
-      this.swipedAt = Date.now();
-      this.goZone(Math.max(-1, Math.min(ZONES.length - 1, this.scene.currentZone + dir)));
+      if (panning) { panning = false; this.swipedAt = Date.now(); this.refresh(true); return; }
+      // Double-touche sur le décor : on s'approche, ou on revient à la vue d'ensemble.
+      if (onScene && Math.hypot(e.clientX - sx, e.clientY - sy) < 8 && !(e.target as HTMLElement).closest('.slot, .zlock, .showb')) {
+        if (Date.now() - lastTap < 320) { const at = local(e.clientX, e.clientY); this.scene.toggleZoom(at.x, at.y); lastTap = 0; this.refresh(true); }
+        else lastTap = Date.now();
+      }
     });
-    for (const ev of ['pointercancel', 'pointerleave']) app.addEventListener(ev, () => { this.dropTool(); this.pointerDown = false; this.holdAt = null; if (this.drag >= 0) { this.endDrag(); this.refresh(true); } });
+    app.addEventListener('wheel', (e) => {
+      if ((e.target as HTMLElement).closest('#sheet, #modal, #studio')) return;
+      const at = local(e.clientX, e.clientY);
+      this.scene.zoomAt(Math.exp(-e.deltaY * 0.0016), at.x, at.y);
+    }, { passive: true });
+    for (const ev of ['pointercancel', 'pointerleave']) app.addEventListener(ev, (e) => { fingers.delete((e as PointerEvent).pointerId); this.dropTool(); this.pointerDown = false; this.holdAt = null; if (this.drag >= 0) { this.endDrag(); this.refresh(true); } });
     app.addEventListener('click', (e) => {
       const t = (e.target as HTMLElement).closest('[data-act]') as HTMLElement | null;
       if (t && !t.hasAttribute('disabled')) this.act(t.dataset.act!, t.dataset.arg ?? '');
@@ -205,7 +246,7 @@ export class UI {
     const s = this.s;
     const now = Date.now();
     const near = (i: number, lift: number, reach: number) => {
-      if (!sim.slotOpen(s, i) || (this.scene.currentZone >= 0 && sim.zoneIndexOfSlot(i) !== this.scene.currentZone)) return Infinity;
+      if (!sim.slotOpen(s, i)) return Infinity;
       const r = this.scene.slotRect(i);
       const d = Math.hypot(r.x - x, r.bottom - r.unit * lift - y);
       return d < r.unit * reach ? d : Infinity;
@@ -762,11 +803,6 @@ export class UI {
     });
   }
 
-  private needsCare(i: number): boolean {
-    const p = this.s.slots[i].plant;
-    return !!p && (p.pests > 0 || p.prog >= 1 || (p.cut === 1 && p.prog < 1) || (p.water < 0.5 && !this.s.upgrades.water));
-  }
-
   refresh(force = false): void {
     const s = this.s;
     this.layout();
@@ -780,13 +816,11 @@ export class UI {
     tools[1].classList.toggle('off', ripe < 2 && this.tool !== 'basket');
     tools[2].classList.toggle('off', !thirsty && this.tool !== 'can');
     tools[3].classList.toggle('off', !bugs && this.tool !== 'glove');
-    // Barquette de graines : visible dans une zone où un pot vide attend.
+    // Barquette de graines : visible dès qu'un pot vide attend.
     if (!this.tool) {
-      const z = this.scene.currentZone;
-      const free = z >= 0 && s.slots.some((sl, i) => sl.pot && !sl.plant && sim.zoneIndexOfSlot(i) === z && sim.slotOpen(s, i));
-      const c = free ? sim.zoneClimate(s, sim.zoneOfSlot(z * SLOTS_PER_ZONE)) : null;
-      const ids = c ? Object.keys(s.seeds).sort((a, b) => sim.fitOf(SPECIES_BY_ID[b], c) - sim.fitOf(SPECIES_BY_ID[a], c)).slice(0, 7 - [shaggy, ripe >= 2, thirsty, bugs].filter(Boolean).length - 1) : [];
-      const html = ids.map((id) => `<button class="seedchip${c && sim.fitOf(SPECIES_BY_ID[id], c) >= 1 ? ' fit' : ''}" data-id="${id}">${EMOJI[id]}<small>×${s.seeds[id]}</small></button>`).join('');
+      const free = s.slots.some((sl, i) => sl.pot && !sl.plant && sim.slotOpen(s, i));
+      const ids = free ? Object.keys(s.seeds).sort((a, b) => s.seeds[b] - s.seeds[a]).slice(0, 7 - [shaggy, ripe >= 2, thirsty, bugs].filter(Boolean).length - 1) : [];
+      const html = ids.map((id) => `<button class="seedchip" data-id="${id}">${EMOJI[id]}<small>×${s.seeds[id]}</small></button>`).join('');
       if (html !== this.seedsHtml) { this.seedsHtml = html; $('seeds').innerHTML = html; }
       // Chaque geste est expliqué une seule fois, au moment où il devient utile.
       const tip = (k: string, on: boolean, text: string) => {
@@ -795,7 +829,8 @@ export class UI {
         this.tipAt = Date.now();
         this.toast(text);
       };
-      tip('seeds', !!html, '🌱 Prends une graine dans la barquette et glisse-la sur un pot vide.');
+      tip('zoom', true, '👆 Pince pour zoomer, glisse pour te déplacer, touche deux fois pour t\'approcher.');
+      tip('seeds', !!html, '🌱 Prends une graine et glisse-la sur un pot vide : 💚 marque les emplacements qui lui conviennent.');
       tip('can', thirsty, '🚿 Une plante a soif : prends l\'arrosoir et promène-le au-dessus d\'elle.');
       tip('glove', bugs, '🧤 Des chenilles ! Prends le gant et frotte la plante.');
       tip('shears', shaggy, '✂️ Une plante fait des pousses folles : passe le sécateur dessus, elle poussera plus vite et plus belle.');
@@ -812,13 +847,20 @@ export class UI {
       el.hidden = !open;
       let cls = 'badge', txt = '';
       if (this.tool.startsWith('seed:')) {
-        if (i === this.toolTarget) { cls += ' ready'; txt = '⬇'; } else cls += ' hidden';
+        // Pendant qu'on tient une graine, chaque pot vide dit s'il lui convient.
+        const sp = SPECIES_BY_ID[this.tool.slice(5)];
+        if (!slot.pot || p || !open || sim.potSize(slot) < sim.sizeOf(sp)) cls += ' hidden';
+        else {
+          const ok = sim.fitOf(sp, sim.zoneClimate(s, sim.zoneOfSlot(i))) >= 1;
+          cls += i === this.toolTarget ? ' ready' : ok ? ' plus' : ' ghost';
+          txt = ok ? '💚' : '🌱';
+        }
       } else if (this.drag >= 0) {
         if (i === this.drag) cls += ' hidden';
         else if (i === this.dragTarget) { cls += ' ready'; txt = slot.pot ? '⇄' : '⬇'; }
         else if (!slot.pot) { cls += ' ghost'; txt = '+'; }
         else cls += ' hidden';
-      } else if (!slot.pot) { cls += ' ghost'; txt = '+'; }
+      } else if (!slot.pot) { if (this.scene.zoomed) { cls += ' ghost'; txt = '+'; } else cls += ' hidden'; }
       else if (!p) { cls += ' plus'; txt = '🌱'; }
       else if (p.pests > 0) { cls += ' alert'; txt = '🐛'.repeat(p.pests); }
       else if (p.cut === 1 && p.prog < 1) { cls += ' alert'; txt = '✂️'; }
@@ -850,23 +892,15 @@ export class UI {
 
     // Haut d'écran
     const col = sim.collection(s);
-    const cur = this.scene.currentZone;
-    const tabs = [`<button class="tab${cur < 0 ? ' on' : ''}" data-act="view" data-arg="-1">${themeOf(this.scene.themeId).all}</button>`].concat(ZONES.map((z, r) => {
-      const care = s.zonesOpen[r] && [r * SLOTS_PER_ZONE, r * SLOTS_PER_ZONE + 1, r * SLOTS_PER_ZONE + 2, BASE_SLOTS + r].some((i) => this.needsCare(i));
-      return `<button class="tab${cur === r ? ' on' : ''}${s.zonesOpen[r] ? '' : ' off'}" data-act="view" data-arg="${r}">${s.zonesOpen[r] ? z.icon : '🔒'} ${ZONE_SHORT[r]}${care ? '<i class="care"></i>' : ''}</button>`;
-    })).join('');
     let info = '';
     if (this.crossing >= 0) info = `<div class="ticker"><span>🧬 Avec quelle plante la croiser ?</span><button class="btn small" data-act="cancelmove">Annuler</button></div>`;
-    else if (cur >= 0) {
-      const c = sim.zoneClimate(s, ZONES[cur]);
-      info = `<div class="zinfo"><b>${this.zname(cur)}</b> ☀️ ${LEVEL_WORDS.light[c.light]} · 🌡️ ${LEVEL_WORDS.temp[c.temp]} · 💧 ${LEVEL_WORDS.hum[c.hum]}</div>`;
-    }
+    else if (this.scene.zoomed) info = '<div class="zrow"><button class="zback" data-act="view" data-arg="-1">⤢</button></div>';
     const lv = sim.levelOf(s);
     const se = sim.seasonOf(s);
     const ct = sim.contestOf(s);
     const prize = !!sim.CONTEST[ct.claimed] && ct.blooms >= sim.CONTEST[ct.claimed].need;
     const ready = sim.TROPHIES.filter((x) => sim.trophyReady(s, x)).length;
-    const hud = `<div class="hudrow"><div class="pill coins">🪙 ${fmt(s.coins)}</div><button class="pill season" data-act="nav" data-arg="season">${SEASONS[se.index].icon}<small>${SEASONS[se.index].name}</small>${prize ? '<i class="dot">!</i>' : ''}</button><button class="pill lvl" data-act="nav" data-arg="trophies"><span>🎓 <small>Niv.</small> ${lv.level}</span><i class="xp"><i style="width:${Math.round(100 * lv.into / lv.span)}%"></i></i>${ready ? `<i class="dot">${ready}</i>` : ''}</button><button class="pill" data-act="nav" data-arg="almanac">📖 ${col.bloomed}<small>/${SPECIES.length}</small></button></div><div class="tabs">${tabs}</div>${info}`;
+    const hud = `<div class="hudrow"><div class="pill coins">🪙 ${fmt(s.coins)}</div><button class="pill season" data-act="nav" data-arg="season">${SEASONS[se.index].icon}<small>${SEASONS[se.index].name}</small>${prize ? '<i class="dot">!</i>' : ''}</button><button class="pill lvl" data-act="nav" data-arg="trophies"><span>🎓 <small>Niv.</small> ${lv.level}</span><i class="xp"><i style="width:${Math.round(100 * lv.into / lv.span)}%"></i></i>${ready ? `<i class="dot">${ready}</i>` : ''}</button><button class="pill" data-act="nav" data-arg="almanac">📖 ${col.bloomed}<small>/${SPECIES.length}</small></button></div>${info}`;
     if (hud !== this.lastHud && (force || !this.pointerDown)) { $('hud').innerHTML = hud; this.lastHud = hud; }
 
     // Nouvelles fiches à fêter

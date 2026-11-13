@@ -1,7 +1,6 @@
 /** Le contenu de chaque panneau, un par fonction. `ui` donne l'état et le panneau ouvert. */
 import { SEASONS, FAMILIES, FAMILY_IDS, GLAZES, LEVEL_WORDS, POT_SIZES, RARITIES, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, STAGES, ZONES } from './data';
 import type { Species } from './data';
-import { STYLES } from './styles';
 import { THEMES } from './themes';
 import * as sim from './sim';
 
@@ -238,8 +237,6 @@ export function shopHtml(ui: UI): string {
     <h3>Atelier</h3>
     ${item('🔥', 'Four à double foyer', 'Les pots cuisent deux fois plus vite.', sim.PRICES.fastKiln, 'upgrade', 'fastKiln', !!s.upgrades.fastKiln)}
     ${item('🧱', 'Grand bac d\'argile', 'Le bac contient deux fois plus d\'argile.', sim.PRICES.bigClay, 'upgrade', 'bigClay', !!s.upgrades.bigClay)}
-    <h3>Style graphique</h3>
-    <div class="themes">${STYLES.map((t) => `<button class="theme ${t.id === ui.scene.styleId ? 'on' : ''}" data-act="style" data-arg="${t.id}"><span class="sw" style="background:${t.swatch}"></span><b>${esc(t.name)}</b><small>${esc(t.desc)}</small></button>`).join('')}</div>
     <h3>Décor</h3>
     <div class="themes">${THEMES.map((t) => `<button class="theme ${t.id === ui.scene.themeId ? 'on' : ''}" data-act="theme" data-arg="${t.id}"><span class="sw" style="background:${t.bg}"></span><b>${esc(t.name)}</b><small>${esc(t.desc)}</small></button>`).join('')}</div>
     </div>`;

@@ -12,6 +12,8 @@ const clock = () => t0 + (Date.now() - t0) * speed;
 let state = sim.load(clock());
 const away = sim.advance(state, clock());
 
+// Direction artistique retenue : la bande dessinée. Les parties commencées dans un autre style y passent une fois.
+if (!state.hints?.bd) { state.style = 'bd'; (state.hints ??= {}).bd = true; }
 const scene = new Scene3D(document.getElementById('gl') as HTMLCanvasElement, state.theme, state.style);
 const ui = new UI(state, scene, () => {
   sim.wipe();
@@ -19,6 +21,7 @@ const ui = new UI(state, scene, () => {
   state = sim.newState(clock());
   state.theme = theme;
   state.style = style;
+  (state.hints ??= {}).bd = true;
   ui.setState(state);
 });
 
