@@ -344,3 +344,29 @@ body[data-style="pixel"] .navb span { font-size: 20px; }
 .seedchip small { position: absolute; right: -4px; bottom: -5px; background: var(--ink); color: #fff; font-size: 10px; font-weight: 800; border-radius: 8px; padding: 1px 5px; }
 .toolghost.seed { transform: translate(-50%, -110%); font-size: 40px; }
 #bottom > #seeds { pointer-events: none; }
+
+/* Passe d'ergonomie : tuiles d'action, barre d'outils compacte, textes allégés */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(62px, 1fr)); gap: 8px; }
+.tile { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 10px 2px 8px; border-radius: 16px; background: #fff; border: 2px solid var(--line); font-size: 12px; font-weight: 800; color: var(--ink); line-height: 1.15; }
+.tile span { font-size: 24px; line-height: 1; }
+.tile small { font-size: 10px; font-weight: 700; color: var(--soft); }
+.tile.hot { border-color: var(--green); background: #eef8ef; }
+.tile[disabled] { opacity: 0.4; }
+.tile:active { transform: scale(0.95); }
+.facts { display: flex; flex-wrap: wrap; gap: 6px; }
+.facts .chip { font-size: 12px; padding: 4px 9px; border-radius: 10px; }
+.cond.ok { border-color: #bfe3c6; background: #f1faf2; font-weight: 700; }
+.sh-body h3 { margin-top: 10px; }
+.tabs .tab { font-size: 12px; padding: 9px 2px; }
+#dock { display: flex; justify-content: space-between; align-items: flex-end; gap: 8px; pointer-events: none; }
+#bottom > #dock { pointer-events: none; }
+#dock #seeds, #dock #tools { gap: 6px; }
+#dock #seeds { justify-content: flex-start; }
+#dock .seedchip, #dock .tool { pointer-events: auto; width: 46px; height: 46px; font-size: 23px; }
+#dock .tool { box-shadow: 0 3px 0 rgba(60, 50, 30, 0.18), 0 5px 10px rgba(60, 50, 30, 0.16); }
+#quest { padding: 7px 12px; font-size: 12.5px; }
+body[data-style="bd"] .tile, body[data-style="pixel"] .tile { border-color: var(--ink); }
+body[data-style="pixel"] .tile { border-radius: 0; }
+#dock #tools { margin-left: auto; }
+.tiles.four { grid-template-columns: repeat(4, 1fr); }
+.tiles.four .tile { font-size: 11px; }

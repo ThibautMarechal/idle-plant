@@ -90,7 +90,7 @@ function wateringCan(x: number, y: number, z: number, rot: number): THREE.Group 
 }
 
 const rows = (xs: number[], pts: [number, number][]): V3[] => pts.flatMap(([y, z]) => xs.map((x): V3 => [x, y, z]));
-const polar = (r: number, deg: number, y = 0): V3 => [Math.cos((deg * Math.PI) / 180) * r, y, Math.sin((deg * Math.PI) / 180) * r];
+
 
 // ---------------------------------------------------------------- Verrière
 

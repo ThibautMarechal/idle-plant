@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { BASE_SLOTS, GLAZES, POT_SIZES, SLOT_COUNT, SLOTS_PER_ZONE, SPECIES_BY_ID, ZONES } from './data';
+import { BASE_SLOTS, POT_SIZES, SLOT_COUNT, SLOTS_PER_ZONE, SPECIES_BY_ID, ZONES } from './data';
 import { buildPlant, buildPot, mat, POT_TOP } from './plants3d';
 import { fitOf, slotOpen, stageOf, zoneClimate, zoneOfSlot } from './sim';
 import type { State } from './sim';
