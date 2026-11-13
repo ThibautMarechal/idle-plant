@@ -79,6 +79,8 @@ export interface State {
   upgrades: Upgrades;
   disc: Record<string, Disc>;
   quests: Record<string, boolean>;
+  /** Astuces déjà montrées une fois. */
+  hints?: Record<string, boolean>;
   stats: { sold: number; earned: number; bestMult: number; planted: number; opened: number; crafted: number; painted: number; orders: number; cuttings: number; crossed?: number; contests?: number };
   lastTick: number;
 }

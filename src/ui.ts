@@ -101,6 +101,7 @@ export class UI {
   private toolAt: number[] = [];
   private toolUsed = false;
   private toolTarget = -1;
+  private tipAt = 0;
   private seedsHtml = '';
   private viewSlot = -1;
   private lastNewsT = 0;
@@ -650,7 +651,7 @@ export class UI {
     if (st.mode === 'wheel') {
       const def = POT_SIZES[st.size - 1];
       const why = s.kiln ? 'Four occupé' : s.clay < def.clay ? `Il manque ${def.clay - s.clay} 🧱` : '';
-      html = `<div class="row">${POT_SIZES.map((d, n) => `<button class="btn small ${st.size === n + 1 ? 'primary' : ''}" data-act="st-size" data-arg="${n + 1}">${d.name.replace(' pot', '')} · ${d.clay} 🧱</button>`).join('')}</div>
+      html = `<div class="row">${POT_SIZES.map((d, n) => `<button class="btn small ${st.size === n + 1 ? 'primary' : ''}" data-act="st-size" data-arg="${n + 1}">${d.name.replace(/ ?pot ?/i, '').replace(/^./, (c) => c.toUpperCase())} · ${d.clay} 🧱</button>`).join('')}</div>
         <p class="sub center">Tu as ${s.clay} 🧱. La taille décide de ce qui peut y pousser ; la forme, c'est toi.</p>
         <div class="row"><button class="btn" data-act="st-reset">↺ Recommencer</button><button class="btn gold" data-act="st-fire" ${why ? 'disabled' : ''}>${why || '🔥 Au four'}</button></div>`;
     } else if (st.mode === 'paint') {
@@ -838,6 +839,18 @@ export class UI {
       const ids = c ? Object.keys(s.seeds).sort((a, b) => sim.fitOf(SPECIES_BY_ID[b], c) - sim.fitOf(SPECIES_BY_ID[a], c)).slice(0, 6) : [];
       const html = ids.map((id) => `<button class="seedchip${c && sim.fitOf(SPECIES_BY_ID[id], c) >= 1 ? ' fit' : ''}" data-id="${id}">${EMOJI[id]}<small>×${s.seeds[id]}</small></button>`).join('');
       if (html !== this.seedsHtml) { this.seedsHtml = html; $('seeds').innerHTML = html; }
+      // Chaque geste est expliqué une seule fois, au moment où il devient utile.
+      const tip = (k: string, on: boolean, text: string) => {
+        if (!on || s.hints?.[k] || this.kind !== 'none' || this.studio.mode || Date.now() - this.tipAt < 6000) return;
+        (s.hints ??= {})[k] = true;
+        this.tipAt = Date.now();
+        this.toast(text);
+      };
+      tip('seeds', !!html, '🌱 Prends une graine dans la barquette et glisse-la sur un pot vide.');
+      tip('can', thirsty, '🚿 Une plante a soif : prends l\'arrosoir et promène-le au-dessus d\'elle.');
+      tip('glove', bugs, '🧤 Des chenilles ! Prends le gant et frotte la plante.');
+      tip('basket', ripe >= 2, '🧺 Plusieurs plantes en fleur : le panier les range en réserve d\'un seul geste.');
+      tip('drag', s.slots.filter((sl) => sl.pot).length >= 2 && s.stats.planted >= 2, '✋ Un pot se déplace en le faisant glisser du doigt vers un autre emplacement.');
     }
     // Emplacements
     s.slots.forEach((slot, i) => {
