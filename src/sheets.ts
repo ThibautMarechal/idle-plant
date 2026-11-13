@@ -206,8 +206,9 @@ export function marketHtml(ui: UI): string {
   }).join('');
   const news = s.news.slice(0, 6).map((n) => `<div class="news"><b class="${n.dir > 0 ? 'up' : 'down'}">${FAMILIES[n.family].icon} ${n.dir > 0 ? '▲' : '▼'}</b> ${esc(n.text)}</div>`).join('');
   return head(ui, '📈 Marché') + `<div class="sh-body">
+    <div class="card"><div class="ico">💐</div><div class="mid"><div class="nm">Ouvrir l'étal</div><div class="ds">Sers toi-même les clients : ils paient jusqu'à 70 % de plus que le cours.</div></div><button class="btn gold small" data-act="stall-go" ${s.stock.length ? '' : 'disabled'}>Ouvrir</button></div>
     <p class="sub">Le prix de vente suit le cours de chaque famille.</p>${rows}
-    <h3>Réserve (${s.stock.length}/${s.stockCap})</h3>${stock || '<p class="sub">Vide. Quand un cours est bas, garde tes plantes en fleur ici et vends au prochain pic.</p>'}
+    <h3>Réserve (${s.stock.length}/${s.stockCap})</h3>${stock || '<p class="sub">Vide. Avec le panier 🧺, range ici tes plantes en fleur, puis ouvre l\'étal.</p>'}
     <h3>Dernières nouvelles</h3>${news || '<p class="sub">Le marché est calme pour l\'instant.</p>'}</div>`;
 }
 

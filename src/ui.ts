@@ -4,6 +4,7 @@ import type { Scene3D } from './scene';
 import { buildPlant } from './plants3d';
 import { Studio } from './studio';
 import { Trek } from './trek';
+import { Stall } from './stall';
 import { finish, STYLES } from './styles';
 import { themeOf } from './themes';
 import * as sim from './sim';
@@ -48,6 +49,8 @@ export class UI {
   paintAt: { where: 'slot' | 'shelf'; k: number } = { where: 'slot', k: 0 };
   private studio!: Studio;
   private trek!: Trek;
+  private stall!: Stall;
+  private stallHtml = '';
   /** Outil tenu au doigt : arrosoir ou gant, promené au-dessus des plantes. */
   private tool = '';
   private toolEl: HTMLElement | null = null;
@@ -119,6 +122,18 @@ export class UI {
       else if (kind === 'dusk') { play('tap'); this.toast('Le soleil se couche : rentre au camp avant la nuit !'); }
     };
     this.trek.onEnd = () => this.trekHome();
+    $('stall').innerHTML = '<canvas id="slgl"></canvas><div class="tr-top"><div class="tr-row"><span class="pill" id="sl-earn"></span><span class="pill" id="sl-combo"></span><span class="pill" id="sl-queue"></span><button class="btn small" data-act="stall-close">Fermer</button></div></div><div id="sl-bubbles"></div><p id="sl-hint" class="on"></p>';
+    this.stall = new Stall($('slgl') as HTMLCanvasElement);
+    this.stall.wishOf = (left) => sim.stallWish(left);
+    this.stall.onSale = (h, match, patience, combo) => sim.stallSell(this.s, h, sim.stallMult(match, patience, combo));
+    this.stall.onChange = () => this.stallHud();
+    this.stall.onEvent = (kind, gain) => {
+      if (kind === 'great') { play('rare'); this.buzz(30); this.toast(`Client ravi ! +${fmt(gain ?? 0)} 🪙`); }
+      else if (kind === 'sale') { play('coin'); this.buzz(15); this.toast(`Vendu : +${fmt(gain ?? 0)} 🪙`); }
+      else if (kind === 'refuse') { play('tap'); this.buzz(50); this.toast('Ce n\'est pas ce qu\'il cherche.'); }
+      else if (kind === 'leave') { play('tap'); this.toast('Un client repart les mains vides : la série est perdue.'); }
+    };
+    this.stall.onEnd = () => this.stallEnd();
     $('tools').innerHTML = '<button class="tool" data-tool="shears">✂️</button><button class="tool" data-tool="basket">🧺</button><button class="tool" data-tool="can">🚿</button><button class="tool" data-tool="glove">🧤</button>';
     const grab = (tool: string, label: string, el: HTMLElement, e: PointerEvent) => {
       this.tool = tool;
@@ -150,7 +165,7 @@ export class UI {
       unlock();
       this.pointerDown = true;
       sx = e.clientX; sy = e.clientY;
-      onScene = !(e.target as HTMLElement).closest('#sheet, #modal, #bottom, #hud, #backdrop, #studio, #trek');
+      onScene = !(e.target as HTMLElement).closest('#sheet, #modal, #bottom, #hud, #backdrop, #studio, #trek, #stall');
       panning = false;
       if (!onScene || this.tool) return;
       fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -228,7 +243,7 @@ export class UI {
       }
     });
     app.addEventListener('wheel', (e) => {
-      if ((e.target as HTMLElement).closest('#sheet, #modal, #studio, #trek')) return;
+      if ((e.target as HTMLElement).closest('#sheet, #modal, #studio, #trek, #stall')) return;
       const at = local(e.clientX, e.clientY);
       this.scene.zoomAt(Math.exp(-e.deltaY * 0.0016), at.x, at.y);
     }, { passive: true });
@@ -573,6 +588,16 @@ export class UI {
         this.trekHud();
         break;
       }
+      case 'stall-go':
+        if (!s.stock.length) { this.toast('Ta réserve est vide : range d\'abord des plantes en fleur.'); break; }
+        this.close();
+        $('stall').className = 'on';
+        this.stall.open([...s.stock]);
+        this.stallHud();
+        break;
+      case 'stall-close':
+        this.stall.shut();
+        break;
       case 'trek-home':
         if (!this.trek.goHome()) this.toast('Reviens d\'abord au camp : suis la flèche ⛺.');
         break;
@@ -763,6 +788,43 @@ export class UI {
       set('tr-green', c.zone / 2);
       $('tr-cur').style.left = pc(c.pos);
     }
+  }
+
+  /** Bandeau de l'étal : recette, série, clients à venir, et une bulle par client qui attend. */
+  private stallHud(): void {
+    const t = this.stall;
+    if (!t.active) return;
+    const set = (id: string, txt: string) => { const el = $(id); if (el.textContent !== txt) el.textContent = txt; };
+    set('sl-earn', `🪙 +${fmt(t.earned)}`);
+    set('sl-combo', t.combo > 1 ? `🔥 Série de ${t.combo}` : `🌼 ${t.left} à vendre`);
+    set('sl-queue', `👥 ${t.queue}`);
+    const bs = t.bubbles();
+    const html = bs.map((b) => `<div class="bub${b.aim ? ' aim' : ''}${b.fit ? ' fit' : ''}${b.left < 0.3 ? ' late' : ''}" data-seat="${b.seat}"><b>${b.wish ? FAMILIES[b.wish].icon : '💛'}</b><small>${b.wish ? esc(FAMILIES[b.wish].name) : 'Coup de cœur'}</small><i><u></u></i></div>`).join('');
+    const box = $('sl-bubbles');
+    if (html !== this.stallHtml) { this.stallHtml = html; box.innerHTML = html; }
+    bs.forEach((b, k) => {
+      const el = box.children[k] as HTMLElement;
+      el.style.left = b.x + 'px';
+      el.style.top = b.y + 'px';
+      (el.querySelector('u') as HTMLElement).style.width = Math.max(0, b.left) * 100 + '%';
+    });
+    set('sl-hint', t.closing ? 'On ferme l\'étal…' : t.held >= 0 ? (t.target >= 0 ? 'Lâche pour servir ce client.' : `${EMOJI[t.heldId]} ${SPECIES_BY_ID[t.heldId].name} (${FAMILIES[SPECIES_BY_ID[t.heldId].family].name}) : glisse-la jusqu'au client qui la veut.`)
+      : t.served + t.missed === 0 ? 'Chaque client annonce la famille qu\'il cherche. Sers-le vite : il paie mieux, et les clients ravis à la suite font monter la série.' : '');
+    $('sl-hint').className = $('sl-hint').textContent ? 'on' : '';
+  }
+
+  /** Fin de la vente : la recette est fêtée, les invendus retournent en réserve. */
+  private stallEnd(): void {
+    if (!this.stall.active) return;
+    const { earned, served, missed, left } = this.stall;
+    this.stall.close();
+    $('stall').className = '';
+    this.stallHtml = '';
+    const m = $('modal');
+    m.innerHTML = `<div class="mtitle">${served ? 'Recette du jour' : 'Étal fermé'}</div><div class="take"><b>+${fmt(earned)} 🪙</b><span>${served} client${served > 1 ? 's' : ''} servi${served > 1 ? 's' : ''}${missed ? ` · ${missed} reparti${missed > 1 ? 's' : ''} sans rien` : ''}</span>${left ? `<span>${left} plante${left > 1 ? 's' : ''} retourne${left > 1 ? 'nt' : ''} en réserve.</span>` : ''}</div><button class="btn primary" data-act="closemodal">Retour à la serre</button>`;
+    m.classList.add('on');
+    if (earned) { play('level'); this.bumpCoins(); }
+    this.refresh(true);
   }
 
   /** Retour à la serre : le panier devient des graines, fêtées comme un sachet. */
@@ -987,7 +1049,7 @@ export class UI {
       if (html !== this.seedsHtml) { this.seedsHtml = html; $('seeds').innerHTML = html; }
       // Chaque geste est expliqué une seule fois, au moment où il devient utile.
       const tip = (k: string, on: boolean, text: string) => {
-        if (!on || s.hints?.[k] || this.kind !== 'none' || this.studio.mode || this.trek.active || Date.now() - this.tipAt < 6000) return;
+        if (!on || s.hints?.[k] || this.kind !== 'none' || this.studio.mode || this.trek.active || this.stall.active || Date.now() - this.tipAt < 6000) return;
         (s.hints ??= {})[k] = true;
         this.tipAt = Date.now();
         this.toast(text);
@@ -1054,7 +1116,7 @@ export class UI {
       else if (h.act === 'packets') { alert = s.packets > 0; txt = alert ? `🎁 ${s.packets} à ouvrir` : `🎁 ${clock(pwait)}`; }
       else if (h.act === 'atelier') { alert = kilnDone; txt = kilnDone ? '🏺 Pot cuit !' : kilnOn ? `🔥 ${clock(s.kiln!.left)}` : h.label; }
       else if (h.act === 'trek') { alert = rest <= 0; txt = rest > 0 ? `🥾 ${clock(rest)}` : '🥾 Partir'; }
-      else if (h.act === 'market') { alert = marketHot; txt = marketHot ? '📈 Ça grimpe !' : h.label; }
+      else if (h.act === 'market') { alert = marketHot; txt = marketHot ? '📈 Ça grimpe !' : s.stock.length ? `💐 Étal · ${s.stock.length}` : h.label; }
       const sp = el.firstElementChild!;
       if (sp.textContent !== txt) sp.textContent = txt;
       sp.classList.toggle('alert', alert);

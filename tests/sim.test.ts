@@ -308,4 +308,19 @@ describe('simulation', () => {
     sim.trekEnd(s, [], [], { clay: 2, coins: 40 });
     expect(s.coins).toBe(coins + 40);
   });
+
+  it('vend plus cher à l\'étal quand le client est ravi', () => {
+    const s = sim.newState(0);
+    const h = { sp: 'thym', q: 80, vr: 0 };
+    s.stock.push(h, { sp: 'thym', q: 80, vr: 0 });
+    const base = sim.saleValue(s, h);
+    expect(sim.stallMult(true, 1, 3)).toBeCloseTo(1.7);
+    expect(sim.stallMult(false, 0, 0)).toBeCloseTo(1.05);
+    const gain = sim.stallSell(s, h, sim.stallMult(true, 1, 0));
+    expect(gain).toBe(Math.round(base * 1.4));
+    expect(s.stock.length).toBe(1);
+    expect(sim.stallSell(s, h, 1.4)).toBe(0);
+    expect(sim.stallWish([], () => 0.9)).toBeNull();
+    expect(sim.stallWish(s.stock, () => 0.9)).toBe('aromatiques');
+  });
 });

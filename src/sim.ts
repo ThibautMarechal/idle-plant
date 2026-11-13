@@ -799,10 +799,10 @@ export function squash(s: State, i: number): boolean {
   return true;
 }
 
-function sell(s: State, h: Harvest): number {
+function sell(s: State, h: Harvest, mult = 1): number {
   const sp = SPECIES_BY_ID[h.sp];
   const m = s.market[sp.family];
-  const gain = saleValue(s, h);
+  const gain = Math.max(1, Math.round(saleValue(s, h) * mult));
   s.coins += gain;
   s.stats.sold++;
   s.stats.earned += gain;
@@ -882,6 +882,28 @@ export function sellStock(s: State, k: number): number {
   if (!h) return 0;
   s.stock.splice(k, 1);
   return sell(s, h);
+}
+
+/**
+ * L'étal du fleuriste : l'envie du prochain client. Le plus souvent une famille qu'on a en réserve,
+ * parfois une famille au hasard (il faudra le laisser repartir), parfois un simple coup de cœur (`null`).
+ */
+export function stallWish(left: Harvest[], rng: Rng = Math.random): Family | null {
+  const r = rng();
+  if (r < 0.18 || !left.length) return null;
+  if (r < 0.32) return FAMILY_IDS[Math.floor(rng() * FAMILY_IDS.length)];
+  return SPECIES_BY_ID[left[Math.floor(rng() * left.length)].sp].family;
+}
+/** Ce que paie un client de l'étal, par rapport au cours : mieux s'il a ce qu'il voulait, vite, et à la suite d'autres clients ravis. */
+export function stallMult(match: boolean, patience: number, combo: number): number {
+  return (match ? 1.15 + 0.25 * clamp(patience, 0, 1) : 1.05 + 0.1 * clamp(patience, 0, 1)) + Math.min(0.3, combo * 0.1);
+}
+/** Vend à l'étal une plante de la réserve ; `mult` vient de `stallMult`. */
+export function stallSell(s: State, h: Harvest, mult: number): number {
+  const k = s.stock.indexOf(h);
+  if (k < 0) return 0;
+  s.stock.splice(k, 1);
+  return sell(s, h, clamp(mult, 1, 1.7));
 }
 
 export function zoneIndexOfSlot(i: number): number {
