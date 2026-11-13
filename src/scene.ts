@@ -28,12 +28,21 @@ interface SlotView {
 }
 
 const v3 = (p: V3) => new THREE.Vector3(p[0], p[1], p[2]);
+/** En première personne, la vue se cale tous les huitièmes de tour. */
+const STEP = Math.PI / 4;
+/** Demi-champ horizontal, vue calée : un pan de mur et ses trois pots tiennent dans la largeur. */
+const HALF_FOV = 0.43;
 
 export class Scene3D {
   private renderer: THREE.WebGLRenderer;
   private scene = new THREE.Scene();
   private world = new THREE.Group();
-  private camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
+  private camera: THREE.OrthographicCamera | THREE.PerspectiveCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
+  /** Première personne : cap (0 = face au premier coin, sens horaire), inclinaison, grossissement. */
+  private look = { yaw: 0, pitch: 0, zoom: 1 };
+  private aim = { yaw: 0, pitch: 0, zoom: 1 };
+  private pannedAt = 0;
+  private now = 0;
   private theme!: Theme;
   private slots: SlotView[] = [];
   private mist: THREE.Mesh[] = [];
@@ -135,10 +144,20 @@ export class Scene3D {
     this.buildGear();
     finish(this.world);
 
-    const dir = new THREE.Vector3(Math.sin(t.yaw) * Math.cos(t.pitch), Math.sin(t.pitch), Math.cos(t.yaw) * Math.cos(t.pitch));
-    this.camera.position.copy(dir.multiplyScalar(30));
-    this.camera.lookAt(0, 0, 0);
+    if (t.fp) {
+      this.camera = new THREE.PerspectiveCamera(70, 1, 0.1, 200);
+      this.camera.rotation.order = 'YXZ';
+      this.camera.position.set(0, t.fp.eye, 0);
+      this.aim = { yaw: Math.round(this.aim.yaw / STEP) * STEP, pitch: t.fp.pitch, zoom: 1 };
+      this.look = { ...this.aim };
+    } else {
+      this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
+      const dir = new THREE.Vector3(Math.sin(t.yaw) * Math.cos(t.pitch), Math.sin(t.pitch), Math.cos(t.yaw) * Math.cos(t.pitch));
+      this.camera.position.copy(dir.multiplyScalar(30));
+      this.camera.lookAt(0, 0, 0);
+    }
     this.camera.updateMatrixWorld(true);
+    if (this.composer) for (const p of this.composer.passes) if ('camera' in p) (p as unknown as { camera: THREE.Camera }).camera = this.camera;
     this.resize();
   }
 
@@ -162,22 +181,21 @@ export class Scene3D {
       this.bugs.push(b);
       bugGroup.add(b);
     }
+    const fp = !!this.theme.fp;
+    const place = (grp: THREE.Group, p: V3) => { grp.position.set(p[0], p[1], p[2]); grp.rotation.y = fp ? -Math.atan2(p[0], -p[2]) : 0; };
     // Brumisateur.
-    const [mx, my, mz] = g.mist;
-    add('mist', box(0.5, 0.16, 0.22, 0xe8eef0, mx, my, mz), box(0.1, 0.1, 0.1, 0x6fc7e0, mx, my - 0.12, mz + 0.05));
+    place(add('mist', box(0.5, 0.16, 0.22, 0xe8eef0, 0, 0, 0), box(0.1, 0.1, 0.1, 0x6fc7e0, 0, -0.12, 0.05)), g.mist);
     // Lampe horticole sur pied.
-    const [lx, ly, lz] = g.lamp;
+    const ly = g.lamp[1];
     const glow = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.04, 0.26), new THREE.MeshBasicMaterial({ color: 0xff9ad8 }));
-    glow.position.set(lx, ly - 0.07, lz);
-    add('lamp', box(0.6, 0.1, 0.34, 0x4a4a52, lx, ly, lz), glow, box(0.05, ly, 0.05, 0x4a4a52, lx - 0.3, ly / 2, lz - 0.12));
+    glow.position.set(0, -0.07, 0);
+    place(add('lamp', box(0.6, 0.1, 0.34, 0x4a4a52, 0, 0, 0), glow, box(0.05, ly, 0.05, 0x4a4a52, -0.3, -ly / 2, -0.12)), g.lamp);
     // Radiateur.
-    const [hx, hy, hz] = g.heat;
     const fins: THREE.Object3D[] = [];
-    for (let k = 0; k < 5; k++) fins.push(box(0.1, 0.5, 0.3, 0xf2efe6, hx, hy + 0.3, hz + k * 0.13 - 0.26));
-    fins.push(box(0.06, 0.06, 0.06, 0xe2604f, hx, hy + 0.6, hz - 0.3));
-    add('heat', ...fins);
+    for (let k = 0; k < 5; k++) fins.push(fp ? box(0.1, 0.5, 0.2, 0xf2efe6, k * 0.13 - 0.26, 0.3, 0) : box(0.1, 0.5, 0.3, 0xf2efe6, 0, 0.3, k * 0.13 - 0.26));
+    fins.push(box(0.06, 0.06, 0.06, 0xe2604f, fp ? -0.36 : 0, 0.6, fp ? 0 : -0.3));
+    place(add('heat', ...fins), g.heat);
     // Ventilateur.
-    const [fx, fy, fz] = g.fan;
     const blades = new THREE.Group();
     for (let k = 0; k < 3; k++) {
       const arm = new THREE.Group();
@@ -185,15 +203,17 @@ export class Scene3D {
       arm.add(box(0.3, 0.07, 0.02, 0xdfe6e8, 0.15, 0, 0, false));
       blades.add(arm);
     }
-    blades.position.set(fx, fy + 0.5, fz + 0.06);
+    blades.position.set(0, 0.5, 0.06);
     this.fanBlades = blades;
-    add('fan', box(0.08, 0.5, 0.08, 0x7a8288, fx, fy + 0.25, fz), box(0.3, 0.05, 0.3, 0x7a8288, fx, fy + 0.03, fz), blades);
+    place(add('fan', box(0.08, 0.5, 0.08, 0x7a8288, 0, 0.25, 0), box(0.3, 0.05, 0.3, 0x7a8288, 0, 0.03, 0), blades), g.fan);
   }
 
   private buildSlot(i: number): SlotView {
     const base = v3(this.theme.slots[i]);
     const root = new THREE.Group();
     root.position.copy(base);
+    // En première personne, chaque pot fait face au jardinier.
+    if (this.theme.fp) root.rotation.y = -Math.atan2(base.x, -base.z);
     const marker = new THREE.Mesh(
       new THREE.RingGeometry(0.3, 0.38, 20),
       new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.75, side: THREE.DoubleSide }),
@@ -248,6 +268,7 @@ export class Scene3D {
     this.composer?.setSize(this.w, this.h);
     this.setView(-1);
     this.view = { ...this.goal };
+    this.look = { ...this.aim };
     this.applyView();
   }
 
@@ -256,6 +277,12 @@ export class Scene3D {
 
   /** Cadre la vue d'ensemble (-1) ou une zone (0..3). La caméra y glisse en douceur. */
   setView(zone: number): void {
+    if (this.theme.fp) {
+      this.aim.zoom = 1;
+      this.aim.pitch = this.theme.fp.pitch;
+      this.aim.yaw = zone >= 0 ? this.near(zone * 2 * STEP) : Math.round(this.aim.yaw / STEP) * STEP;
+      return;
+    }
     // Vue d'ensemble : tous les pots et la vitrine, entre le bandeau du haut et la barre du bas.
     const all = this.slots.map((s) => s.base.clone().setY(s.base.y + 1.4)).concat(this.slots.map((s) => s.base))
       .concat(this.theme.shows.map((p) => v3(p).setY(p[1] + 1.2)));
@@ -285,7 +312,17 @@ export class Scene3D {
   }
 
   /** Déplace la vue du doigt : le décor suit exactement. */
-  panBy(dx: number, dy: number): void {
+  panBy(dx: number, dy: number, edge = false): void {
+    if (this.theme.fp) {
+      // Le décor suit le doigt : un écran de large vaut le champ de vision.
+      const k = (2 * HALF_FOV) / this.aim.zoom / this.w;
+      this.aim.yaw -= dx * k * (edge ? 1.6 : 1);
+      if (!edge) this.aim.pitch = Math.max(-0.3, Math.min(0.5, this.aim.pitch + dy * k));
+      this.look = { ...this.aim };
+      this.pannedAt = this.now;
+      this.applyView();
+      return;
+    }
     if (!this.zoomed) return;
     const g = this.goal;
     g.cx -= dx / g.u;
@@ -297,6 +334,12 @@ export class Scene3D {
 
   /** Zoome d'un facteur k en gardant fixe le point (sx, sy) de l'écran. `smooth` : la caméra y glisse. */
   zoomAt(k: number, sx: number, sy: number, smooth = false): void {
+    if (this.theme.fp) {
+      this.aim.zoom = Math.max(1, Math.min(2.6, this.aim.zoom * k));
+      this.pannedAt = this.now;
+      if (!smooth) { this.look.zoom = this.aim.zoom; this.applyView(); }
+      return;
+    }
     const g = this.goal;
     const u2 = Math.max(this.fit.u, Math.min(this.w / 4.4, g.u * k));
     const X = g.cx - this.w / (2 * g.u) + sx / g.u;
@@ -310,15 +353,47 @@ export class Scene3D {
 
   /** Double-touche : on s'approche de l'endroit touché, ou on revient à la vue d'ensemble. */
   toggleZoom(sx: number, sy: number): void {
+    if (this.theme.fp) {
+      if (this.zoomed) { this.setView(-1); return; }
+      // On se tourne vers l'endroit touché et on s'en approche.
+      const t = Math.tan(HALF_FOV) / this.aim.zoom;
+      this.aim.yaw += Math.atan(((sx / this.w) * 2 - 1) * t);
+      this.aim.pitch = Math.max(-0.3, Math.min(0.5, this.aim.pitch + Math.atan((1 - (sy / this.h) * 2) * t * (this.h / this.w)) * 0.7));
+      this.aim.zoom = 1.9;
+      this.pannedAt = this.now;
+      return;
+    }
     if (this.zoomed) this.setView(-1);
     else this.zoomAt((this.w / 5.2) / this.goal.u, sx, sy, true);
   }
 
+  /** Cap équivalent à `yaw` le plus proche du cap actuel : on tourne par le plus court. */
+  private near(yaw: number): number {
+    const d = yaw - this.aim.yaw;
+    return this.aim.yaw + d - Math.round(d / (2 * Math.PI)) * 2 * Math.PI;
+  }
+
+  /** Vrai en première personne : il n'y a pas de vue d'ensemble, on est toujours près des pots. */
+  get close(): boolean {
+    return !!this.theme.fp || this.zoomed;
+  }
+
   get zoomed(): boolean {
+    if (this.theme.fp) return this.aim.zoom > 1.15;
     return this.goal.u > this.fit.u * 1.25;
   }
 
   private applyView(): void {
+    if (this.camera instanceof THREE.PerspectiveCamera) {
+      const c = this.camera, l = this.look;
+      c.aspect = this.w / this.h;
+      c.fov = Math.min(100, (2 * Math.atan(Math.tan(HALF_FOV) / c.aspect) * 180) / Math.PI);
+      c.zoom = l.zoom;
+      c.rotation.set(l.pitch, -l.yaw, 0);
+      c.updateProjectionMatrix();
+      c.updateMatrixWorld(true);
+      return;
+    }
     const v = this.view;
     this.unit = v.u;
     this.camera.left = v.cx - this.w / (2 * v.u);
@@ -400,6 +475,14 @@ export class Scene3D {
   dragTo(sx: number, sy: number): void {
     if (this.lifted < 0) return;
     const v = this.slots[this.lifted];
+    if (this.theme.fp) {
+      // Le pot reste à bout de bras, à la distance des étagères.
+      const d = new THREE.Vector3((sx / this.w) * 2 - 1, -(sy / this.h) * 2 + 1, 0.5).unproject(this.camera).sub(this.camera.position).normalize();
+      const t = 3.9 / Math.max(0.2, Math.hypot(d.x, d.z));
+      v.root.position.copy(this.camera.position).addScaledVector(d, t);
+      v.root.position.y -= 0.3;
+      return;
+    }
     const y = v.base.y + 0.45;
     const o = new THREE.Vector3((sx / this.w) * 2 - 1, -(sy / this.h) * 2 + 1, -1).unproject(this.camera);
     const d = new THREE.Vector3();
@@ -415,8 +498,18 @@ export class Scene3D {
 
   render(t: number, dt: number): void {
     const k = Math.min(1, dt * 7);
+    this.now = t;
+    if (this.theme.fp) {
+      const l = this.look, a = this.aim;
+      // Doigt levé, la vue se cale en douceur face au coin le plus proche.
+      if (t - this.pannedAt > 0.3 && a.zoom <= 1.15 && this.lifted < 0) a.yaw = Math.round(a.yaw / STEP) * STEP;
+      if (Math.abs(l.yaw - a.yaw) + Math.abs(l.pitch - a.pitch) + Math.abs(l.zoom - a.zoom) > 0.0005) {
+        l.yaw += (a.yaw - l.yaw) * k; l.pitch += (a.pitch - l.pitch) * k; l.zoom += (a.zoom - l.zoom) * k;
+        this.applyView();
+      }
+    }
     const v = this.view, g = this.goal;
-    if (Math.abs(v.u - g.u) + Math.abs(v.cx - g.cx) + Math.abs(v.cy - g.cy) + Math.abs(v.ay - g.ay) > 0.01) {
+    if (!this.theme.fp && Math.abs(v.u - g.u) + Math.abs(v.cx - g.cx) + Math.abs(v.cy - g.cy) + Math.abs(v.ay - g.ay) > 0.01) {
       v.u += (g.u - v.u) * k; v.cx += (g.cx - v.cx) * k; v.cy += (g.cy - v.cy) * k; v.ay += (g.ay - v.ay) * k;
       this.applyView();
     }
@@ -455,6 +548,8 @@ export class Scene3D {
   }
 
   private screen(p: THREE.Vector3): { x: number; y: number } {
+    // Derrière soi : hors écran.
+    if (this.theme.fp && this.cam(p).z > -0.3) return { x: -9999, y: -9999 };
     const q = p.clone().project(this.camera);
     return { x: (q.x * 0.5 + 0.5) * this.w, y: (1 - (q.y * 0.5 + 0.5)) * this.h };
   }
@@ -464,7 +559,7 @@ export class Scene3D {
     const v = this.slots[i];
     const foot = this.screen(v.base);
     const head = this.screen(v.base.clone().setY(v.base.y + 1.55));
-    return { x: foot.x, bottom: foot.y, top: head.y, unit: this.unit };
+    return { x: foot.x, bottom: foot.y, top: head.y, unit: this.theme.fp ? (foot.y - head.y) / 1.55 : this.unit };
   }
 
   /** Position écran d'un socle de la vitrine. */

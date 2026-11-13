@@ -43,7 +43,6 @@ export class UI {
   private lastHud = '';
   private lastQuest = '';
   private lastNav = '';
-  private lastOrder = '';
   /** Pot en cours de peinture : sur un emplacement ou sur l'étagère. */
   paintAt: { where: 'slot' | 'shelf'; k: number } = { where: 'slot', k: 0 };
   private studio!: Studio;
@@ -55,6 +54,7 @@ export class UI {
   private toolTarget = -1;
   private tipAt = 0;
   private seedsHtml = '';
+  private seedOpen = 0;
   private viewSlot = -1;
   private pointerDown = false;
   private slotEls: HTMLButtonElement[] = [];
@@ -114,7 +114,8 @@ export class UI {
     $('tools').querySelectorAll<HTMLElement>('.tool').forEach((b) => b.addEventListener('pointerdown', (e) => grab(b.dataset.tool!, b.textContent!, b, e)));
     // Graines à glisser : on prend une graine dans la barquette et on la lâche sur un pot vide.
     $('seeds').addEventListener('pointerdown', (e) => {
-      const chip = (e.target as HTMLElement).closest('.seedchip') as HTMLElement | null;
+      const chip = (e.target as HTMLElement).closest('.seedchip[data-id]') as HTMLElement | null;
+      if (chip) this.seedOpen = Date.now();
       if (chip) grab('seed:' + chip.dataset.id, EMOJI[chip.dataset.id!], chip, e);
     });
     const app = $('app');
@@ -176,7 +177,7 @@ export class UI {
         this.edgeAt = Date.now();
         const px = at.x < 44 ? 14 : at.x > rect.width - 44 ? -14 : 0;
         const py = at.y < 150 ? 14 : at.y > rect.height - 190 ? -14 : 0;
-        if (px || py) this.scene.panBy(px, py);
+        if (px || py) this.scene.panBy(px, py, true);
       }
       this.moveGhost(e.clientX, e.clientY);
     });
@@ -493,8 +494,12 @@ export class UI {
         if (gain) { this.coinFx(this.arg, gain); this.toast(`${who} est ravi : +${fmt(gain)} 🪙 et +${clay} argile.`); this.close(); }
         break;
       }
+      case 'seedbag':
+        this.seedOpen = this.seedOpen ? 0 : Date.now();
+        this.refresh(true);
+        break;
       case 'orderinfo':
-        if (s.order) this.toast(`Fais fleurir une plante de la famille ${FAMILIES[s.order.family].name.toLowerCase()}, qualité ${sim.qualityWord(s.order.minQ).toLowerCase()} ou mieux, puis choisis « Livrer » à la récolte.`);
+        if (s.order) this.toast(`📦 ${s.order.who} (+${s.order.coins} 🪙) : fais fleurir une plante de la famille ${FAMILIES[s.order.family].name.toLowerCase()}, qualité ${sim.qualityWord(s.order.minQ).toLowerCase()} ou mieux, puis choisis « Livrer » à la récolte.`);
         break;
       case 'buypot':
         if (sim.buyPot(s, this.arg)) { this.scene.pop(this.arg); this.buzz(20); this.open('seed', this.arg); }
@@ -819,8 +824,12 @@ export class UI {
     // Barquette de graines : visible dès qu'un pot vide attend.
     if (!this.tool) {
       const free = s.slots.some((sl, i) => sl.pot && !sl.plant && sim.slotOpen(s, i));
-      const ids = free ? Object.keys(s.seeds).sort((a, b) => s.seeds[b] - s.seeds[a]).slice(0, 7 - [shaggy, ripe >= 2, thirsty, bugs].filter(Boolean).length - 1) : [];
-      const html = ids.map((id) => `<button class="seedchip" data-id="${id}">${EMOJI[id]}<small>×${s.seeds[id]}</small></button>`).join('');
+      // Rangée : un seul bouton. On l'ouvre pour choisir une graine, elle se referme toute seule.
+      const total = Object.values(s.seeds).reduce((a, b) => a + b, 0);
+      if (this.seedOpen && (!free || Date.now() - this.seedOpen > 9000)) this.seedOpen = 0;
+      const ids = free && this.seedOpen ? Object.keys(s.seeds).sort((a, b) => s.seeds[b] - s.seeds[a]).slice(0, 5) : [];
+      const html = !free || !total ? '' : `<button class="seedchip bag${this.seedOpen ? ' open' : ''}" data-act="seedbag">${this.seedOpen ? '✕' : '🌱'}${this.seedOpen ? '' : `<small>×${total}</small>`}</button>`
+        + ids.map((id) => `<button class="seedchip" data-id="${id}">${EMOJI[id]}<small>×${s.seeds[id]}</small></button>`).join('');
       if (html !== this.seedsHtml) { this.seedsHtml = html; $('seeds').innerHTML = html; }
       // Chaque geste est expliqué une seule fois, au moment où il devient utile.
       const tip = (k: string, on: boolean, text: string) => {
@@ -860,7 +869,7 @@ export class UI {
         else if (i === this.dragTarget) { cls += ' ready'; txt = slot.pot ? '⇄' : '⬇'; }
         else if (!slot.pot) { cls += ' ghost'; txt = '+'; }
         else cls += ' hidden';
-      } else if (!slot.pot) { if (this.scene.zoomed) { cls += ' ghost'; txt = '+'; } else cls += ' hidden'; }
+      } else if (!slot.pot) { if (this.scene.close) { cls += ' ghost'; txt = '+'; } else cls += ' hidden'; }
       else if (!p) { cls += ' plus'; txt = '🌱'; }
       else if (p.pests > 0) { cls += ' alert'; txt = '🐛'.repeat(p.pests); }
       else if (p.cut === 1 && p.prog < 1) { cls += ' alert'; txt = '✂️'; }
@@ -909,15 +918,12 @@ export class UI {
 
     // Objectif
     const q = sim.currentQuest(s);
-    const qh = q ? `<button class="qt" data-act="questgo">🎯 ${esc(q.text)}${q.done(s) ? '' : ' <b>›</b>'}</button>${q.done(s)
-      ? `<button class="btn gold small" data-act="quest">+${q.reward} 🪙</button>`
-      : `<span class="chip">+${q.reward} 🪙</span>`}` : '';
-    if (qh !== this.lastQuest && (force || !this.pointerDown)) { $('quest').innerHTML = qh; this.lastQuest = qh; }
-
-    // Commande en cours
     const o = s.order;
-    const oh = o ? `<div class="qt" data-act="orderinfo"><small>Commande · ${clock(o.left)}</small><b>${esc(o.who)}</b> cherche ${FAMILIES[o.family].icon} ${FAMILIES[o.family].name.toLowerCase()}, ${sim.qualityWord(o.minQ).toLowerCase()} ou mieux</div><span class="chip">+${o.coins} 🪙 · +${o.clay} 🧱</span>` : '';
-    if (oh !== this.lastOrder && (force || !this.pointerDown)) { $('order').innerHTML = oh; this.lastOrder = oh; }
+    const oc = o ? `<button class="chip ord" data-act="orderinfo">📦 ${FAMILIES[o.family].icon} ${clock(o.left)}</button>` : '';
+    const qh = (q ? `<button class="qt" data-act="questgo">🎯 ${esc(q.text)}</button>${q.done(s)
+      ? `<button class="btn gold small" data-act="quest">+${q.reward} 🪙</button>`
+      : `<span class="chip">+${q.reward} 🪙</span>`}` : o ? '<span class="qt"></span>' : '') + oc;
+    if (qh !== this.lastQuest && (force || !this.pointerDown)) { $('quest').innerHTML = qh; this.lastQuest = qh; }
 
     // Navigation
     const seeds = Object.values(s.seeds).reduce((a, b) => a + b, 0);

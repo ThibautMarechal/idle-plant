@@ -32,6 +32,8 @@ export interface Theme {
   mistDir: V3;
   /** Où poser brumisateur, lampe, radiateur et ventilateur. */
   gear: { mist: V3; lamp: V3; heat: V3; fan: V3 };
+  /** Vue à la première personne : hauteur des yeux et inclinaison de départ. Sans ce champ, vue de haut. */
+  fp?: { eye: number; pitch: number };
   build(add: (...o: THREE.Object3D[]) => void): void;
 }
 
@@ -269,7 +271,101 @@ const balcon: Theme = {
   },
 };
 
-export const THEMES: Theme[] = [verriere, appartement, balcon];
+// ---------------------------------------------------------------- Pavillon (première personne)
+
+/** Point du pavillon : `lx` le long du pan de mur qui regarde vers `deg`, à `dist` du centre. */
+const at = (deg: number, lx: number, y: number, dist: number): V3 => {
+  const a = (deg * Math.PI) / 180;
+  return [lx * Math.cos(a) + dist * Math.sin(a), y, lx * Math.sin(a) - dist * Math.cos(a)];
+};
+const P = { A: 5.0, pots: 4.3, bench: 0.78, zoneDeg: [0, 90, 180, 270], showDeg: 315 };
+
+const pavillon: Theme = {
+  id: 'pavillon',
+  all: 'Serre',
+  zones: ['Sous le store', 'Près du bassin', 'Près de la porte', 'Table plein sud'],
+  name: 'Le pavillon',
+  desc: 'Debout au milieu de la serre : on tourne sur soi pour passer d\'un coin à l\'autre.',
+  bg: 'linear-gradient(180deg, #8fd0e8 0%, #c4e8ee 45%, #eaf5e4 70%, #bfe0b0 100%)',
+  yaw: 0,
+  pitch: 0,
+  fp: { eye: 1.5, pitch: 0.11 },
+  slots: [...P.zoneDeg.flatMap((d) => [-1.15, 0, 1.15].map((lx): V3 => at(d, lx, P.bench, P.pots - (lx ? 0.12 : 0)))),
+    ...P.zoneDeg.map((d): V3 => at(d, 0, 2.95, P.pots + 0.25))],
+  shows: [-1.14, -0.38, 0.38, 1.14].map((lx): V3 => at(P.showDeg, lx, 1.05, 4.45)),
+  bounds: [[-5.5, 0, -5.5], [5.5, 4, 5.5]],
+  pot: [0xc9714a, 0xd9825a],
+  showPot: [0xf4efe4, 0xffffff],
+  hemi: [0xfff6e0, 0x8fae9a, 1.25],
+  sun: [0xfff0d0, 1.9, [4, 10, 6]],
+  mist: at(90, 1.5, 1.0, 4.2),
+  mistDir: [0.1, 0.9, -2.4],
+  gear: { mist: at(90, -1.7, 2.7, 4.8), lamp: at(180, 1.75, 2.75, 4.5), heat: at(180, -0.58, 0.78, 4.78), fan: at(270, 0.58, P.bench, 4.7) },
+  build(add) {
+    const { A } = P;
+    const side = 2 * A * Math.tan(Math.PI / 8) + 0.1;
+    const wall = (deg: number, ...o: THREE.Object3D[]) => {
+      const g = new THREE.Group();
+      g.rotation.y = (-deg * Math.PI) / 180;
+      g.add(...o);
+      add(g);
+    };
+    // Jardin autour, puis dalle de la serre.
+    const lawn = new THREE.Mesh(new THREE.CylinderGeometry(70, 70, 0.1, 40), mat(0xa9d39a));
+    lawn.position.y = -0.1;
+    lawn.receiveShadow = true;
+    const slab = new THREE.Mesh(new THREE.CylinderGeometry(A / Math.cos(Math.PI / 8) + 0.1, A / Math.cos(Math.PI / 8) + 0.1, 0.1, 8), mat(0xe2cfae));
+    slab.rotation.y = Math.PI / 8;
+    slab.position.y = -0.04;
+    slab.receiveShadow = true;
+    add(lawn, slab);
+    // Huit pans vitrés, leurs montants, et la charpente qui monte vers le faîte.
+    for (let k = 0; k < 8; k++) {
+      const d = k * 45;
+      wall(d, box(side, 0.55, 0.2, 0xe9dcc6, 0, 0.275, -A), glass(side, 3.2, 0.04, 0, 2.15, -A, 0xcfeef5, 0.22),
+        box(0.12, 3.8, 0.12, 0xfdfaf2, side / 2, 1.9, -A), box(0.07, 3.2, 0.07, 0xfdfaf2, 0, 2.15, -A, false),
+        box(side, 0.12, 0.12, 0xfdfaf2, 0, 3.8, -A), box(side, 0.07, 0.07, 0xfdfaf2, 0, 2.0, -A, false));
+      const rafter = box(0.09, 0.09, 5.9, 0xfdfaf2, 0, 4.85, -2.65, false);
+      rafter.rotation.x = -0.37;
+      wall(d + 22.5, rafter);
+      // Buissons du jardin, derrière la vitre.
+      const [x, , z] = at(d + 11, 0, 0, 7.2 + (k % 3) * 0.8);
+      add(blob(0.9 + (k % 2) * 0.35, k % 2 ? 0x86c47c : 0x9ad08c, x, 0.5, z, 1));
+    }
+    const bench = (deg: number, color: number, leg: number, h = P.bench) => wall(deg, box(3.7, 0.12, 1.0, color, 0, h - 0.06, -P.pots - 0.05),
+      ...[-1.7, 1.7].flatMap((x) => [-3.95, -4.65].map((z) => box(0.12, h - 0.12, 0.12, leg, x, (h - 0.12) / 2, z))));
+    // Coin d'ombre : un store tendu au-dessus des pots.
+    bench(0, 0x8a6f5a, 0x6a5242);
+    const awning = box(3.9, 0.06, 1.7, 0x7f8fa6, 0, 4.25, -4.2);
+    awning.rotation.x = 0.22;
+    wall(0, awning);
+    // Bassin : une auge de pierre pleine d'eau, les pots posés sur sa margelle.
+    wall(90, box(3.9, P.bench, 1.1, 0xb9b2a6, 0, P.bench / 2, -P.pots - 0.05), box(3.9, 0.5, 0.7, 0xa7a096, 0, 0.25, -3.45));
+    const pool = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.05, 0.5), new THREE.MeshStandardMaterial({ color: 0x6fc7e0, roughness: 0.15, flatShading: true }));
+    pool.position.set(...at(90, 0, 0.5, 3.45));
+    pool.rotation.y = -Math.PI / 2;
+    pool.userData.water = true;
+    add(pool);
+    // Près de la porte : établi clair, et la porte sur le pan voisin.
+    bench(180, 0xd9b98a, 0xb99667);
+    wall(135, box(1.5, 2.9, 0.14, 0x5f9f8a, 0, 1.45, -A + 0.05), box(1.0, 1.3, 0.16, 0xcfeef5, 0, 2.0, -A + 0.05, false),
+      box(0.1, 0.1, 0.12, 0xf2c94c, 0.55, 1.3, -A + 0.16, false), box(1.6, 0.03, 0.9, 0xb96f5a, 0, 0.02, -A + 0.7, false));
+    // Table plein sud.
+    bench(270, 0xc99a66, 0xa9794f);
+    // Coin atelier : tour, four et pots qui sèchent.
+    wall(45, box(2.6, 0.12, 0.9, 0xb98a5a, 0, 0.9, -4.4), box(0.12, 0.84, 0.8, 0x8a5f3c, -1.2, 0.42, -4.4), box(0.12, 0.84, 0.8, 0x8a5f3c, 1.2, 0.42, -4.4),
+      box(0.9, 1.1, 0.8, 0xb5654a, -0.75, 1.51, -4.45), box(0.4, 0.45, 0.06, 0x3a2a26, -0.75, 1.35, -4.03, false), box(0.3, 0.3, 0.02, 0xffb347, -0.75, 1.35, -3.99, false),
+      cyl(0.2, 0.15, 0.3, 0xc9714a, 0.35, 1.11, -4.35, 10), cyl(0.15, 0.11, 0.24, 0xd9825a, 0.8, 1.08, -4.3, 10), cyl(0.3, 0.3, 0.06, 0x9a8f86, 0.45, 0.99, -4.35, 14));
+    // Coin réserve : caisses, sacs de terreau, arrosoir.
+    wall(225, box(0.9, 0.7, 0.9, 0xb98a5a, -0.8, 0.35, -4.3), box(0.75, 0.6, 0.75, 0xa9794f, -0.7, 1.0, -4.35), box(0.9, 0.7, 0.9, 0xa9794f, 0.25, 0.35, -4.35),
+      box(0.8, 0.9, 0.4, 0xd8c9a8, 1.2, 0.45, -4.5), box(0.5, 0.25, 0.02, 0x6fae8a, 1.2, 0.55, -4.29, false));
+    add(wateringCan(...at(225, 0.3, 0.7, 4.3), 0.8));
+    // Vitrine : un présentoir à gradin, face aux visiteurs.
+    wall(P.showDeg, box(3.3, 0.1, 0.8, 0xf4efe4, 0, 1.0, -4.45), box(3.3, 0.95, 0.7, 0xa9794f, 0, 0.475, -4.45), box(3.3, 0.06, 0.06, 0xf2c94c, 0, 0.9, -4.08, false));
+  },
+};
+
+export const THEMES: Theme[] = [pavillon, verriere, appartement, balcon];
 export function themeOf(id: string | undefined): Theme {
   return THEMES.find((t) => t.id === id) ?? THEMES[0];
 }

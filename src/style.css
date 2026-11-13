@@ -389,3 +389,16 @@ body[data-style="pixel"] .tabs .tab { font-size: 10px; }
 .hudrow { gap: 6px; }
 .hudrow .pill { padding: 8px 9px; }
 body[data-style="bd"] .hudrow .pill { padding: 7px 8px; font-size: 14px; }
+
+/* Bas d'écran allégé : une ligne d'objectif, une barre de navigation basse, les graines rangées. */
+#bottom { gap: 6px; padding-bottom: calc(8px + var(--safe-b)); }
+#order { display: none; }
+#quest { padding: 5px 6px 5px 10px; font-size: 12px; gap: 6px; border-radius: 14px; }
+#quest .qt { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+#quest .chip { flex: none; font-size: 11px; padding: 2px 7px; }
+#quest .chip.ord { font-weight: 800; }
+.navb { gap: 0; padding: 4px 2px 3px; font-size: 10px; border-radius: 14px; }
+.navb span { font-size: 19px; }
+#nav { gap: 5px; grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.seedchip.bag.open { font-size: 16px; font-weight: 800; }
+#dock #seeds { flex-wrap: nowrap; }

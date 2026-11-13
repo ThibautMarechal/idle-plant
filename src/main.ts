@@ -14,6 +14,8 @@ const away = sim.advance(state, clock());
 
 // Direction artistique retenue : la bande dessinée. Les parties commencées dans un autre style y passent une fois.
 if (!state.hints?.bd) { state.style = 'bd'; (state.hints ??= {}).bd = true; }
+// Essai en cours : la vue à la première personne. Elle devient le décor par défaut, une fois.
+if (!state.hints?.fp) { state.theme = 'pavillon'; (state.hints ??= {}).fp = true; }
 const scene = new Scene3D(document.getElementById('gl') as HTMLCanvasElement, state.theme, state.style);
 const ui = new UI(state, scene, () => {
   sim.wipe();
@@ -22,6 +24,7 @@ const ui = new UI(state, scene, () => {
   state.theme = theme;
   state.style = style;
   (state.hints ??= {}).bd = true;
+  state.hints.fp = true;
   ui.setState(state);
 });
 
