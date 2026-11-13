@@ -70,6 +70,8 @@ export class UI {
   private celebrate: string[] = [];
   private drag = -1;
   private dragTarget = -1;
+  private doorAt = 0;
+  private crossedAt = 0;
   private holdAt: { x: number; y: number; i: number; t: number } | null = null;
   private edgeAt = 0;
   private showEl!: HTMLButtonElement;
@@ -257,6 +259,21 @@ export class UI {
       if (d < bestD && d < r.unit * 0.95) { bestD = d; best = i; }
     });
     if (best !== this.dragTarget) { this.dragTarget = best; this.refresh(true); }
+    // Le pot tenu un instant devant la porte la franchit avec nous : serre et jardin s'échangent leurs pots.
+    const hot = themeOf(this.scene.themeId).fp?.hot ?? [];
+    const k = hot.findIndex((h) => h.act === 'door');
+    const dr = k >= 0 && this.s.zonesOpen[GARDEN_INDEX] ? this.scene.hotRect(k) : null;
+    const over = !!dr && Date.now() - this.crossedAt > 1500 && x > 44 && x < rect.width - 44 && Math.hypot(dr.x - x, dr.y - y) < dr.unit * hot[k].r;
+    if (!over) this.doorAt = 0;
+    else if (!this.doorAt) this.doorAt = Date.now();
+    else if (Date.now() - this.doorAt > 450) {
+      this.doorAt = 0;
+      this.crossedAt = Date.now();
+      this.scene.walk(this.scene.spot ? 0 : 1, this.scene.spot ? 0 : 135);
+      play('tap');
+      this.buzz(25);
+      this.refresh(true);
+    }
   }
 
   /** L'outil suit le doigt et agit sur chaque plante qu'il survole. */
@@ -981,6 +998,7 @@ export class UI {
       tip('glove', bugs, '🧤 Des chenilles ! Prends le gant et frotte la plante.');
       tip('shears', shaggy, '✂️ Une plante fait des pousses folles : passe le sécateur dessus, elle poussera plus vite et plus belle.');
       tip('basket', ripe >= 2, '🧺 Plusieurs plantes en fleur : le panier les range en réserve d\'un seul geste.');
+      tip('door', this.scene.fp && s.zonesOpen[GARDEN_INDEX] && s.slots.some((sl) => sl.pot), '🚪 Pour sortir un pot au jardin, fais-le glisser sur la porte et tiens-le là un instant.');
       tip('drag', s.slots.filter((sl) => sl.pot).length >= 2 && s.stats.planted >= 2, '✋ Un pot se déplace en le faisant glisser du doigt vers un autre emplacement.');
     }
     // Emplacements
@@ -1031,7 +1049,8 @@ export class UI {
     this.hotEls.forEach((el, k) => {
       const h = themeOf(this.scene.themeId).fp!.hot[k];
       let txt = h.label, alert = false;
-      if (h.act === 'door') txt = !s.zonesOpen[GARDEN_INDEX] ? `🔒 Jardin · ${fmt(sim.ZONE_PRICES[GARDEN_INDEX])} 🪙` : this.scene.spot ? '🚪 Rentrer' : '🌳 Jardin';
+      if (h.act === 'door' && this.drag >= 0 && s.zonesOpen[GARDEN_INDEX]) { txt = '🚪 Tiens le pot ici'; alert = true; }
+      else if (h.act === 'door') txt = !s.zonesOpen[GARDEN_INDEX] ? `🔒 Jardin · ${fmt(sim.ZONE_PRICES[GARDEN_INDEX])} 🪙` : this.scene.spot ? '🚪 Rentrer' : '🌳 Jardin';
       else if (h.act === 'packets') { alert = s.packets > 0; txt = alert ? `🎁 ${s.packets} à ouvrir` : `🎁 ${clock(pwait)}`; }
       else if (h.act === 'atelier') { alert = kilnDone; txt = kilnDone ? '🏺 Pot cuit !' : kilnOn ? `🔥 ${clock(s.kiln!.left)}` : h.label; }
       else if (h.act === 'trek') { alert = rest <= 0; txt = rest > 0 ? `🥾 ${clock(rest)}` : '🥾 Partir'; }
