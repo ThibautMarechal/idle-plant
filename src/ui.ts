@@ -1,4 +1,4 @@
-import { BIOMES, TREK_TIME, GARDEN_INDEX, SEASONS, FAMILIES, FAMILY_IDS, GLAZES, PAINTS, POT_SIZES, RARITIES, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, STAGES, ZONES } from './data';
+import { BIOMES, GARDEN_INDEX, SEASONS, FAMILIES, FAMILY_IDS, GLAZES, PAINTS, POT_SIZES, RARITIES, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, STAGES, ZONES } from './data';
 import type { Family } from './data';
 import type { Scene3D } from './scene';
 import { buildPlant } from './plants3d';
@@ -107,6 +107,7 @@ export class UI {
     this.trek = new Trek($('trgl') as HTMLCanvasElement);
     this.trek.onChange = () => this.trekHud();
     this.trek.onEvent = (kind, id) => {
+      if (kind === 'clay' || kind === 'coins') { play('coin'); this.buzz(12); this.toast(kind === 'clay' ? `Un filon d'argile : +${id} 🧱` : `Une bourse oubliée : +${id} 🪙`); return; }
       const name = id ? `${EMOJI[id]} ${SPECIES_BY_ID[id].name}` : '';
       if (kind === 'perfect') { play('rare'); this.buzz(30); this.toast(`Coupe parfaite ! ${name} et une graine en plus.`); }
       else if (kind === 'pick') { play('plant'); this.buzz(15); this.toast(`${name} dans le panier.`); }
@@ -356,6 +357,7 @@ export class UI {
       return b;
     });
     document.body.dataset.style = this.scene.styleId;
+    document.body.dataset.fp = this.scene.fp ? '1' : '';
   }
 
   setState(s: State): void {
@@ -538,13 +540,19 @@ export class UI {
         if (sim.buyBasket(s)) { play('craft'); this.buzz(20); }
         else this.toast('Pas assez de pièces.');
         break;
+      case 'trek-gear': {
+        const k = n === 1 ? 'lantern' : 'boots';
+        if (sim.buyTrekGear(s, k)) { play('craft'); this.buzz(20); this.toast(k === 'boots' ? 'Bottes de marche : tu avances plus vite.' : 'Lanterne : la nuit tombe plus tard.'); }
+        else this.toast('Pas assez de pièces.');
+        break;
+      }
       case 'trek-go': {
         const finds = sim.trekFinds(s, n, Math.random);
         if (!finds.length) { this.toast('Repose-toi encore un peu avant de repartir.'); break; }
         this.close();
         $('trek').className = 'on';
         $('trek').style.background = `linear-gradient(180deg, ${BIOMES[n].sky[0]} 0%, ${BIOMES[n].sky[1]} 60%)`;
-        this.trek.open(n, finds, sim.basketCap(s));
+        this.trek.open(n, finds, sim.trekSetup(s));
         this.trekHud();
         break;
       }
@@ -698,12 +706,12 @@ export class UI {
     const t = this.trek;
     if (!t.active) return;
     const px = (el: HTMLElement, x: number, y: number) => { el.style.left = x + 'px'; el.style.top = y + 'px'; };
-    ($('tr-bar') as HTMLElement).style.width = (t.left / TREK_TIME) * 100 + '%';
+    ($('tr-bar') as HTMLElement).style.width = t.day * 100 + '%';
     $('tr-bar').classList.toggle('late', t.left < 35);
     ($('tr-night') as HTMLElement).style.opacity = String(t.night * 0.55);
     const count: Record<string, number> = {};
     for (const id of t.bonus) count[id] = (count[id] ?? 0) + 1;
-    const b = `🧺 ${t.basket.map((id) => EMOJI[id] + (count[id]-- > 0 ? '✨' : '')).join('')}${'·'.repeat(Math.max(0, t.cap - t.basket.length))}`;
+    const b = `🧺 ${t.basket.map((id) => EMOJI[id] + (count[id]-- > 0 ? '✨' : '')).join('')}${'·'.repeat(Math.max(0, t.cap - t.basket.length))}${t.loot.clay ? ` 🧱${t.loot.clay}` : ''}${t.loot.coins ? ` 🪙${t.loot.coins}` : ''}`;
     if ($('tr-basket').textContent !== b) $('tr-basket').textContent = b;
     const dist = t.atCamp ? '⛺ Au camp' : `⛺ ${Math.round(t.campDist)} m`;
     if ($('tr-dist').textContent !== dist) $('tr-dist').textContent = dist;
@@ -744,7 +752,9 @@ export class UI {
   private trekHome(): void {
     if (!this.trek.active) return;
     const lost = this.trek.lost;
-    const got = sim.trekEnd(this.s, this.trek.basket, this.trek.bonus);
+    const loot = { ...this.trek.loot };
+    const got = sim.trekEnd(this.s, this.trek.basket, this.trek.bonus, loot);
+    const extra = [loot.clay ? `+${loot.clay} argile` : '', loot.coins ? `+${fmt(loot.coins)} 🪙` : ''].filter(Boolean).join(' et ');
     this.trek.close();
     $('trek').className = '';
     this.trekLabel = '';
@@ -752,7 +762,8 @@ export class UI {
       this.showPacket(got);
       const title = $('modal').querySelector('.mtitle');
       if (title) title.textContent = lost ? 'Ce qu\'il reste de ta cueillette' : 'Ta cueillette';
-    } else this.toast(lost ? 'La nuit t\'a tout fait perdre. Rentre plus tôt la prochaine fois !' : 'Tu rentres le panier vide. La prochaine sortie sera la bonne !');
+      if (extra) this.toast(`Ramassé en chemin : ${extra}.`);
+    } else this.toast(extra ? `Panier vide, mais tu rapportes ${extra}.` : lost ? 'La nuit t\'a tout fait perdre. Rentre plus tôt la prochaine fois !' : 'Tu rentres le panier vide. La prochaine sortie sera la bonne !');
     this.refresh(true);
   }
 
@@ -1012,11 +1023,22 @@ export class UI {
         (bar.firstElementChild as HTMLElement).style.width = Math.round(p!.prog * 100) + '%';
       }
     });
+    // Les étiquettes du décor disent ce qui s'y passe : sachet prêt, four en cours, repos avant la prochaine sortie.
+    const pwait = Math.max(0, Math.ceil(s.packetIn));
+    const kilnOn = !!s.kiln, kilnDone = kilnOn && s.kiln!.left <= 0;
+    const rest = sim.trekOf(s).rest;
+    const marketHot = FAMILY_IDS.some((f) => s.market[f].p >= 1.25) && s.stock.length > 0;
     this.hotEls.forEach((el, k) => {
-      if (themeOf(this.scene.themeId).fp!.hot[k].act !== 'door') return;
-      const txt = !s.zonesOpen[GARDEN_INDEX] ? `🔒 Jardin · ${fmt(sim.ZONE_PRICES[GARDEN_INDEX])} 🪙` : this.scene.spot ? '🚪 Rentrer' : '🌳 Jardin';
+      const h = themeOf(this.scene.themeId).fp!.hot[k];
+      let txt = h.label, alert = false;
+      if (h.act === 'door') txt = !s.zonesOpen[GARDEN_INDEX] ? `🔒 Jardin · ${fmt(sim.ZONE_PRICES[GARDEN_INDEX])} 🪙` : this.scene.spot ? '🚪 Rentrer' : '🌳 Jardin';
+      else if (h.act === 'packets') { alert = s.packets > 0; txt = alert ? `🎁 ${s.packets} à ouvrir` : `🎁 ${clock(pwait)}`; }
+      else if (h.act === 'atelier') { alert = kilnDone; txt = kilnDone ? '🏺 Pot cuit !' : kilnOn ? `🔥 ${clock(s.kiln!.left)}` : h.label; }
+      else if (h.act === 'trek') { alert = rest <= 0; txt = rest > 0 ? `🥾 ${clock(rest)}` : '🥾 Partir'; }
+      else if (h.act === 'market') { alert = marketHot; txt = marketHot ? '📈 Ça grimpe !' : h.label; }
       const sp = el.firstElementChild!;
       if (sp.textContent !== txt) sp.textContent = txt;
+      sp.classList.toggle('alert', alert);
     });
     this.lockEls.forEach((el, r) => {
       el.hidden = s.zonesOpen[r];
@@ -1051,10 +1073,13 @@ export class UI {
     // Objectif
     const q = sim.currentQuest(s);
     const o = s.order;
-    const oc = o ? `<button class="chip ord" data-act="orderinfo">📦 ${FAMILIES[o.family].icon} ${clock(o.left)}</button>` : '';
+    // Sans barre du bas, ce qui est prêt se signale ici d'une pastille, même quand on regarde ailleurs.
+    const al = this.scene.fp ? (s.packets > 0 ? `<button class="chip ord al" data-act="nav" data-arg="packets">🎁 ${s.packets}</button>` : '')
+      + (kilnDone ? '<button class="chip ord al" data-act="nav" data-arg="atelier">🏺 !</button>' : '') : '';
+    const oc = al + (o ? `<button class="chip ord" data-act="orderinfo">📦 ${FAMILIES[o.family].icon} ${clock(o.left)}</button>` : '');
     const qh = (q ? `<button class="qt" data-act="questgo">🎯 ${esc(q.text)}</button>${q.done(s)
       ? `<button class="btn gold small" data-act="quest">+${q.reward} 🪙</button>`
-      : `<span class="chip">+${q.reward} 🪙</span>`}` : o ? '<span class="qt"></span>' : '') + oc;
+      : `<span class="chip">+${q.reward} 🪙</span>`}` : oc ? '<span class="qt"></span>' : '') + oc;
     if (qh !== this.lastQuest && (force || !this.pointerDown)) { $('quest').innerHTML = qh; this.lastQuest = qh; }
 
     // Navigation

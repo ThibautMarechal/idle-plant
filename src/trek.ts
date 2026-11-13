@@ -52,11 +52,17 @@ export class Trek {
   cut: { pos: number; dir: number; mid: number; zone: number; speed: number } | null = null;
   /** Manette sous le pouce, en pixels : origine et écart. */
   stick: { x: number; y: number; dx: number; dy: number } | null = null;
+  /** Ramassé en chemin : argile et pièces. */
+  loot = { clay: 0, coins: 0 };
+  private total = TREK_TIME;
+  private speed = 1;
+  private pickups: { x: number; z: number; kind: 'clay' | 'coins'; n: number; obj: THREE.Object3D; got: boolean }[] = [];
+  private glints: THREE.Mesh[] = [];
   /** Vrai si la nuit est tombée loin du camp. */
   lost = false;
   slowed = false;
   onChange: () => void = () => {};
-  onEvent: (kind: 'pick' | 'perfect' | 'miss' | 'reveal' | 'slow' | 'dusk', id?: string) => void = () => {};
+  onEvent: (kind: 'pick' | 'perfect' | 'miss' | 'reveal' | 'slow' | 'dusk' | 'clay' | 'coins', id?: string) => void = () => {};
   onEnd: () => void = () => {};
 
   private renderer: THREE.WebGLRenderer | null = null;
@@ -90,7 +96,11 @@ export class Trek {
     window.addEventListener('resize', () => { if (this.active) this.resize(); });
   }
 
-  open(biome: number, finds: { id: string; hidden: boolean; tier: number }[], cap: number): void {
+  open(biome: number, finds: { id: string; hidden: boolean; tier: number }[], setup: { time: number; speed: number; cap: number }): void {
+    const cap = setup.cap;
+    this.total = setup.time;
+    this.speed = setup.speed;
+    this.loot = { clay: 0, coins: 0 };
     if (!this.renderer) {
       this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, alpha: true });
       this.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
@@ -104,7 +114,7 @@ export class Trek {
     this.cap = cap;
     this.basket = [];
     this.bonus = [];
-    this.left = TREK_TIME;
+    this.left = setup.time;
     this.near = -1;
     this.cut = null;
     this.stick = null;
@@ -135,6 +145,8 @@ export class Trek {
     this.sway = [];
     this.solids = [];
     this.slows = [];
+    this.pickups = [];
+    this.glints = [];
   }
 
   resize(): void {
@@ -188,6 +200,14 @@ export class Trek {
         cover.add(mesh(new THREE.IcosahedronGeometry(0.6, 1), 0x6fbf78, 0, 1.05, 0));
         root.add(cover);
         plant.visible = false;
+      }
+      // Une lueur monte des plantes rares : on la voit de loin, à travers la brume.
+      if (f.tier > 0) {
+        const glint = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.5, 16, 8, 1, true), new THREE.MeshBasicMaterial({ color: f.tier === 2 ? 0xffd84d : 0xbfe9ff, transparent: true, opacity: f.tier === 2 ? 0.34 : 0.2, depthWrite: false, fog: false, side: THREE.DoubleSide }));
+        glint.position.y = 8;
+        glint.userData.raw = true;
+        root.add(glint);
+        this.glints.push(glint);
       }
       w.add(root);
       return { id: f.id, tier: f.tier, pos, root, cover, rub: 0, taken: false, fly: 0 };
@@ -286,6 +306,22 @@ export class Trek {
       scatter(70, 2, 46, 0.2, (x, z, k) => tuft(x, z, k % 2 ? 0xb9b86a : 0xa9a85a, 0.9));
     }
 
+    // À ramasser en marchant : des mottes d'argile et des pièces perdues, plus généreuses loin du camp.
+    scatter(16, 8, 43, 0.6, (x, z, k) => {
+      const kind = k % 2 ? 'clay' : 'coins';
+      const far = Math.hypot(x, z);
+      const obj = new THREE.Group();
+      if (kind === 'clay') obj.add(mesh(new THREE.IcosahedronGeometry(0.26, 0), 0xb9744f, 0, 0.2, 0), mesh(new THREE.IcosahedronGeometry(0.16, 0), 0xc98360, 0.24, 0.12, 0.1));
+      else {
+        const coin = mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.06, 12), 0xf2c94c, 0, 0.55, 0);
+        coin.rotation.x = Math.PI / 2;
+        obj.add(coin);
+      }
+      obj.position.set(x, 0, z);
+      w.add(obj);
+      this.pickups.push({ x, z, kind, n: kind === 'clay' ? (far > 26 ? 2 : 1) : Math.round(far / 5) * 5 + 10, obj, got: false });
+    });
+
     // Le camp : une tente, un fanion, le feu. C'est là qu'il faut être quand la nuit tombe.
     const tent = mesh(new THREE.ConeGeometry(1.5, 1.9, 4), 0xe2804f, 0, 0.95, 0);
     tent.rotation.y = Math.PI / 4;
@@ -345,6 +381,10 @@ export class Trek {
   /** 0 en plein jour, 1 à la nuit tombée. */
   get night(): number {
     return Math.max(0, Math.min(1, 1 - this.left / (TREK_TIME * 0.45)));
+  }
+  /** Part du jour qui reste, 0..1. */
+  get day(): number {
+    return this.left / this.total;
   }
 
   // ---------- gestes ----------
@@ -489,7 +529,7 @@ export class Trek {
       const slowed = this.slows.some((z) => Math.hypot(z.x - this.pos.x, z.z - this.pos.z) < z.r);
       if (slowed && !this.slowed) this.onEvent('slow');
       this.slowed = slowed;
-      const v = fwd * (fwd > 0 ? SPEED : SPEED * 0.5) * (slowed ? 0.35 : 1) * dt;
+      const v = fwd * (fwd > 0 ? SPEED : SPEED * 0.5) * this.speed * (slowed ? 0.35 : 1) * dt;
       this.pos.x += Math.sin(this.yaw) * v;
       this.pos.z += -Math.cos(this.yaw) * v;
       this.step += Math.abs(v);
@@ -509,6 +549,17 @@ export class Trek {
     cam.position.set(this.pos.x, EYE + Math.sin(this.step * 2.4) * 0.04, this.pos.z);
     cam.rotation.set(this.pitch, -this.yaw, 0);
     cam.updateMatrixWorld(true);
+
+    // On ramasse ce sur quoi on marche.
+    for (const p of this.pickups) {
+      if (p.got) { if (p.obj.visible) { p.obj.position.y += dt * 4; p.obj.scale.multiplyScalar(1 - Math.min(1, dt * 5)); if (p.obj.position.y > 1.6) p.obj.visible = false; } continue; }
+      if (p.kind === 'coins') p.obj.rotation.y = t * 2.5;
+      if (this.ended || Math.hypot(p.x - this.pos.x, p.z - this.pos.z) > 1.3) continue;
+      p.got = true;
+      this.loot[p.kind] += p.n;
+      this.onEvent(p.kind, String(p.n));
+    }
+    this.glints.forEach((g, i) => { g.rotation.y = t * 0.6 + i; g.visible = !!g.parent?.visible && g.parent.scale.x > 0.5; });
 
     // La plante à portée de main : la plus proche, devant soi.
     if (!this.cut) {

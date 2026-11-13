@@ -1,4 +1,4 @@
-import { BASKETS, BIOMES, TREK_REST, GARDEN, GARDEN_CLIMATE, GARDEN_FIRST, GARDEN_INDEX, PROF_MAX, PROF_MIN, BASE_SLOTS, SEASONS, SEASON_LENGTH, CLIENTS, FAMILIES, FAMILY_IDS, GLAZES, NEWS, POT_SIZES, RARITIES, SLOT_COUNT, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, ZONES } from './data';
+import { BASKETS, BIOMES, TREK_GEAR, TREK_REST, TREK_TIME, GARDEN, GARDEN_CLIMATE, GARDEN_FIRST, GARDEN_INDEX, PROF_MAX, PROF_MIN, BASE_SLOTS, SEASONS, SEASON_LENGTH, CLIENTS, FAMILIES, FAMILY_IDS, GLAZES, NEWS, POT_SIZES, RARITIES, SLOT_COUNT, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, ZONES } from './data';
 import type { Family, Rarity, Species, Zone } from './data';
 
 /** `vr` : variante, 0 normale, 1 panachée, 2 dorée. */
@@ -83,7 +83,7 @@ export interface State {
   /** Astuces déjà montrées une fois. */
   hints?: Record<string, boolean>;
   /** Expéditions : repos restant (s), taille du panier, milieux ouverts, sorties faites. */
-  trek?: { rest: number; basket: number; open: boolean[]; done: number };
+  trek?: { rest: number; basket: number; open: boolean[]; done: number; boots?: boolean; lantern?: boolean };
   stats: { sold: number; earned: number; bestMult: number; planted: number; opened: number; crafted: number; painted: number; orders: number; cuttings: number; crossed?: number; contests?: number };
   lastTick: number;
 }
@@ -679,6 +679,18 @@ export function openBiome(s: State, b: number): boolean {
   t.open[b] = true;
   return true;
 }
+export function buyTrekGear(s: State, k: 'boots' | 'lantern'): boolean {
+  const t = trekOf(s);
+  if (t[k] || s.coins < TREK_GEAR[k].price) return false;
+  s.coins -= TREK_GEAR[k].price;
+  t[k] = true;
+  return true;
+}
+/** Durée d'une sortie et vitesse de marche, équipement compris. */
+export function trekSetup(s: State): { time: number; speed: number; cap: number } {
+  const t = trekOf(s);
+  return { time: TREK_TIME + (t.lantern ? TREK_GEAR.lantern.time : 0), speed: t.boots ? TREK_GEAR.boots.speed : 1, cap: basketCap(s) };
+}
 export function buyBasket(s: State): boolean {
   const t = trekOf(s), next = BASKETS[t.basket + 1];
   if (!next || s.coins < next.price) return false;
@@ -711,9 +723,12 @@ export function trekFinds(s: State, b: number, rng: Rng): { id: string; hidden: 
  * Retour d'expédition : le panier (limité à sa taille) devient des graines, plus une graine
  * par coupe parfaite (`bonus`), et il faut se reposer avant de repartir.
  */
-export function trekEnd(s: State, ids: string[], bonus: string[] = []): { id: string; isNew: boolean }[] {
+export function trekEnd(s: State, ids: string[], bonus: string[] = [], loot: { clay: number; coins: number } = { clay: 0, coins: 0 }): { id: string; isNew: boolean }[] {
   const t = trekOf(s);
   if (t.rest > 0) return [];
+  // Ce qu'on a ramassé en chemin : de l'argile pour l'atelier, quelques pièces.
+  s.clay = Math.max(s.clay, Math.min(clayCap(s), s.clay + loot.clay));
+  s.coins += loot.coins;
   t.rest = TREK_REST;
   t.done++;
   const kept = ids.slice(0, basketCap(s));

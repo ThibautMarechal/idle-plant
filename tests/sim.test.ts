@@ -301,5 +301,11 @@ describe('simulation', () => {
     expect(sim.openBiome(s, 1)).toBe(true);
     expect(sim.buyBasket(s)).toBe(true);
     expect(sim.basketCap(s)).toBe(6);
+    expect(sim.buyTrekGear(s, 'lantern')).toBe(true);
+    expect(sim.trekSetup(s).time).toBe(195);
+    const coins = s.coins;
+    sim.advance(s, 600 * 1000);
+    sim.trekEnd(s, [], [], { clay: 2, coins: 40 });
+    expect(s.coins).toBe(coins + 40);
   });
 });

@@ -352,4 +352,6 @@ export const TREK_TIME = 150;
 /** Marge de la coupe parfaite sur la jauge, selon la rareté (fraction de la jauge). */
 export const CUT_ZONE: Record<Rarity, number> = { commun: 0.3, rare: 0.22, exotique: 0.16, legendaire: 0.11 };
 export const TREK_REST = 240;
+/** Équipement d'expédition : les bottes font marcher plus vite, la lanterne allonge la journée. */
+export const TREK_GEAR = { boots: { price: 300, speed: 1.3 }, lantern: { price: 500, time: 45 } };
 export const BASKETS: { cap: number; price: number }[] = [{ cap: 4, price: 0 }, { cap: 6, price: 350 }, { cap: 9, price: 900 }];

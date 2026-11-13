@@ -300,6 +300,7 @@ const pavillon: Theme = {
     spots: [[0, 0, 0], at(135, 0, 0, P.out)],
     hot: [
       { act: 'atelier', label: '🏺 Atelier', at: at(45, 0, 1.45, 4.4), spot: 0, r: 1.0 },
+      { act: 'almanac', label: '📖 Almanach', at: at(45, 1.72, 1.35, 4.3), spot: 0, r: 0.45 },
       { act: 'shop', label: '🛒 Boutique', at: at(225, -0.75, 0.95, 4.3), spot: 0, r: 0.8 },
       { act: 'market', label: '📈 Marché', at: at(225, 1.05, 1.5, 4.5), spot: 0, r: 0.7 },
       { act: 'packets', label: '🎁 Sachets', at: at(135, 1.5, 1.35, 4.7), spot: 0, r: 0.5 },
@@ -432,6 +433,13 @@ const pavillon: Theme = {
     wall(45, box(2.6, 0.12, 0.9, 0xb98a5a, 0, 0.9, -4.4), box(0.12, 0.84, 0.8, 0x8a5f3c, -1.2, 0.42, -4.4), box(0.12, 0.84, 0.8, 0x8a5f3c, 1.2, 0.42, -4.4),
       box(0.9, 1.1, 0.8, 0xb5654a, -0.75, 1.51, -4.45), box(0.4, 0.45, 0.06, 0x3a2a26, -0.75, 1.35, -4.03, false), box(0.3, 0.3, 0.02, 0xffb347, -0.75, 1.35, -3.99, false),
       cyl(0.2, 0.15, 0.3, 0xc9714a, 0.35, 1.11, -4.35, 10), cyl(0.15, 0.11, 0.24, 0xd9825a, 0.8, 1.08, -4.3, 10), cyl(0.3, 0.3, 0.06, 0x9a8f86, 0.45, 0.99, -4.35, 14));
+    // Lutrin de l'almanach : un grand livre ouvert, à droite de l'établi.
+    const book = new THREE.Group();
+    book.add(box(0.34, 0.03, 0.46, 0xfdfaf2, -0.175, 0.03, 0, false), box(0.34, 0.03, 0.46, 0xf4efe4, 0.175, 0.03, 0, false), box(0.76, 0.03, 0.52, 0x4f8a5b, 0, 0, 0, false),
+      box(0.03, 0.035, 0.46, 0xe2574c, 0, 0.035, 0, false));
+    book.position.set(1.72, 1.2, -4.3);
+    book.rotation.x = 0.55;
+    wall(45, box(0.12, 1.1, 0.12, 0x8a5f3c, 1.72, 0.55, -4.4), box(0.5, 0.06, 0.4, 0x8a5f3c, 1.72, 0.03, -4.4), book);
     // Coin réserve : caisses, sacs de terreau, arrosoir.
     wall(225, box(0.9, 0.7, 0.9, 0xb98a5a, -0.8, 0.35, -4.3), box(0.75, 0.6, 0.75, 0xa9794f, -0.7, 1.0, -4.35), box(0.9, 0.7, 0.9, 0xa9794f, 0.25, 0.35, -4.35),
       // Ardoise des cours du marché, sur son chevalet.

@@ -442,3 +442,8 @@ body[data-style="bd"] .hudrow .pill { padding: 7px 8px; font-size: 14px; }
 #tr-cur { position: absolute; top: -3px; bottom: -3px; width: 7px; margin-left: -3px; background: #fff; border: 2px solid var(--ink); border-radius: 4px; }
 .tr-row .pill, .tr-row .btn { white-space: nowrap; font-size: 13px; padding: 6px 10px; flex: none; }
 #tr-basket { flex: 0 1 auto; min-width: 0; overflow: hidden; letter-spacing: 0; }
+
+/* Vue à la première personne : le décor sert de menu, la barre du bas disparaît. */
+body[data-fp="1"] #nav { display: none; }
+.hot span.alert { background: var(--gold, #f2c94c); animation: pulse 1.1s ease-in-out infinite; }
+#quest .chip.al { background: var(--gold, #f2c94c); }
