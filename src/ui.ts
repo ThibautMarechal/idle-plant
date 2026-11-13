@@ -1,8 +1,9 @@
-import { GARDEN_INDEX, SEASONS, FAMILIES, FAMILY_IDS, GLAZES, PAINTS, POT_SIZES, RARITIES, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, STAGES, ZONES } from './data';
+import { BIOMES, TREK_TIME, GARDEN_INDEX, SEASONS, FAMILIES, FAMILY_IDS, GLAZES, PAINTS, POT_SIZES, RARITIES, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, STAGES, ZONES } from './data';
 import type { Family } from './data';
 import type { Scene3D } from './scene';
 import { buildPlant } from './plants3d';
 import { Studio } from './studio';
+import { Trek } from './trek';
 import { finish, STYLES } from './styles';
 import { themeOf } from './themes';
 import * as sim from './sim';
@@ -46,6 +47,7 @@ export class UI {
   /** Pot en cours de peinture : sur un emplacement ou sur l'étagère. */
   paintAt: { where: 'slot' | 'shelf'; k: number } = { where: 'slot', k: 0 };
   private studio!: Studio;
+  private trek!: Trek;
   /** Outil tenu au doigt : arrosoir ou gant, promené au-dessus des plantes. */
   private tool = '';
   private toolEl: HTMLElement | null = null;
@@ -55,6 +57,7 @@ export class UI {
   private tipAt = 0;
   private seedsHtml = '';
   private seedOpen = 0;
+  private trekLabel = '';
   private viewSlot = -1;
   private pointerDown = false;
   private slotEls: HTMLButtonElement[] = [];
@@ -100,6 +103,11 @@ export class UI {
     this.applyTheme();
     $('studio').innerHTML = '<div class="st-head"><h2 id="st-title"></h2><button class="x" data-act="st-close">✕</button></div><p id="st-hint"></p><canvas id="stgl"></canvas><div id="st-tools"></div>';
     this.studio = new Studio($('stgl') as HTMLCanvasElement);
+    $('trek').innerHTML = '<canvas id="trgl"></canvas><div class="tr-top"><div class="tr-time"><i id="tr-bar"></i></div><div class="tr-row"><span class="pill" id="tr-basket"></span><button class="btn small" data-act="trek-home">Rentrer</button></div></div><div id="tr-label"></div><p id="tr-hint"></p>';
+    this.trek = new Trek($('trgl') as HTMLCanvasElement);
+    this.trek.onChange = () => this.trekHud();
+    this.trek.onPick = (id) => { play('plant'); this.buzz(15); this.toast(`${EMOJI[id]} ${SPECIES_BY_ID[id].name} dans le panier`); };
+    this.trek.onEnd = () => this.trekHome();
     $('tools').innerHTML = '<button class="tool" data-tool="shears">✂️</button><button class="tool" data-tool="basket">🧺</button><button class="tool" data-tool="can">🚿</button><button class="tool" data-tool="glove">🧤</button>';
     const grab = (tool: string, label: string, el: HTMLElement, e: PointerEvent) => {
       this.tool = tool;
@@ -131,7 +139,7 @@ export class UI {
       unlock();
       this.pointerDown = true;
       sx = e.clientX; sy = e.clientY;
-      onScene = !(e.target as HTMLElement).closest('#sheet, #modal, #bottom, #hud, #backdrop, #studio');
+      onScene = !(e.target as HTMLElement).closest('#sheet, #modal, #bottom, #hud, #backdrop, #studio, #trek');
       panning = false;
       if (!onScene || this.tool) return;
       fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -209,7 +217,7 @@ export class UI {
       }
     });
     app.addEventListener('wheel', (e) => {
-      if ((e.target as HTMLElement).closest('#sheet, #modal, #studio')) return;
+      if ((e.target as HTMLElement).closest('#sheet, #modal, #studio, #trek')) return;
       const at = local(e.clientX, e.clientY);
       this.scene.zoomAt(Math.exp(-e.deltaY * 0.0016), at.x, at.y);
     }, { passive: true });
@@ -514,6 +522,25 @@ export class UI {
         if (gain) { this.coinFx(this.arg, gain); this.toast(`${who} est ravi : +${fmt(gain)} 🪙 et +${clay} argile.`); this.close(); }
         break;
       }
+      case 'trek-biome':
+        if (sim.openBiome(s, n)) { play('craft'); this.buzz(25); this.toast(`${BIOMES[n].name} : nouveau milieu à explorer !`); }
+        else this.toast('Pas assez de pièces.');
+        break;
+      case 'trek-basket':
+        if (sim.buyBasket(s)) { play('craft'); this.buzz(20); }
+        else this.toast('Pas assez de pièces.');
+        break;
+      case 'trek-go': {
+        const finds = sim.trekFinds(s, n, Math.random, 12);
+        if (!finds.length) { this.toast('Repose-toi encore un peu avant de repartir.'); break; }
+        this.close();
+        $('trek').className = 'on';
+        $('trek').style.background = `linear-gradient(180deg, ${BIOMES[n].sky[0]} 0%, ${BIOMES[n].sky[1]} 60%)`;
+        this.trek.open(n, finds, sim.basketCap(s));
+        this.trekHud();
+        break;
+      }
+      case 'trek-home': this.trekHome(); break;
       case 'seedbag':
         this.seedOpen = this.seedOpen ? 0 : Date.now();
         this.refresh(true);
@@ -654,6 +681,41 @@ export class UI {
   private closeStudio(): void {
     this.studio.close();
     $('studio').className = '';
+  }
+
+  /** Bandeau de l'expédition : temps restant, panier, et l'étiquette de la plante devant soi. */
+  private trekHud(): void {
+    const t = this.trek;
+    if (!t.active) return;
+    ($('tr-bar') as HTMLElement).style.width = (t.left / TREK_TIME) * 100 + '%';
+    const b = `🧺 ${t.basket.map((id) => EMOJI[id]).join('')}${'·'.repeat(Math.max(0, t.cap - t.basket.length))}`;
+    if ($('tr-basket').textContent !== b) $('tr-basket').textContent = b;
+    const lab = $('tr-label'), r = t.nearRect();
+    let html = '', hint = 'Glisse pour regarder autour de toi. Touche une plante pour t\'en approcher.';
+    if (r && t.near >= 0) {
+      const sp = SPECIES_BY_ID[t.nearId];
+      html = t.nearHidden ? '<b>Un fourré…</b>' : `<b>${EMOJI[sp.id]} ${esc(sp.name)}</b>${rarTag(sp)}${this.s.disc[sp.id]?.seen ? '' : '<i>NOUVEAU</i>'}`;
+      hint = t.nearHidden ? 'Glisse le doigt dessus pour écarter les branches.' : t.full ? 'Ton panier est plein.' : 'Glisse le doigt en travers de la plante pour la prélever.';
+      lab.style.left = r.x + 'px';
+      lab.style.top = r.y + 'px';
+    }
+    if (html !== this.trekLabel) { this.trekLabel = html; lab.innerHTML = html; lab.className = html ? 'on' : ''; }
+    if ($('tr-hint').textContent !== hint) $('tr-hint').textContent = hint;
+  }
+
+  /** Retour à la serre : le panier devient des graines, fêtées comme un sachet. */
+  private trekHome(): void {
+    if (!this.trek.active) return;
+    const got = sim.trekEnd(this.s, this.trek.basket);
+    this.trek.close();
+    $('trek').className = '';
+    this.trekLabel = '';
+    if (got.length) {
+      this.showPacket(got);
+      const title = $('modal').querySelector('.mtitle');
+      if (title) title.textContent = 'Ta cueillette';
+    } else this.toast('Tu rentres le panier vide. La prochaine sortie sera la bonne !');
+    this.refresh(true);
   }
 
   /** Les outils sous l'établi, selon ce qu'on y fait. */
@@ -859,7 +921,7 @@ export class UI {
       if (html !== this.seedsHtml) { this.seedsHtml = html; $('seeds').innerHTML = html; }
       // Chaque geste est expliqué une seule fois, au moment où il devient utile.
       const tip = (k: string, on: boolean, text: string) => {
-        if (!on || s.hints?.[k] || this.kind !== 'none' || this.studio.mode || Date.now() - this.tipAt < 6000) return;
+        if (!on || s.hints?.[k] || this.kind !== 'none' || this.studio.mode || this.trek.active || Date.now() - this.tipAt < 6000) return;
         (s.hints ??= {})[k] = true;
         this.tipAt = Date.now();
         this.toast(text);

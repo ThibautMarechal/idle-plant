@@ -17,7 +17,7 @@ export const EMOJI: Record<string, string> = {
 };
 export const ZONE_SHORT = ['Ombre', 'Bassin', 'Porte', 'Plein sud'];
 
-export type SheetKind = 'season' | 'trophies' | 'atelier' | 'paint' | 'vitrine' | 'none' | 'seed' | 'buypot' | 'plant' | 'harvest' | 'packets' | 'market' | 'shop' | 'almanac' | 'fiche' | 'zone';
+export type SheetKind = 'trek' | 'season' | 'trophies' | 'atelier' | 'paint' | 'vitrine' | 'none' | 'seed' | 'buypot' | 'plant' | 'harvest' | 'packets' | 'market' | 'shop' | 'almanac' | 'fiche' | 'zone';
 
 export const $ = (id: string) => document.getElementById(id)!;
 export const fmt = (n: number) => Math.round(n).toLocaleString('fr-FR');

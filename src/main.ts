@@ -66,4 +66,4 @@ function frame(nowMs: number): void {
 requestAnimationFrame(frame);
 
 // Accès console pour le débogage et les tests.
-(window as unknown as Record<string, unknown>).grainier = { get state() { return state; }, sim, scene };
+(window as unknown as Record<string, unknown>).grainier = { get state() { return state; }, sim, scene, ui };

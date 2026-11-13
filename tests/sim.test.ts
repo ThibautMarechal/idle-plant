@@ -279,4 +279,25 @@ describe('simulation', () => {
     s.seasonT = 3 * 20 * 60 + 1;
     expect(sim.zoneClimate(s, sim.zoneOfSlot(16)).temp).toBeLessThan(spring);
   });
+
+  it('expédition : trouvailles du milieu, panier limité, puis repos', () => {
+    const s = sim.newState(0);
+    let k = 0;
+    const rng = () => ((k += 0.137) % 1);
+    const finds = sim.trekFinds(s, 0, rng, 12);
+    expect(finds.length).toBe(12);
+    for (const f of finds) expect(['fougeres', 'arbustes', 'fleurs']).toContain(SPECIES_BY_ID[f.id].family);
+    for (const f of finds.filter((x) => x.hidden)) expect(SPECIES_BY_ID[f.id].rarity).not.toBe('commun');
+    expect(sim.trekFinds(s, 1, rng, 12).length).toBe(0);
+    const got = sim.trekEnd(s, finds.map((f) => f.id));
+    expect(got.length).toBe(sim.basketCap(s));
+    expect(Object.values(s.seeds).reduce((a, b) => a + b, 0)).toBe(4);
+    expect(sim.trekFinds(s, 0, rng, 12).length).toBe(0);
+    sim.advance(s, 241 * 1000);
+    expect(sim.trekFinds(s, 0, rng, 12).length).toBe(12);
+    s.coins = 2000;
+    expect(sim.openBiome(s, 1)).toBe(true);
+    expect(sim.buyBasket(s)).toBe(true);
+    expect(sim.basketCap(s)).toBe(6);
+  });
 });

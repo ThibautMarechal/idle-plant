@@ -339,3 +339,15 @@ export const PROF_MAX = 0.48;
 /** Grille de peinture d'un pot : PAINT_W cases autour, PAINT_H en hauteur. */
 export const PAINT_W = 144;
 export const PAINT_H = 48;
+
+/** Milieux d'expédition : on y cueille soi-même graines et boutures sauvages. */
+export interface Biome { id: string; name: string; icon: string; fams: Family[]; price: number; text: string; sky: [string, string]; ground: number; fog: number }
+export const BIOMES: Biome[] = [
+  { id: 'foret', name: 'La forêt', icon: '🌲', fams: ['fougeres', 'arbustes', 'fleurs'], price: 0, text: 'Sous-bois frais : fougères, arbustes et fleurs.', sky: ['#bfe3ee', '#e9f4dc'], ground: 0x8fc27a, fog: 0xd9ecd4 },
+  { id: 'marais', name: 'Le marais', icon: '🪷', fams: ['carnivores', 'tropicales', 'orchidees'], price: 400, text: 'Eau tiède et brume : carnivores, tropicales et orchidées.', sky: ['#b9d8d6', '#e4efe0'], ground: 0x7fae8a, fog: 0xcfe3dc },
+  { id: 'dunes', name: 'Les dunes', icon: '🏜️', fams: ['succulentes', 'aromatiques'], price: 900, text: 'Sable chaud et vent sec : succulentes et aromatiques.', sky: ['#a9d8f2', '#fbe9c6'], ground: 0xe9d3a0, fog: 0xf6e7c8 },
+];
+/** Durée d'une sortie (s), repos entre deux sorties (s), tailles et prix du panier. */
+export const TREK_TIME = 75;
+export const TREK_REST = 240;
+export const BASKETS: { cap: number; price: number }[] = [{ cap: 4, price: 0 }, { cap: 6, price: 350 }, { cap: 9, price: 900 }];

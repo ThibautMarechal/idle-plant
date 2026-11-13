@@ -303,6 +303,7 @@ const pavillon: Theme = {
       { act: 'shop', label: '🛒 Boutique', at: at(225, -0.75, 0.95, 4.3), spot: 0, r: 0.8 },
       { act: 'market', label: '📈 Marché', at: at(225, 1.05, 1.5, 4.5), spot: 0, r: 0.7 },
       { act: 'packets', label: '🎁 Sachets', at: at(135, 1.5, 1.35, 4.7), spot: 0, r: 0.5 },
+      { act: 'trek', label: '🥾 Expédition', at: at(135, -1.3, 1.15, 4.6), spot: 0, r: 0.6 },
       { act: 'door', label: '🚪', at: at(135, 0, 1.7, 5.0), spot: -1, r: 0.9 },
     ],
   },
@@ -377,6 +378,9 @@ const pavillon: Theme = {
       box(0.1, 0.1, 0.2, 0xf2c94c, 0.55, 1.3, -A, false));
     door.userData.door = true;
     wall(135, door, box(1.6, 0.03, 0.9, 0xb96f5a, 0, 0.02, -A + 0.7, false),
+      // Sac à dos et bottes : le départ en expédition.
+      box(0.7, 0.5, 0.5, 0xb98a5a, -1.35, 0.25, -4.6), box(0.55, 0.7, 0.34, 0x5f9a6a, -1.35, 0.85, -4.62), box(0.4, 0.22, 0.1, 0x4f8552, -1.35, 0.75, -4.42, false),
+      box(0.14, 0.34, 0.28, 0x6b4a34, -1.42, 0.17, -4.15), box(0.14, 0.34, 0.28, 0x6b4a34, -1.22, 0.17, -4.15),
       // Boîte aux lettres : les sachets de graines y arrivent.
       box(0.08, 1.1, 0.08, 0x8a5f3c, 1.5, 0.55, -4.7), box(0.5, 0.36, 0.34, 0xe2604f, 1.5, 1.28, -4.7), box(0.3, 0.04, 0.02, 0x3a2a26, 1.5, 1.34, -4.52, false));
     // Le jardin : des dalles jusqu'à une jardinière en plein air, une clôture, un arbre.

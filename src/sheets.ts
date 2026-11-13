@@ -1,5 +1,5 @@
 /** Le contenu de chaque panneau, un par fonction. `ui` donne l'état et le panneau ouvert. */
-import { GARDEN, GARDEN_FIRST, GARDEN_INDEX, SEASONS, FAMILIES, FAMILY_IDS, GLAZES, LEVEL_WORDS, POT_SIZES, RARITIES, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, STAGES, ZONES } from './data';
+import { BASKETS, BIOMES, GARDEN, GARDEN_FIRST, GARDEN_INDEX, SEASONS, FAMILIES, FAMILY_IDS, GLAZES, LEVEL_WORDS, POT_SIZES, RARITIES, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, STAGES, ZONES } from './data';
 import type { Species } from './data';
 import { THEMES } from './themes';
 import * as sim from './sim';
@@ -29,6 +29,7 @@ export function sheetHtml(ui: UI): string {
     case 'atelier': return atelierHtml(ui);
     case 'trophies': return trophiesHtml(ui);
     case 'season': return seasonHtml(ui);
+    case 'trek': return trekHtml(ui);
     default: return '';
   }
   void s;
@@ -241,6 +242,24 @@ export function shopHtml(ui: UI): string {
     <h3>Décor</h3>
     <div class="themes">${THEMES.map((t) => `<button class="theme ${t.id === ui.scene.themeId ? 'on' : ''}" data-act="theme" data-arg="${t.id}"><span class="sw" style="background:${t.bg}"></span><b>${esc(t.name)}</b><small>${esc(t.desc)}</small></button>`).join('')}</div>
     </div>`;
+}
+
+export function trekHtml(ui: UI): string {
+  const s = ui.s;
+  const t = sim.trekOf(s);
+  const next = BASKETS[t.basket + 1];
+  const rows = BIOMES.map((b, k) => {
+    const fams = b.fams.map((f) => FAMILIES[f].icon).join(' ');
+    const end = !t.open[k] ? `<button class="btn ${s.coins >= b.price ? 'primary' : ''} small" data-act="trek-biome" data-arg="${k}" ${s.coins >= b.price ? '' : 'disabled'}>${fmt(b.price)} 🪙</button>`
+      : t.rest > 0 ? `<span class="chip">${clock(t.rest)}</span>`
+        : `<button class="btn gold small" data-act="trek-go" data-arg="${k}">Partir</button>`;
+    return `<div class="card"><div class="ico">${b.icon}</div><div class="mid"><div class="nm">${b.name} ${fams}</div><div class="ds">${b.text}</div></div>${end}</div>`;
+  }).join('');
+  return head(ui, '🥾 Expédition') + `<div class="sh-body">
+    <p class="sub">${t.rest > 0 ? `Tu te reposes encore ${clock(t.rest)} avant de repartir.` : 'Pars cueillir toi-même graines et boutures sauvages. Les plus rares se cachent dans les fourrés.'}</p>
+    ${rows}
+    <div class="card"><div class="ico">🧺</div><div class="mid"><div class="nm">Panier : ${sim.basketCap(s)} plantes</div><div class="ds">${next ? `Un plus grand panier en porte ${next.cap}.` : 'C\'est le plus grand panier.'}</div></div>${next
+      ? `<button class="btn ${s.coins >= next.price ? 'primary' : ''} small" data-act="trek-basket" ${s.coins >= next.price ? '' : 'disabled'}>${fmt(next.price)} 🪙</button>` : '<span class="chip ok">Maximum</span>'}</div></div>`;
 }
 
 export function seasonHtml(ui: UI): string {

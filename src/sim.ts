@@ -1,4 +1,4 @@
-import { GARDEN, GARDEN_CLIMATE, GARDEN_FIRST, GARDEN_INDEX, PROF_MAX, PROF_MIN, BASE_SLOTS, SEASONS, SEASON_LENGTH, CLIENTS, FAMILIES, FAMILY_IDS, GLAZES, NEWS, POT_SIZES, RARITIES, SLOT_COUNT, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, ZONES } from './data';
+import { BASKETS, BIOMES, TREK_REST, GARDEN, GARDEN_CLIMATE, GARDEN_FIRST, GARDEN_INDEX, PROF_MAX, PROF_MIN, BASE_SLOTS, SEASONS, SEASON_LENGTH, CLIENTS, FAMILIES, FAMILY_IDS, GLAZES, NEWS, POT_SIZES, RARITIES, SLOT_COUNT, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, ZONES } from './data';
 import type { Family, Rarity, Species, Zone } from './data';
 
 /** `vr` : variante, 0 normale, 1 panachée, 2 dorée. */
@@ -82,6 +82,8 @@ export interface State {
   quests: Record<string, boolean>;
   /** Astuces déjà montrées une fois. */
   hints?: Record<string, boolean>;
+  /** Expéditions : repos restant (s), taille du panier, milieux ouverts, sorties faites. */
+  trek?: { rest: number; basket: number; open: boolean[]; done: number };
   stats: { sold: number; earned: number; bestMult: number; planted: number; opened: number; crafted: number; painted: number; orders: number; cuttings: number; crossed?: number; contests?: number };
   lastTick: number;
 }
@@ -333,6 +335,7 @@ export function advance(s: State, now: number, rng: Rng = Math.random): number {
     s.visitors += (total / 20) * s.showcase.filter(Boolean).length * (0.5 + rng());
   }
   s.seasonT = (s.seasonT ?? 0) + Math.min(total, SEASON_LENGTH);
+  if (s.trek) s.trek.rest = Math.max(0, s.trek.rest - total);
   // Atelier : l'argile se dépose toute seule, le four cuit, les commandes passent.
   if (s.clay < clayCap(s)) {
     s.clayAcc += total;
@@ -659,6 +662,59 @@ function grant(s: State, ids: string[]): { id: string; isNew: boolean }[] {
     s.seeds[id] = (s.seeds[id] ?? 0) + 1;
     return { id, isNew };
   });
+}
+
+// ---------- expéditions ----------
+
+export function trekOf(s: State): NonNullable<State['trek']> {
+  return (s.trek ??= { rest: 0, basket: 0, open: BIOMES.map((b) => b.price === 0), done: 0 });
+}
+export function basketCap(s: State): number {
+  return BASKETS[trekOf(s).basket].cap;
+}
+export function openBiome(s: State, b: number): boolean {
+  const t = trekOf(s);
+  if (t.open[b] || s.coins < BIOMES[b].price) return false;
+  s.coins -= BIOMES[b].price;
+  t.open[b] = true;
+  return true;
+}
+export function buyBasket(s: State): boolean {
+  const t = trekOf(s), next = BASKETS[t.basket + 1];
+  if (!next || s.coins < next.price) return false;
+  s.coins -= next.price;
+  t.basket++;
+  return true;
+}
+/**
+ * Ce qui pousse aujourd'hui dans un milieu : `n` plantes sauvages de ses familles.
+ * Les plus rares sont cachées dans un fourré (`hidden`) : il faut l'écarter pour les voir.
+ */
+export function trekFinds(s: State, b: number, rng: Rng, n: number): { id: string; hidden: boolean }[] {
+  if (!trekOf(s).open[b] || trekOf(s).rest > 0) return [];
+  const fams = BIOMES[b].fams;
+  const out: { id: string; hidden: boolean }[] = [];
+  for (let i = 0; i < n; i++) {
+    // Un tiers des emplacements sont des fourrés : on y trouve au moins du rare.
+    const hidden = i % 3 === 2;
+    let rar = rollRarity(rng);
+    if (hidden && rar === 'commun') rar = rng() < 0.75 ? 'rare' : 'exotique';
+    let pool = SPECIES.filter((sp) => fams.includes(sp.family) && sp.rarity === rar);
+    if (!pool.length) pool = SPECIES.filter((sp) => fams.includes(sp.family) && sp.rarity === (hidden ? 'rare' : 'commun'));
+    if (!pool.length) pool = SPECIES.filter((sp) => fams.includes(sp.family));
+    out.push({ id: pool[Math.floor(rng() * pool.length)].id, hidden });
+  }
+  return out;
+}
+/** Retour d'expédition : le panier (limité à sa taille) devient des graines, et il faut se reposer avant de repartir. */
+export function trekEnd(s: State, ids: string[]): { id: string; isNew: boolean }[] {
+  const t = trekOf(s);
+  if (t.rest > 0) return [];
+  t.rest = TREK_REST;
+  t.done++;
+  const kept = ids.slice(0, basketCap(s));
+  gainXp(s, kept.length * 2);
+  return grant(s, kept);
 }
 
 export function openFreePacket(s: State, rng: Rng = Math.random) {
