@@ -334,3 +334,13 @@ body[data-style="pixel"] .navb span { font-size: 20px; }
 .toolghost { position: absolute; font-size: 44px; transform: translate(-50%, -85%) rotate(-18deg); pointer-events: none; filter: drop-shadow(0 6px 6px rgba(40, 30, 10, 0.3)); }
 #bottom { pointer-events: none; }
 #bottom > :not(#tools) { pointer-events: auto; }
+
+/* Barquette de graines à glisser sur un pot */
+#seeds { display: flex; gap: 8px; justify-content: center; pointer-events: none; }
+#seeds:empty { display: none; }
+.seedchip { pointer-events: auto; touch-action: none; position: relative; width: 50px; height: 50px; border-radius: 16px; background: rgba(255, 252, 244, 0.95); font-size: 24px; box-shadow: 0 3px 0 rgba(60, 50, 30, 0.16), 0 5px 12px rgba(60, 50, 30, 0.16); border: 2px solid transparent; }
+.seedchip.fit { border-color: var(--green); }
+.seedchip.held { opacity: 0.35; }
+.seedchip small { position: absolute; right: -4px; bottom: -5px; background: var(--ink); color: #fff; font-size: 10px; font-weight: 800; border-radius: 8px; padding: 1px 5px; }
+.toolghost.seed { transform: translate(-50%, -110%); font-size: 40px; }
+#bottom > #seeds { pointer-events: none; }

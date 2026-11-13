@@ -100,6 +100,8 @@ export class UI {
   private toolEl: HTMLElement | null = null;
   private toolAt: number[] = [];
   private toolUsed = false;
+  private toolTarget = -1;
+  private seedsHtml = '';
   private viewSlot = -1;
   private lastNewsT = 0;
   private pointerDown = false;
@@ -147,17 +149,24 @@ export class UI {
     this.applyTheme();
     $('studio').innerHTML = '<div class="st-head"><h2 id="st-title"></h2><button class="x" data-act="st-close">✕</button></div><p id="st-hint"></p><canvas id="stgl"></canvas><div id="st-tools"></div>';
     this.studio = new Studio($('stgl') as HTMLCanvasElement);
-    $('tools').innerHTML = '<button class="tool" data-tool="can">🚿</button><button class="tool" data-tool="glove">🧤</button>';
-    $('tools').querySelectorAll<HTMLElement>('.tool').forEach((b) => b.addEventListener('pointerdown', (e) => {
-      this.tool = b.dataset.tool!;
+    $('tools').innerHTML = '<button class="tool" data-tool="basket">🧺</button><button class="tool" data-tool="can">🚿</button><button class="tool" data-tool="glove">🧤</button>';
+    const grab = (tool: string, label: string, el: HTMLElement, e: PointerEvent) => {
+      this.tool = tool;
       this.toolUsed = false;
+      this.toolTarget = -1;
       this.toolEl = document.createElement('div');
-      this.toolEl.className = 'toolghost';
-      this.toolEl.textContent = b.textContent;
+      this.toolEl.className = 'toolghost' + (tool.startsWith('seed:') ? ' seed' : '');
+      this.toolEl.textContent = label;
       $('fx').appendChild(this.toolEl);
-      b.classList.add('held');
+      el.classList.add('held');
       this.useTool(e.clientX, e.clientY);
-    }));
+    };
+    $('tools').querySelectorAll<HTMLElement>('.tool').forEach((b) => b.addEventListener('pointerdown', (e) => grab(b.dataset.tool!, b.textContent!, b, e)));
+    // Graines à glisser : on prend une graine dans la barquette et on la lâche sur un pot vide.
+    $('seeds').addEventListener('pointerdown', (e) => {
+      const chip = (e.target as HTMLElement).closest('.seedchip') as HTMLElement | null;
+      if (chip) grab('seed:' + chip.dataset.id, EMOJI[chip.dataset.id!], chip, e);
+    });
     const app = $('app');
     let sx = 0, sy = 0, st = 0, onScene = false;
     setMuted(!!this.s.mute);
@@ -245,30 +254,63 @@ export class UI {
     if (this.toolEl) { this.toolEl.style.left = x + 'px'; this.toolEl.style.top = y + 'px'; }
     const s = this.s;
     const now = Date.now();
-    s.slots.forEach((slot, i) => {
-      if (!slot.plant || !sim.slotOpen(s, i)) return;
-      if (this.scene.currentZone >= 0 && sim.zoneIndexOfSlot(i) !== this.scene.currentZone) return;
+    const near = (i: number, lift: number, reach: number) => {
+      if (!sim.slotOpen(s, i) || (this.scene.currentZone >= 0 && sim.zoneIndexOfSlot(i) !== this.scene.currentZone)) return Infinity;
       const r = this.scene.slotRect(i);
-      if (Math.hypot(r.x - x, r.bottom - r.unit * 0.7 - y) > r.unit * 0.8 || now - (this.toolAt[i] ?? 0) < 280) return;
-      if (this.tool === 'can' ? sim.water(s, i) : sim.squash(s, i)) {
-        this.toolAt[i] = now;
-        this.toolUsed = true;
-        this.scene.pop(i);
-        this.float(i, this.tool === 'can' ? '💧' : slot.plant.pests > 0 ? '🐛' : '✨ Propre !');
-        play(this.tool === 'can' ? 'water' : 'tap');
-        this.buzz(10);
-        this.refresh(true);
+      const d = Math.hypot(r.x - x, r.bottom - r.unit * lift - y);
+      return d < r.unit * reach ? d : Infinity;
+    };
+    if (this.tool.startsWith('seed:')) {
+      // La graine vise le pot vide le plus proche du doigt ; elle sera semée au lâcher.
+      const id = this.tool.slice(5);
+      let best = -1, bestD = Infinity;
+      s.slots.forEach((slot, i) => {
+        if (!slot.pot || slot.plant || sim.potSize(slot) < sim.sizeOf(SPECIES_BY_ID[id])) return;
+        const d = near(i, 0.45, 0.95);
+        if (d < bestD) { bestD = d; best = i; }
+      });
+      if (best !== this.toolTarget) { this.toolTarget = best; this.refresh(true); }
+      return;
+    }
+    s.slots.forEach((slot, i) => {
+      if (!slot.plant || near(i, 0.7, 0.8) === Infinity || now - (this.toolAt[i] ?? 0) < 280) return;
+      let fx = '';
+      if (this.tool === 'can') { if (sim.water(s, i)) fx = '💧'; }
+      else if (this.tool === 'glove') { if (sim.squash(s, i)) fx = slot.plant.pests > 0 ? '🐛' : '✨ Propre !'; }
+      else if (slot.plant.prog >= 1) {
+        if (sim.harvestStore(s, i)) fx = '📦';
+        else if (now - this.toolAt[99] > 2000 || !this.toolAt[99]) { this.toolAt[99] = now; this.toast('La réserve est pleine : vends au Marché ou agrandis-la.'); }
       }
+      if (!fx) return;
+      this.toolAt[i] = now;
+      this.toolUsed = true;
+      this.scene.pop(i);
+      this.float(i, fx);
+      play(this.tool === 'can' ? 'water' : 'tap');
+      this.buzz(10);
+      this.refresh(true);
     });
   }
 
   private dropTool(): void {
     if (!this.tool) return;
-    if (!this.toolUsed) this.toast(this.tool === 'can' ? 'Garde le doigt sur l\'arrosoir et promène-le au-dessus des plantes assoiffées.' : 'Garde le doigt sur le gant et frotte les plantes envahies pour chasser les chenilles.');
+    const s = this.s;
+    if (this.tool.startsWith('seed:')) {
+      const i = this.toolTarget;
+      this.toolTarget = -1;
+      if (i >= 0 && sim.plantSeed(s, i, this.tool.slice(5))) { play('plant'); this.scene.pop(i); this.float(i, '🌱'); this.buzz(12); }
+      else this.toast('Glisse la graine jusqu\'à un pot vide assez grand pour elle.');
+    } else if (!this.toolUsed) {
+      this.toast(this.tool === 'can' ? 'Garde le doigt sur l\'arrosoir et promène-le au-dessus des plantes assoiffées.'
+        : this.tool === 'glove' ? 'Garde le doigt sur le gant et frotte les plantes envahies pour chasser les chenilles.'
+        : 'Garde le doigt sur le panier et passe sur les plantes en fleur : elles partent en réserve, à vendre au bon moment.');
+    }
     this.tool = '';
     this.toolEl?.remove();
     this.toolEl = null;
-    $('tools').querySelectorAll('.held').forEach((b) => b.classList.remove('held'));
+    document.querySelectorAll('#tools .held, #seeds .held').forEach((b) => b.classList.remove('held'));
+    this.seedsHtml = '';
+    this.refresh(true);
     this.swipedAt = Date.now();
   }
 
@@ -783,9 +825,20 @@ export class UI {
     // Outils à promener : visibles seulement quand ils servent.
     const thirsty = !s.upgrades.water && s.slots.some((sl) => sl.plant && sl.plant.water < 0.5);
     const bugs = s.slots.some((sl) => sl.plant && sl.plant.pests > 0);
+    const ripe = s.slots.filter((sl) => sl.plant && sl.plant.prog >= 1).length;
     const tools = $('tools').children;
-    tools[0].classList.toggle('off', !thirsty && this.tool !== 'can');
-    tools[1].classList.toggle('off', !bugs && this.tool !== 'glove');
+    tools[0].classList.toggle('off', ripe < 2 && this.tool !== 'basket');
+    tools[1].classList.toggle('off', !thirsty && this.tool !== 'can');
+    tools[2].classList.toggle('off', !bugs && this.tool !== 'glove');
+    // Barquette de graines : visible dans une zone où un pot vide attend.
+    if (!this.tool) {
+      const z = this.scene.currentZone;
+      const free = z >= 0 && s.slots.some((sl, i) => sl.pot && !sl.plant && sim.zoneIndexOfSlot(i) === z && sim.slotOpen(s, i));
+      const c = free ? sim.zoneClimate(s, sim.zoneOfSlot(z * SLOTS_PER_ZONE)) : null;
+      const ids = c ? Object.keys(s.seeds).sort((a, b) => sim.fitOf(SPECIES_BY_ID[b], c) - sim.fitOf(SPECIES_BY_ID[a], c)).slice(0, 6) : [];
+      const html = ids.map((id) => `<button class="seedchip${c && sim.fitOf(SPECIES_BY_ID[id], c) >= 1 ? ' fit' : ''}" data-id="${id}">${EMOJI[id]}<small>×${s.seeds[id]}</small></button>`).join('');
+      if (html !== this.seedsHtml) { this.seedsHtml = html; $('seeds').innerHTML = html; }
+    }
     // Emplacements
     s.slots.forEach((slot, i) => {
       const el = this.slotEls[i];
@@ -795,7 +848,9 @@ export class UI {
       const open = sim.slotOpen(s, i);
       el.hidden = !open;
       let cls = 'badge', txt = '';
-      if (this.drag >= 0) {
+      if (this.tool.startsWith('seed:')) {
+        if (i === this.toolTarget) { cls += ' ready'; txt = '⬇'; } else cls += ' hidden';
+      } else if (this.drag >= 0) {
         if (i === this.drag) cls += ' hidden';
         else if (i === this.dragTarget) { cls += ' ready'; txt = slot.pot ? '⇄' : '⬇'; }
         else if (!slot.pot) { cls += ' ghost'; txt = '+'; }
