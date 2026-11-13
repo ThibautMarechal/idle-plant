@@ -255,7 +255,15 @@ export const SLOTS_PER_ZONE = 3;
 /** Emplacements au sol : trois par zone. */
 export const BASE_SLOTS = ZONES.length * SLOTS_PER_ZONE;
 /** S'y ajoute une suspension par zone (emplacements 12 à 15), à acheter. */
-export const SLOT_COUNT = BASE_SLOTS + ZONES.length;
+export const HANG_SLOTS = ZONES.length;
+/** Le jardin, derrière la porte : trois emplacements en plein air (16 à 18). Son climat suit les saisons. */
+export const GARDEN: Zone = { id: 'jardin', name: 'Le jardin', icon: '🌳', light: 3, temp: 2, hum: 2, desc: 'En plein air : le climat change à chaque saison' };
+export const GARDEN_INDEX = ZONES.length;
+export const GARDEN_SLOTS = 3;
+export const GARDEN_FIRST = BASE_SLOTS + HANG_SLOTS;
+/** Climat du jardin au printemps, en été, en automne, en hiver. */
+export const GARDEN_CLIMATE = [{ light: 3, temp: 2, hum: 2 }, { light: 3, temp: 3, hum: 1 }, { light: 2, temp: 2, hum: 3 }, { light: 2, temp: 1, hum: 2 }];
+export const SLOT_COUNT = GARDEN_FIRST + GARDEN_SLOTS;
 
 export const STAGES = ['Graine', 'Pousse', 'Végétatif', 'Boutons', 'Floraison'];
 export const LEVEL_WORDS = {

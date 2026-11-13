@@ -402,3 +402,8 @@ body[data-style="bd"] .hudrow .pill { padding: 7px 8px; font-size: 14px; }
 #nav { gap: 5px; grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .seedchip.bag.open { font-size: 16px; font-weight: 800; }
 #dock #seeds { flex-wrap: nowrap; }
+
+/* Objets cliquables du décor : toute la zone répond, l'étiquette dit où l'on va. */
+.hot { position: absolute; pointer-events: auto; transform: translate(-50%, -50%); background: none; display: flex; align-items: flex-start; justify-content: center; }
+.hot span { background: #fff; border: 2.5px solid var(--ink); box-shadow: 0 3px 0 var(--ink); font-weight: 800; font-size: 12px; padding: 4px 10px; border-radius: 13px; white-space: nowrap; color: var(--ink); }
+.hot:active span { transform: translateY(2px); box-shadow: 0 1px 0 var(--ink); }

@@ -1,4 +1,4 @@
-import { PROF_MAX, PROF_MIN, BASE_SLOTS, SEASONS, SEASON_LENGTH, CLIENTS, FAMILIES, FAMILY_IDS, GLAZES, NEWS, POT_SIZES, RARITIES, SLOT_COUNT, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, ZONES } from './data';
+import { GARDEN, GARDEN_CLIMATE, GARDEN_FIRST, GARDEN_INDEX, PROF_MAX, PROF_MIN, BASE_SLOTS, SEASONS, SEASON_LENGTH, CLIENTS, FAMILIES, FAMILY_IDS, GLAZES, NEWS, POT_SIZES, RARITIES, SLOT_COUNT, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, ZONES } from './data';
 import type { Family, Rarity, Species, Zone } from './data';
 
 /** `vr` : variante, 0 normale, 1 panachée, 2 dorée. */
@@ -114,7 +114,7 @@ export const PRICE_MAX = 2.0;
 export const PACKET_SIZE = 3;
 export const MAX_PACKETS = 3;
 export const PACKET_EVERY = 300;
-export const ZONE_PRICES = [150, 400, 0, 0];
+export const ZONE_PRICES = [150, 400, 0, 0, 600];
 export const MAX_OFFLINE = 12 * 3600;
 
 export const PRICES = {
@@ -178,7 +178,7 @@ export function newState(now: number): State {
 }
 
 export function zoneOfSlot(i: number): Zone {
-  return ZONES[zoneIndexOfSlot(i)];
+  return ZONES[zoneIndexOfSlot(i)] ?? GARDEN;
 }
 
 export function gearOn(s: State, g: ClimateGear): boolean {
@@ -187,6 +187,7 @@ export function gearOn(s: State, g: ClimateGear): boolean {
 
 /** Climat d'une zone, équipements allumés compris. */
 export function zoneClimate(s: State, z: Zone): { light: number; temp: number; hum: number } {
+  if (z.id === 'jardin') return { ...GARDEN_CLIMATE[seasonOf(s).index] };
   const c = { light: z.light, temp: z.temp, hum: z.hum };
   if (z.id === 'ombre' && gearOn(s, 'mist')) c.hum = 3;
   if (z.id === 'porte' && gearOn(s, 'lamp')) c.light = 3;
@@ -809,12 +810,12 @@ export function sellStock(s: State, k: number): number {
 }
 
 export function zoneIndexOfSlot(i: number): number {
-  return i < BASE_SLOTS ? Math.floor(i / SLOTS_PER_ZONE) : i - BASE_SLOTS;
+  return i >= GARDEN_FIRST ? GARDEN_INDEX : i < BASE_SLOTS ? Math.floor(i / SLOTS_PER_ZONE) : i - BASE_SLOTS;
 }
 /** Un emplacement est utilisable si sa zone est aménagée et, pour une suspension, si elle est achetée. */
 export function slotOpen(s: State, i: number): boolean {
   const z = zoneIndexOfSlot(i);
-  return !!s.zonesOpen[z] && (i < BASE_SLOTS || !!s.extra?.[z]);
+  return !!s.zonesOpen[z] && (i < BASE_SLOTS || i >= GARDEN_FIRST || !!s.extra?.[z]);
 }
 export function buyExtra(s: State, z: number): boolean {
   if (!s.zonesOpen[z] || s.extra?.[z] || s.coins < EXTRA_PRICES[z]) return false;
@@ -916,7 +917,7 @@ export const QUESTS: Quest[] = [
   { id: 'cross', text: 'Croise deux plantes en fleur de même famille et de même rareté', reward: 120, done: (s) => (s.stats.crossed ?? 0) >= 1 },
   { id: 'gear', text: 'Installe un équipement dans la serre', reward: 100, done: (s) => Object.values(s.upgrades).some(Boolean) },
   { id: 'variant', text: 'Fais fleurir une variante panachée ou dorée', reward: 150, done: (s) => collection(s).variants >= 1 },
-  { id: 'zone2', text: 'Aménage toute la serre', reward: 150, done: (s) => s.zonesOpen.every(Boolean) },
+  { id: 'zone2', text: 'Aménage toute la serre', reward: 150, done: (s) => s.zonesOpen.slice(0, ZONES.length).every(Boolean) },
   { id: 'stars20', text: 'Cumule 20 étoiles dans l\'almanach', reward: 250, done: (s) => collection(s).stars >= 20 },
   { id: 'bloom10', text: 'Ajoute 10 espèces à l\'almanach', reward: 300, done: (s) => collection(s).bloomed >= 10 },
   { id: 'show4', text: 'Remplis la vitrine', reward: 300, done: (s) => s.showcase.every(Boolean) },

@@ -1,5 +1,5 @@
 /** Le contenu de chaque panneau, un par fonction. `ui` donne l'état et le panneau ouvert. */
-import { SEASONS, FAMILIES, FAMILY_IDS, GLAZES, LEVEL_WORDS, POT_SIZES, RARITIES, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, STAGES, ZONES } from './data';
+import { GARDEN, GARDEN_FIRST, GARDEN_INDEX, SEASONS, FAMILIES, FAMILY_IDS, GLAZES, LEVEL_WORDS, POT_SIZES, RARITIES, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, STAGES, ZONES } from './data';
 import type { Species } from './data';
 import { THEMES } from './themes';
 import * as sim from './sim';
@@ -61,14 +61,15 @@ export function vitrineHtml(ui: UI): string {
 
 export function zoneHtml(ui: UI): string {
   const s = ui.s;
-  const z = ZONES[ui.arg];
+  const garden = ui.arg === GARDEN_INDEX;
+  const z = ZONES[ui.arg] ?? GARDEN;
   const price = sim.ZONE_PRICES[ui.arg];
   const can = s.coins >= price;
   const c = sim.zoneClimate(s, z);
   const fans = SPECIES.filter((sp) => sim.fitOf(sp, c) >= 1 && s.disc[sp.id]?.seen).map((sp) => `${EMOJI[sp.id]} ${sp.name}`);
   return head(ui, `${z.icon} ${ui.zname(ui.arg)}`) + `<div class="sh-body">
-    <p class="sub">Ce coin est encore encombré. Aménage-le pour gagner trois emplacements.</p>
-    ${zoneLine(ui, ui.arg * SLOTS_PER_ZONE)}
+    <p class="sub">${garden ? 'Derrière la porte, un jardin en plein air : trois emplacements de plus. Son climat change à chaque saison.' : 'Ce coin est encore encombré. Aménage-le pour gagner trois emplacements.'}</p>
+    ${zoneLine(ui, garden ? GARDEN_FIRST : ui.arg * SLOTS_PER_ZONE)}
     <p class="sub">${fans.length ? 'Parfaite pour : ' + fans.join(', ') + '.' : 'Aucune de tes espèces connues n\'y serait parfaitement à l\'aise pour l\'instant.'}</p>
     <button class="btn primary wide" data-act="openzone" ${can ? '' : 'disabled'}>Aménager · ${fmt(price)} 🪙</button>
     ${can ? '' : `<p class="sub center">Il te manque ${fmt(price - s.coins)} 🪙.</p>`}</div>`;
@@ -315,7 +316,7 @@ export function ficheHtml(ui: UI, sp: Species): string {
     <p class="sub"><i>${esc(sp.latin)}</i> · ${FAMILIES[sp.family].name} · ${esc(sp.origin)}</p>
     <div>${rarTag(sp)} <span class="st">${stars(sim.starsOf(d))}</span></div>
     <h3>Ce qu'elle aime</h3>${needsChips(sp)}
-    <p class="sub">Idéal : ${ZONES.filter((z) => sim.fitOf(sp, sim.zoneClimate(ui.s, z)) >= 1).map((z) => ui.zname(ZONES.indexOf(z))).join(', ') || 'aucun coin parfait pour l\'instant, cherche le moins mauvais ou équipe la serre'}.</p>
+    <p class="sub">Idéal : ${[...ZONES, ...(ui.s.zonesOpen[GARDEN_INDEX] ? [GARDEN] : [])].filter((z) => sim.fitOf(sp, sim.zoneClimate(ui.s, z)) >= 1).map((z) => ui.zname(ZONES.indexOf(z))).join(', ') || 'aucun coin parfait pour l\'instant, cherche le moins mauvais ou équipe la serre'}.</p>
     <div class="kv"><span>Taille adulte</span><b>${esc(sp.height)}</b></div>
     <div class="kv"><span>Pot nécessaire</span><b>${POT_SIZES[sim.sizeOf(sp) - 1].name}${sim.sizeOf(sp) > 1 ? ' ou plus grand' : ''}</b></div>
     <div class="kv"><span>Émail préféré</span><b>${GLAZES[FAMILIES[sp.family].glaze].name}</b></div>

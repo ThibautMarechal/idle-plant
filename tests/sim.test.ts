@@ -266,4 +266,17 @@ describe('simulation', () => {
     expect(sim.slotOpen(s, 14)).toBe(true);
     expect(sim.buyPot(s, 14)).toBe(true);
   });
+
+  it('le jardin s\'achète, ouvre trois emplacements et suit le climat des saisons', () => {
+    const s = sim.newState(0);
+    expect(sim.slotOpen(s, 16)).toBe(false);
+    s.coins = 1000;
+    expect(sim.openZone(s, 4)).toBe(true);
+    expect(s.coins).toBe(400);
+    expect(sim.slotOpen(s, 18)).toBe(true);
+    expect(sim.zoneOfSlot(17).id).toBe('jardin');
+    const spring = sim.zoneClimate(s, sim.zoneOfSlot(16)).temp;
+    s.seasonT = 3 * 20 * 60 + 1;
+    expect(sim.zoneClimate(s, sim.zoneOfSlot(16)).temp).toBeLessThan(spring);
+  });
 });

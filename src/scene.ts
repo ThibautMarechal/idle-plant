@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { BASE_SLOTS, POT_SIZES, SLOT_COUNT, SLOTS_PER_ZONE, SPECIES_BY_ID, ZONES } from './data';
+import { BASE_SLOTS, GARDEN_FIRST, GARDEN_INDEX, POT_SIZES, SLOT_COUNT, SLOTS_PER_ZONE, SPECIES_BY_ID, ZONES } from './data';
 import { buildPlant, buildPot, mat, POT_TOP } from './plants3d';
 import { fitOf, slotOpen, stageOf, zoneClimate, zoneOfSlot } from './sim';
 import type { State } from './sim';
@@ -42,6 +42,10 @@ export class Scene3D {
   private look = { yaw: 0, pitch: 0, zoom: 1 };
   private aim = { yaw: 0, pitch: 0, zoom: 1 };
   private pannedAt = 0;
+  private panStart = 0;
+  /** Où l'on se tient : 0 dans la serre, 1 au jardin. */
+  spot = 0;
+  private doors: THREE.Object3D[] = [];
   private now = 0;
   private theme!: Theme;
   private slots: SlotView[] = [];
@@ -117,13 +121,16 @@ export class Scene3D {
     sun.castShadow = true;
     sun.shadow.mapSize.set(1024, 1024);
     const sc = sun.shadow.camera;
-    sc.left = -7; sc.right = 7; sc.top = 7; sc.bottom = -7; sc.near = 1; sc.far = 34;
+    const far = t.fp ? 17 : 7;
+    if (t.fp) sun.shadow.mapSize.set(2048, 2048);
+    sc.left = -far; sc.right = far; sc.top = far; sc.bottom = -far; sc.near = 1; sc.far = 34 + far;
     sun.shadow.bias = -0.002;
     sun.shadow.radius = st.shadowRadius;
     add(sun);
 
     t.build(add);
-    this.world.traverse((o) => { if (o.userData.water) this.waters.push(o); });
+    this.doors = [];
+    this.world.traverse((o) => { if (o.userData.water) this.waters.push(o); if (o.userData.door) this.doors.push(o); });
 
     const mistMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35, depthWrite: false });
     for (let k = 0; k < 6; k++) {
@@ -147,6 +154,7 @@ export class Scene3D {
     if (t.fp) {
       this.camera = new THREE.PerspectiveCamera(70, 1, 0.1, 200);
       this.camera.rotation.order = 'YXZ';
+      this.spot = 0;
       this.camera.position.set(0, t.fp.eye, 0);
       this.aim = { yaw: Math.round(this.aim.yaw / STEP) * STEP, pitch: t.fp.pitch, zoom: 1 };
       this.look = { ...this.aim };
@@ -209,7 +217,8 @@ export class Scene3D {
   }
 
   private buildSlot(i: number): SlotView {
-    const base = v3(this.theme.slots[i]);
+    // Un décor sans jardin range ces emplacements hors de vue.
+    const base = v3(this.theme.slots[i] ?? [0, -80, 0]);
     const root = new THREE.Group();
     root.position.copy(base);
     // En première personne, chaque pot fait face au jardinier.
@@ -234,7 +243,7 @@ export class Scene3D {
     drip.visible = false;
     root.add(drip);
     let hanger: THREE.Group | null = null;
-    if (i >= BASE_SLOTS) {
+    if (i >= BASE_SLOTS && i < GARDEN_FIRST) {
       hanger = new THREE.Group();
       hanger.add(box(0.95, 0.06, 0.6, 0xb98a5a, 0, -0.03, 0));
       for (const sx of [-0.42, 0.42]) hanger.add(box(0.025, 1.9, 0.025, 0xe8dcc0, sx, 0.95, 0, false));
@@ -315,7 +324,9 @@ export class Scene3D {
   panBy(dx: number, dy: number, edge = false): void {
     if (this.theme.fp) {
       // Le décor suit le doigt : un écran de large vaut le champ de vision.
-      const k = (2 * HALF_FOV) / this.aim.zoom / this.w;
+      const k = ((2 * HALF_FOV) / this.aim.zoom / this.w) * 1.35;
+      // Début d'un geste : on retient le coin d'où l'on part.
+      if (this.now - this.pannedAt > 0.25) this.panStart = Math.round(this.aim.yaw / STEP) * STEP;
       this.aim.yaw -= dx * k * (edge ? 1.6 : 1);
       if (!edge) this.aim.pitch = Math.max(-0.3, Math.min(0.5, this.aim.pitch + dy * k));
       this.look = { ...this.aim };
@@ -373,6 +384,41 @@ export class Scene3D {
     return this.aim.yaw + d - Math.round(d / (2 * Math.PI)) * 2 * Math.PI;
   }
 
+  get fp(): boolean {
+    return !!this.theme.fp;
+  }
+
+  /** Doigt levé après un balayage : un petit geste suffit pour passer au coin voisin, dans le sens du geste. */
+  release(): void {
+    if (!this.theme.fp || this.aim.zoom > 1.15) return;
+    const d = this.aim.yaw - this.panStart;
+    this.aim.yaw = Math.abs(d) < 0.07 ? this.panStart : this.panStart + Math.sign(d) * Math.max(1, Math.round(Math.abs(d) / STEP)) * STEP;
+    this.pannedAt = -1;
+  }
+
+  /** Passe la porte : on marche jusqu'à l'autre endroit, tourné vers `deg`. */
+  walk(spot: number, deg: number): void {
+    if (!this.theme.fp) return;
+    this.spot = spot;
+    this.aim.zoom = 1;
+    this.aim.pitch = this.theme.fp.pitch;
+    this.aim.yaw = this.near((deg * Math.PI) / 180);
+    this.pannedAt = this.now;
+  }
+
+  /** Vrai si l'emplacement est là où l'on se tient. */
+  private here(i: number): boolean {
+    return !this.theme.fp || (i >= GARDEN_FIRST ? 1 : 0) === this.spot;
+  }
+
+  /** Position écran d'un objet cliquable du décor, et taille d'une unité à cet endroit. */
+  hotRect(k: number): { x: number; y: number; unit: number } {
+    const h = this.theme.fp?.hot[k];
+    if (!h || (h.spot >= 0 && h.spot !== this.spot)) return { x: -9999, y: -9999, unit: 0 };
+    const a = this.screen(v3(h.at)), b = this.screen(v3(h.at).setY(h.at[1] + 1));
+    return { x: a.x, y: a.y, unit: Math.abs(a.y - b.y) };
+  }
+
   /** Vrai en première personne : il n'y a pas de vue d'ensemble, on est toujours près des pots. */
   get close(): boolean {
     return !!this.theme.fp || this.zoomed;
@@ -405,6 +451,7 @@ export class Scene3D {
 
   /** Aligne le décor sur l'état du jeu. Ne reconstruit un modèle que si son aspect change. */
   sync(s: State): void {
+    for (const d of this.doors) d.visible = !s.zonesOpen[GARDEN_INDEX];
     for (const k of Object.keys(this.gear)) this.gear[k].visible = !!s.upgrades[k as keyof State['upgrades']];
     s.showcase.forEach((h, k) => {
       const v = this.shows[k];
@@ -503,7 +550,10 @@ export class Scene3D {
       const l = this.look, a = this.aim;
       // Doigt levé, la vue se cale en douceur face au coin le plus proche.
       if (t - this.pannedAt > 0.3 && a.zoom <= 1.15 && this.lifted < 0) a.yaw = Math.round(a.yaw / STEP) * STEP;
-      if (Math.abs(l.yaw - a.yaw) + Math.abs(l.pitch - a.pitch) + Math.abs(l.zoom - a.zoom) > 0.0005) {
+      const [px, , pz] = this.theme.fp.spots[this.spot];
+      const cp = this.camera.position, far = Math.abs(cp.x - px) + Math.abs(cp.z - pz) > 0.002;
+      if (far) { cp.x += (px - cp.x) * Math.min(1, dt * 3.2); cp.z += (pz - cp.z) * Math.min(1, dt * 3.2); }
+      if (far || Math.abs(l.yaw - a.yaw) + Math.abs(l.pitch - a.pitch) + Math.abs(l.zoom - a.zoom) > 0.0005) {
         l.yaw += (a.yaw - l.yaw) * k; l.pitch += (a.pitch - l.pitch) * k; l.zoom += (a.zoom - l.zoom) * k;
         this.applyView();
       }
@@ -557,6 +607,7 @@ export class Scene3D {
   /** Position écran (px, relative au canvas) du pied et du sommet d'un emplacement. */
   slotRect(i: number): { x: number; top: number; bottom: number; unit: number } {
     const v = this.slots[i];
+    if (!this.here(i)) return { x: -9999, bottom: -9999, top: -9999, unit: 1 };
     const foot = this.screen(v.base);
     const head = this.screen(v.base.clone().setY(v.base.y + 1.55));
     return { x: foot.x, bottom: foot.y, top: head.y, unit: this.theme.fp ? (foot.y - head.y) / 1.55 : this.unit };
@@ -564,12 +615,14 @@ export class Scene3D {
 
   /** Position écran d'un socle de la vitrine. */
   showRect(k: number): { x: number; y: number } {
+    if (this.theme.fp && this.spot) return { x: -9999, y: -9999 };
     return this.screen(v3(this.theme.shows[k]).add(new THREE.Vector3(0, 1.35, 0)));
   }
 
   /** Position écran du centre d'une zone, pour y accrocher un cadenas. */
   zoneCenter(r: number): { x: number; y: number } {
     const c = new THREE.Vector3();
+    if (this.theme.fp && this.spot) return { x: -9999, y: -9999 };
     for (let k = 0; k < SLOTS_PER_ZONE; k++) c.add(this.slots[r * SLOTS_PER_ZONE + k].base);
     return this.screen(c.multiplyScalar(1 / SLOTS_PER_ZONE).add(new THREE.Vector3(0, 1.1, 0)));
   }

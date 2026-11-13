@@ -33,7 +33,13 @@ export interface Theme {
   /** Où poser brumisateur, lampe, radiateur et ventilateur. */
   gear: { mist: V3; lamp: V3; heat: V3; fan: V3 };
   /** Vue à la première personne : hauteur des yeux et inclinaison de départ. Sans ce champ, vue de haut. */
-  fp?: { eye: number; pitch: number };
+  fp?: {
+    eye: number; pitch: number;
+    /** Endroits où l'on peut se tenir : le centre de la serre, puis le jardin. */
+    spots: V3[];
+    /** Objets du décor qui ouvrent un menu quand on les touche. `r` : demi-taille de la zone tactile. */
+    hot: { act: string; label: string; at: V3; spot: number; r: number }[];
+  };
   build(add: (...o: THREE.Object3D[]) => void): void;
 }
 
@@ -278,7 +284,7 @@ const at = (deg: number, lx: number, y: number, dist: number): V3 => {
   const a = (deg * Math.PI) / 180;
   return [lx * Math.cos(a) + dist * Math.sin(a), y, lx * Math.sin(a) - dist * Math.cos(a)];
 };
-const P = { A: 5.0, pots: 4.3, bench: 0.78, zoneDeg: [0, 90, 180, 270], showDeg: 315 };
+const P = { A: 5.0, pots: 4.3, bench: 0.78, zoneDeg: [0, 90, 180, 270], showDeg: 315, out: 9.6 };
 
 const pavillon: Theme = {
   id: 'pavillon',
@@ -289,9 +295,20 @@ const pavillon: Theme = {
   bg: 'linear-gradient(180deg, #8fd0e8 0%, #c4e8ee 45%, #eaf5e4 70%, #bfe0b0 100%)',
   yaw: 0,
   pitch: 0,
-  fp: { eye: 1.5, pitch: 0.11 },
+  fp: {
+    eye: 1.5, pitch: 0.11,
+    spots: [[0, 0, 0], at(135, 0, 0, P.out)],
+    hot: [
+      { act: 'atelier', label: '🏺 Atelier', at: at(45, 0, 1.45, 4.4), spot: 0, r: 1.0 },
+      { act: 'shop', label: '🛒 Boutique', at: at(225, -0.75, 0.95, 4.3), spot: 0, r: 0.8 },
+      { act: 'market', label: '📈 Marché', at: at(225, 1.05, 1.5, 4.5), spot: 0, r: 0.7 },
+      { act: 'packets', label: '🎁 Sachets', at: at(135, 1.5, 1.35, 4.7), spot: 0, r: 0.5 },
+      { act: 'door', label: '🚪', at: at(135, 0, 1.7, 5.0), spot: -1, r: 0.9 },
+    ],
+  },
   slots: [...P.zoneDeg.flatMap((d) => [-1.15, 0, 1.15].map((lx): V3 => at(d, lx, P.bench, P.pots - (lx ? 0.12 : 0)))),
-    ...P.zoneDeg.map((d): V3 => at(d, 0, 2.95, P.pots + 0.25))],
+    ...P.zoneDeg.map((d): V3 => at(d, 0, 2.95, P.pots + 0.25)),
+    ...[-1.15, 0, 1.15].map((lx): V3 => at(135, lx, 0.7, P.out + P.pots - (lx ? 0.12 : 0)))],
   shows: [-1.14, -0.38, 0.38, 1.14].map((lx): V3 => at(P.showDeg, lx, 1.05, 4.45)),
   bounds: [[-5.5, 0, -5.5], [5.5, 4, 5.5]],
   pot: [0xc9714a, 0xd9825a],
@@ -322,15 +339,22 @@ const pavillon: Theme = {
     // Huit pans vitrés, leurs montants, et la charpente qui monte vers le faîte.
     for (let k = 0; k < 8; k++) {
       const d = k * 45;
-      wall(d, box(side, 0.55, 0.2, 0xe9dcc6, 0, 0.275, -A), glass(side, 3.2, 0.04, 0, 2.15, -A, 0xcfeef5, 0.22),
-        box(0.12, 3.8, 0.12, 0xfdfaf2, side / 2, 1.9, -A), box(0.07, 3.2, 0.07, 0xfdfaf2, 0, 2.15, -A, false),
-        box(side, 0.12, 0.12, 0xfdfaf2, 0, 3.8, -A), box(side, 0.07, 0.07, 0xfdfaf2, 0, 2.0, -A, false));
+      wall(d, box(0.12, 3.8, 0.12, 0xfdfaf2, side / 2, 1.9, -A), box(side, 0.12, 0.12, 0xfdfaf2, 0, 3.8, -A));
+      if (d === 135) {
+        // Le pan de la porte : une ouverture au milieu, pour sortir au jardin.
+        const w = (side - 1.6) / 2;
+        for (const x of [-0.8 - w / 2, 0.8 + w / 2]) wall(d, box(w, 0.55, 0.2, 0xe9dcc6, x, 0.275, -A), glass(w, 3.2, 0.04, x, 2.15, -A, 0xcfeef5, 0.22));
+        wall(d, glass(1.6, 0.8, 0.04, 0, 3.35, -A, 0xcfeef5, 0.22), box(0.1, 2.95, 0.14, 0xfdfaf2, -0.8, 1.475, -A), box(0.1, 2.95, 0.14, 0xfdfaf2, 0.8, 1.475, -A), box(1.7, 0.1, 0.14, 0xfdfaf2, 0, 2.95, -A));
+      } else {
+        wall(d, box(side, 0.55, 0.2, 0xe9dcc6, 0, 0.275, -A), glass(side, 3.2, 0.04, 0, 2.15, -A, 0xcfeef5, 0.22),
+          box(0.07, 3.2, 0.07, 0xfdfaf2, 0, 2.15, -A, false), box(side, 0.07, 0.07, 0xfdfaf2, 0, 2.0, -A, false));
+      }
       const rafter = box(0.09, 0.09, 5.9, 0xfdfaf2, 0, 4.85, -2.65, false);
       rafter.rotation.x = -0.37;
       wall(d + 22.5, rafter);
       // Buissons du jardin, derrière la vitre.
       const [x, , z] = at(d + 11, 0, 0, 7.2 + (k % 3) * 0.8);
-      add(blob(0.9 + (k % 2) * 0.35, k % 2 ? 0x86c47c : 0x9ad08c, x, 0.5, z, 1));
+      if (k !== 3) add(blob(0.9 + (k % 2) * 0.35, k % 2 ? 0x86c47c : 0x9ad08c, x, 0.5, z, 1));
     }
     const bench = (deg: number, color: number, leg: number, h = P.bench) => wall(deg, box(3.7, 0.12, 1.0, color, 0, h - 0.06, -P.pots - 0.05),
       ...[-1.7, 1.7].flatMap((x) => [-3.95, -4.65].map((z) => box(0.12, h - 0.12, 0.12, leg, x, (h - 0.12) / 2, z))));
@@ -348,8 +372,22 @@ const pavillon: Theme = {
     add(pool);
     // Près de la porte : établi clair, et la porte sur le pan voisin.
     bench(180, 0xd9b98a, 0xb99667);
-    wall(135, box(1.5, 2.9, 0.14, 0x5f9f8a, 0, 1.45, -A + 0.05), box(1.0, 1.3, 0.16, 0xcfeef5, 0, 2.0, -A + 0.05, false),
-      box(0.1, 0.1, 0.12, 0xf2c94c, 0.55, 1.3, -A + 0.16, false), box(1.6, 0.03, 0.9, 0xb96f5a, 0, 0.02, -A + 0.7, false));
+    const door = new THREE.Group();
+    door.add(box(1.5, 2.9, 0.14, 0x5f9f8a, 0, 1.45, -A), box(1.0, 1.3, 0.16, 0xcfeef5, 0, 2.0, -A, false),
+      box(0.1, 0.1, 0.2, 0xf2c94c, 0.55, 1.3, -A, false));
+    door.userData.door = true;
+    wall(135, door, box(1.6, 0.03, 0.9, 0xb96f5a, 0, 0.02, -A + 0.7, false),
+      // Boîte aux lettres : les sachets de graines y arrivent.
+      box(0.08, 1.1, 0.08, 0x8a5f3c, 1.5, 0.55, -4.7), box(0.5, 0.36, 0.34, 0xe2604f, 1.5, 1.28, -4.7), box(0.3, 0.04, 0.02, 0x3a2a26, 1.5, 1.34, -4.52, false));
+    // Le jardin : des dalles jusqu'à une jardinière en plein air, une clôture, un arbre.
+    const g = P.out + P.pots;
+    for (const dist of [6.1, 7.3, 8.5]) wall(135, box(0.9, 0.04, 0.7, 0xd9cdb8, dist % 2 > 1 ? 0.15 : -0.15, 0.0, -dist, false));
+    wall(135, box(3.9, 0.7, 1.0, 0xa9794f, 0, 0.35, -g - 0.05), box(3.7, 0.06, 0.8, 0x6b4a34, 0, 0.69, -g - 0.05, false),
+      ...Array.from({ length: 13 }, (_, k) => box(0.36, 1.3 + (k % 2) * 0.12, 0.08, 0xfdfaf2, -4.8 + k * 0.8, 0.65, -g - 2.6)),
+      box(10, 0.1, 0.06, 0xfdfaf2, 0, 0.85, -g - 2.55, false),
+      cyl(0.22, 0.3, 2.6, 0x8a5f3c, 3.4, 1.3, -g - 1.4, 8), cyl(0.07, 0.07, 1.5, 0x6b4a34, -3.1, 0.75, -g - 0.4, 6), box(0.9, 0.3, 0.04, 0xf2c94c, -3.1, 1.4, -g - 0.4));
+    add(blob(1.7, 0x6fb56a, ...at(135, 3.4, 3.4, g + 1.4), 1), blob(1.1, 0x86c47c, ...at(135, 4.3, 2.7, g + 1.0), 1),
+      blob(1.0, 0x9ad08c, ...at(135, -4.2, 0.6, g + 3.6), 1), blob(1.3, 0x86c47c, ...at(135, 1.2, 0.8, g + 4.2), 1));
     // Table plein sud.
     bench(270, 0xc99a66, 0xa9794f);
     // Coin atelier : tour, four et pots qui sèchent.
@@ -358,7 +396,9 @@ const pavillon: Theme = {
       cyl(0.2, 0.15, 0.3, 0xc9714a, 0.35, 1.11, -4.35, 10), cyl(0.15, 0.11, 0.24, 0xd9825a, 0.8, 1.08, -4.3, 10), cyl(0.3, 0.3, 0.06, 0x9a8f86, 0.45, 0.99, -4.35, 14));
     // Coin réserve : caisses, sacs de terreau, arrosoir.
     wall(225, box(0.9, 0.7, 0.9, 0xb98a5a, -0.8, 0.35, -4.3), box(0.75, 0.6, 0.75, 0xa9794f, -0.7, 1.0, -4.35), box(0.9, 0.7, 0.9, 0xa9794f, 0.25, 0.35, -4.35),
-      box(0.8, 0.9, 0.4, 0xd8c9a8, 1.2, 0.45, -4.5), box(0.5, 0.25, 0.02, 0x6fae8a, 1.2, 0.55, -4.29, false));
+      // Ardoise des cours du marché, sur son chevalet.
+      box(1.0, 0.75, 0.06, 0x3f5a4a, 1.05, 1.5, -4.55), box(0.06, 1.9, 0.06, 0x8a5f3c, 0.6, 0.95, -4.6), box(0.06, 1.9, 0.06, 0x8a5f3c, 1.5, 0.95, -4.6),
+      box(0.6, 0.04, 0.02, 0xfdfaf2, 1.0, 1.65, -4.51, false), box(0.4, 0.04, 0.02, 0xf2c94c, 0.95, 1.45, -4.51, false));
     add(wateringCan(...at(225, 0.3, 0.7, 4.3), 0.8));
     // Vitrine : un présentoir à gradin, face aux visiteurs.
     wall(P.showDeg, box(3.3, 0.1, 0.8, 0xf4efe4, 0, 1.0, -4.45), box(3.3, 0.95, 0.7, 0xa9794f, 0, 0.475, -4.45), box(3.3, 0.06, 0.06, 0xf2c94c, 0, 0.9, -4.08, false));

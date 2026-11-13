@@ -1,4 +1,4 @@
-import { SEASONS, FAMILIES, FAMILY_IDS, GLAZES, PAINTS, POT_SIZES, RARITIES, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, STAGES, ZONES } from './data';
+import { GARDEN_INDEX, SEASONS, FAMILIES, FAMILY_IDS, GLAZES, PAINTS, POT_SIZES, RARITIES, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, STAGES, ZONES } from './data';
 import type { Family } from './data';
 import type { Scene3D } from './scene';
 import { buildPlant } from './plants3d';
@@ -67,9 +67,10 @@ export class UI {
   private celebrate: string[] = [];
   private drag = -1;
   private dragTarget = -1;
-  private holdAt: { x: number; y: number; i: number } | null = null;
+  private holdAt: { x: number; y: number; i: number; t: number } | null = null;
   private edgeAt = 0;
   private showEl!: HTMLButtonElement;
+  private hotEls: HTMLButtonElement[] = [];
 
   constructor(public s: State, readonly scene: Scene3D, private onReset: () => void) {
     const overlay = $('overlay');
@@ -87,7 +88,7 @@ export class UI {
       b.onclick = () => { if (Date.now() - this.swipedAt > 350) this.tapSlot(i); };
       // Glisser un pot : dès que le doigt bouge, le pot se soulève et suit.
       b.addEventListener('pointerdown', (e) => {
-        this.holdAt = this.s.slots[i].pot ? { x: e.clientX, y: e.clientY, i } : null;
+        this.holdAt = this.s.slots[i].pot ? { x: e.clientX, y: e.clientY, i, t: Date.now() } : null;
       });
       overlay.appendChild(b);
       this.slotEls.push(b);
@@ -153,6 +154,8 @@ export class UI {
         this.swipedAt = Date.now();
         return;
       }
+      // À la première personne, un geste vif parti d'un pot est un balayage ; pour prendre le pot, on pose le doigt un instant.
+      if (this.drag < 0 && this.holdAt && this.scene.fp && Date.now() - this.holdAt.t < 180 && Math.hypot(e.clientX - this.holdAt.x, e.clientY - this.holdAt.y) >= 10) this.holdAt = null;
       if (this.drag < 0 && !this.holdAt) {
         // Un doigt sur le décor : la vue suit.
         if (!f) return;
@@ -198,7 +201,7 @@ export class UI {
         this.refresh(true);
         return;
       }
-      if (panning) { panning = false; this.swipedAt = Date.now(); this.refresh(true); return; }
+      if (panning) { panning = false; this.scene.release(); this.swipedAt = Date.now(); this.refresh(true); return; }
       // Double-touche sur le décor : on s'approche, ou on revient à la vue d'ensemble.
       if (onScene && Math.hypot(e.clientX - sx, e.clientY - sy) < 8 && !(e.target as HTMLElement).closest('.slot, .zlock, .showb')) {
         if (Date.now() - lastTap < 320) { const at = local(e.clientX, e.clientY); this.scene.toggleZoom(at.x, at.y); lastTap = 0; this.refresh(true); }
@@ -314,11 +317,28 @@ export class UI {
   }
 
   zname(z: number): string {
-    return themeOf(this.scene.themeId).zones[z];
+    return themeOf(this.scene.themeId).zones[z] ?? 'Le jardin';
   }
 
   private applyTheme(): void {
     $('app').style.background = themeOf(this.scene.themeId).bg;
+    // Objets du décor qui ouvrent un menu : une zone tactile par objet, avec son étiquette.
+    this.hotEls.forEach((el) => el.remove());
+    this.hotEls = (themeOf(this.scene.themeId).fp?.hot ?? []).map((h) => {
+      const b = document.createElement('button');
+      b.className = 'hot';
+      b.innerHTML = `<span>${h.label}</span>`;
+      b.onclick = () => {
+        if (Date.now() - this.swipedAt < 350) return;
+        if (h.act !== 'door') return this.act('nav', h.act);
+        if (!this.s.zonesOpen[GARDEN_INDEX]) return this.open('zone', GARDEN_INDEX);
+        this.scene.walk(this.scene.spot ? 0 : 1, this.scene.spot ? 315 : 135);
+        play('tap');
+        this.refresh(true);
+      };
+      $('overlay').appendChild(b);
+      return b;
+    });
     document.body.dataset.style = this.scene.styleId;
   }
 
@@ -429,7 +449,7 @@ export class UI {
         break;
       }
       case 'openzone':
-        if (sim.openZone(s, this.arg)) { this.toast(`${this.zname(this.arg)} : zone aménagée !`); this.buzz(30); this.close(); this.goZone(this.arg); }
+        if (sim.openZone(s, this.arg)) { this.toast(`${this.zname(this.arg)} : zone aménagée !`); this.buzz(30); const z = this.arg; this.close(); if (z === GARDEN_INDEX) this.scene.walk(1, 135); else this.goZone(z); }
         else this.toast('Pas assez de pièces.');
         break;
       case 'plant':
@@ -798,6 +818,12 @@ export class UI {
       el.style.width = r.unit * 1.25 + 'px';
       el.style.height = r.bottom - r.top + 'px';
     });
+    this.hotEls.forEach((el, k) => {
+      const r = this.scene.hotRect(k), h = themeOf(this.scene.themeId).fp!.hot[k];
+      el.style.left = r.x + 'px';
+      el.style.top = r.y + 'px';
+      el.style.width = el.style.height = r.unit * h.r * 2 + 'px';
+    });
     const sr = this.scene.showRect(1), sr2 = this.scene.showRect(2);
     this.showEl.style.left = (sr.x + sr2.x) / 2 + 'px';
     this.showEl.style.top = sr.y + 'px';
@@ -885,6 +911,12 @@ export class UI {
         bar.className = 'bar' + (p!.water <= 0 ? ' dry' : '');
         (bar.firstElementChild as HTMLElement).style.width = Math.round(p!.prog * 100) + '%';
       }
+    });
+    this.hotEls.forEach((el, k) => {
+      if (themeOf(this.scene.themeId).fp!.hot[k].act !== 'door') return;
+      const txt = !s.zonesOpen[GARDEN_INDEX] ? `🔒 Jardin · ${fmt(sim.ZONE_PRICES[GARDEN_INDEX])} 🪙` : this.scene.spot ? '🚪 Rentrer' : '🌳 Jardin';
+      const sp = el.firstElementChild!;
+      if (sp.textContent !== txt) sp.textContent = txt;
     });
     this.lockEls.forEach((el, r) => {
       el.hidden = s.zonesOpen[r];
