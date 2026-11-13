@@ -422,3 +422,23 @@ body[data-style="bd"] .hudrow .pill { padding: 7px 8px; font-size: 14px; }
 #tr-label.on { display: flex; }
 #tr-label i { font-style: normal; font-size: 10px; font-weight: 900; background: var(--gold); border-radius: 6px; padding: 1px 5px; }
 #tr-hint { position: absolute; left: 16px; right: 16px; bottom: calc(18px + var(--safe-b)); margin: 0; text-align: center; font-weight: 800; font-size: 13.5px; background: rgba(255, 255, 255, 0.9); border: 2.5px solid var(--ink); border-radius: 14px; padding: 8px 12px; pointer-events: none; }
+
+/* Expédition, version jeu : boussole du camp, manette sous le pouce, jauge de coupe, tombée de la nuit. */
+.tr-time i.late { background: var(--red, #e2604f); }
+.tr-row { gap: 6px; }
+#tr-camp { display: flex; gap: 6px; align-items: center; }
+#tr-arrow { display: inline-block; font-size: 13px; }
+#tr-night { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, #1b1b3a 0%, #5a2a4a 55%, #c9603a 100%); opacity: 0; mix-blend-mode: multiply; }
+#tr-stick { position: absolute; display: none; width: 140px; height: 140px; margin: -70px 0 0 -70px; border-radius: 50%; border: 3px solid rgba(255, 255, 255, 0.8); background: rgba(255, 255, 255, 0.14); pointer-events: none; }
+#tr-stick.on { display: block; }
+#tr-stick i { position: absolute; left: 45px; top: 45px; width: 50px; height: 50px; border-radius: 50%; background: #fff; border: 2.5px solid var(--ink); }
+#tr-hint { display: none; }
+#tr-hint.on { display: block; }
+#tr-gauge { position: absolute; display: none; left: 28px; right: 28px; bottom: calc(96px + var(--safe-b)); height: 34px; border-radius: 18px; background: #e2604f; border: 3px solid var(--ink); box-shadow: 0 4px 0 var(--ink); overflow: hidden; pointer-events: none; }
+#tr-gauge.on { display: block; }
+#tr-gauge span { position: absolute; top: 0; bottom: 0; }
+#tr-ok { background: #f2c94c; }
+#tr-green { background: #4fbf6a; }
+#tr-cur { position: absolute; top: -3px; bottom: -3px; width: 7px; margin-left: -3px; background: #fff; border: 2px solid var(--ink); border-radius: 4px; }
+.tr-row .pill, .tr-row .btn { white-space: nowrap; font-size: 13px; padding: 6px 10px; flex: none; }
+#tr-basket { flex: 0 1 auto; min-width: 0; overflow: hidden; letter-spacing: 0; }

@@ -348,6 +348,8 @@ export const BIOMES: Biome[] = [
   { id: 'dunes', name: 'Les dunes', icon: '🏜️', fams: ['succulentes', 'aromatiques'], price: 900, text: 'Sable chaud et vent sec : succulentes et aromatiques.', sky: ['#a9d8f2', '#fbe9c6'], ground: 0xe9d3a0, fog: 0xf6e7c8 },
 ];
 /** Durée d'une sortie (s), repos entre deux sorties (s), tailles et prix du panier. */
-export const TREK_TIME = 75;
+export const TREK_TIME = 150;
+/** Marge de la coupe parfaite sur la jauge, selon la rareté (fraction de la jauge). */
+export const CUT_ZONE: Record<Rarity, number> = { commun: 0.3, rare: 0.22, exotique: 0.16, legendaire: 0.11 };
 export const TREK_REST = 240;
 export const BASKETS: { cap: number; price: number }[] = [{ cap: 4, price: 0 }, { cap: 6, price: 350 }, { cap: 9, price: 900 }];

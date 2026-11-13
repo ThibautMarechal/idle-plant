@@ -46,6 +46,7 @@ export class Scene3D {
   /** Où l'on se tient : 0 dans la serre, 1 au jardin. */
   spot = 0;
   private doors: THREE.Object3D[] = [];
+  private flutters: THREE.Object3D[] = [];
   private now = 0;
   private theme!: Theme;
   private slots: SlotView[] = [];
@@ -130,7 +131,8 @@ export class Scene3D {
 
     t.build(add);
     this.doors = [];
-    this.world.traverse((o) => { if (o.userData.water) this.waters.push(o); if (o.userData.door) this.doors.push(o); });
+    this.flutters = [];
+    this.world.traverse((o) => { if (o.userData.water) this.waters.push(o); if (o.userData.door) this.doors.push(o); if (o.userData.flutter !== undefined) this.flutters.push(o); });
 
     const mistMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35, depthWrite: false });
     for (let k = 0; k < 6; k++) {
@@ -584,6 +586,7 @@ export class Scene3D {
       (m.material as THREE.MeshBasicMaterial).opacity = 0.34 * Math.sin(ph * Math.PI);
     });
     this.waters.forEach((w) => { w.scale.y = 1 + Math.sin(t * 1.5) * 0.25; });
+    this.flutters.forEach((f) => { f.rotation.x = 0.45 + Math.sin(t * 6 + (f.userData.flutter as number) * 1.3) * 0.35; f.rotation.z = Math.sin(t * 4.3 + (f.userData.flutter as number)) * 0.2; });
     this.bugs.forEach((b) => {
       const n = b.userData.k as number;
       const a = t * 0.35 + n * 1.9;

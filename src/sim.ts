@@ -687,34 +687,38 @@ export function buyBasket(s: State): boolean {
   return true;
 }
 /**
- * Ce qui pousse aujourd'hui dans un milieu : `n` plantes sauvages de ses familles.
- * Les plus rares sont cachées dans un fourré (`hidden`) : il faut l'écarter pour les voir.
+ * Ce qui pousse aujourd'hui dans un milieu, du camp vers le lointain :
+ * huit plantes proches (`tier` 0), six fourrés à mi-chemin qui cachent au moins du rare (1),
+ * quatre trouvailles lointaines, exotiques le plus souvent, parfois légendaires (2).
  */
-export function trekFinds(s: State, b: number, rng: Rng, n: number): { id: string; hidden: boolean }[] {
+export function trekFinds(s: State, b: number, rng: Rng): { id: string; hidden: boolean; tier: number }[] {
   if (!trekOf(s).open[b] || trekOf(s).rest > 0) return [];
   const fams = BIOMES[b].fams;
-  const out: { id: string; hidden: boolean }[] = [];
-  for (let i = 0; i < n; i++) {
-    // Un tiers des emplacements sont des fourrés : on y trouve au moins du rare.
-    const hidden = i % 3 === 2;
+  const out: { id: string; hidden: boolean; tier: number }[] = [];
+  for (let i = 0; i < 18; i++) {
+    const tier = i < 8 ? 0 : i < 14 ? 1 : 2;
     let rar = rollRarity(rng);
-    if (hidden && rar === 'commun') rar = rng() < 0.75 ? 'rare' : 'exotique';
+    if (tier === 1 && rar === 'commun') rar = rng() < 0.75 ? 'rare' : 'exotique';
+    if (tier === 2) { const r = rng(); rar = r < 0.1 ? 'legendaire' : r < 0.6 ? 'exotique' : 'rare'; }
     let pool = SPECIES.filter((sp) => fams.includes(sp.family) && sp.rarity === rar);
-    if (!pool.length) pool = SPECIES.filter((sp) => fams.includes(sp.family) && sp.rarity === (hidden ? 'rare' : 'commun'));
+    if (!pool.length) pool = SPECIES.filter((sp) => fams.includes(sp.family) && sp.rarity === (tier ? 'rare' : 'commun'));
     if (!pool.length) pool = SPECIES.filter((sp) => fams.includes(sp.family));
-    out.push({ id: pool[Math.floor(rng() * pool.length)].id, hidden });
+    out.push({ id: pool[Math.floor(rng() * pool.length)].id, hidden: tier === 1 || (tier === 2 && i % 2 === 1), tier });
   }
   return out;
 }
-/** Retour d'expédition : le panier (limité à sa taille) devient des graines, et il faut se reposer avant de repartir. */
-export function trekEnd(s: State, ids: string[]): { id: string; isNew: boolean }[] {
+/**
+ * Retour d'expédition : le panier (limité à sa taille) devient des graines, plus une graine
+ * par coupe parfaite (`bonus`), et il faut se reposer avant de repartir.
+ */
+export function trekEnd(s: State, ids: string[], bonus: string[] = []): { id: string; isNew: boolean }[] {
   const t = trekOf(s);
   if (t.rest > 0) return [];
   t.rest = TREK_REST;
   t.done++;
   const kept = ids.slice(0, basketCap(s));
   gainXp(s, kept.length * 2);
-  return grant(s, kept);
+  return grant(s, [...kept, ...bonus.filter((id) => kept.includes(id)).slice(0, kept.length)]);
 }
 
 export function openFreePacket(s: State, rng: Rng = Math.random) {

@@ -256,7 +256,7 @@ export function trekHtml(ui: UI): string {
     return `<div class="card"><div class="ico">${b.icon}</div><div class="mid"><div class="nm">${b.name} ${fams}</div><div class="ds">${b.text}</div></div>${end}</div>`;
   }).join('');
   return head(ui, '🥾 Expédition') + `<div class="sh-body">
-    <p class="sub">${t.rest > 0 ? `Tu te reposes encore ${clock(t.rest)} avant de repartir.` : 'Pars cueillir toi-même graines et boutures sauvages. Les plus rares se cachent dans les fourrés.'}</p>
+    <p class="sub">${t.rest > 0 ? `Tu te reposes encore ${clock(t.rest)} avant de repartir.` : 'Pars du camp à pied et cueille graines et boutures sauvages. Plus tu t\'éloignes, plus elles sont rares, mais sois rentré au camp avant la nuit ou tu perdras la moitié du panier.'}</p>
     ${rows}
     <div class="card"><div class="ico">🧺</div><div class="mid"><div class="nm">Panier : ${sim.basketCap(s)} plantes</div><div class="ds">${next ? `Un plus grand panier en porte ${next.cap}.` : 'C\'est le plus grand panier.'}</div></div>${next
       ? `<button class="btn ${s.coins >= next.price ? 'primary' : ''} small" data-act="trek-basket" ${s.coins >= next.price ? '' : 'disabled'}>${fmt(next.price)} 🪙</button>` : '<span class="chip ok">Maximum</span>'}</div></div>`;

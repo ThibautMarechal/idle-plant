@@ -103,10 +103,18 @@ export class UI {
     this.applyTheme();
     $('studio').innerHTML = '<div class="st-head"><h2 id="st-title"></h2><button class="x" data-act="st-close">✕</button></div><p id="st-hint"></p><canvas id="stgl"></canvas><div id="st-tools"></div>';
     this.studio = new Studio($('stgl') as HTMLCanvasElement);
-    $('trek').innerHTML = '<canvas id="trgl"></canvas><div class="tr-top"><div class="tr-time"><i id="tr-bar"></i></div><div class="tr-row"><span class="pill" id="tr-basket"></span><button class="btn small" data-act="trek-home">Rentrer</button></div></div><div id="tr-label"></div><p id="tr-hint"></p>';
+    $('trek').innerHTML = '<canvas id="trgl"></canvas><div id="tr-night"></div><div class="tr-top"><div class="tr-time"><i id="tr-bar"></i></div><div class="tr-row"><span class="pill" id="tr-basket"></span><span class="pill" id="tr-camp"><b id="tr-arrow">▲</b><span id="tr-dist"></span></span><button class="btn small" id="tr-home" data-act="trek-home">Rentrer</button></div></div><div id="tr-stick"><i></i></div><div id="tr-label"></div><div id="tr-gauge"><span id="tr-ok"></span><span id="tr-green"></span><b id="tr-cur"></b></div><p id="tr-hint"></p>';
     this.trek = new Trek($('trgl') as HTMLCanvasElement);
     this.trek.onChange = () => this.trekHud();
-    this.trek.onPick = (id) => { play('plant'); this.buzz(15); this.toast(`${EMOJI[id]} ${SPECIES_BY_ID[id].name} dans le panier`); };
+    this.trek.onEvent = (kind, id) => {
+      const name = id ? `${EMOJI[id]} ${SPECIES_BY_ID[id].name}` : '';
+      if (kind === 'perfect') { play('rare'); this.buzz(30); this.toast(`Coupe parfaite ! ${name} et une graine en plus.`); }
+      else if (kind === 'pick') { play('plant'); this.buzz(15); this.toast(`${name} dans le panier.`); }
+      else if (kind === 'miss') { play('tap'); this.buzz(60); this.toast(`Raté : ${name} est abîmée.`); }
+      else if (kind === 'reveal') { play('craft'); this.buzz(20); }
+      else if (kind === 'slow') this.toast(['Des ronces ! Tu avances au ralenti.', 'De la vase ! Tu avances au ralenti.', 'Du sable mou ! Tu avances au ralenti.'][this.trek.biome]);
+      else if (kind === 'dusk') { play('tap'); this.toast('Le soleil se couche : rentre au camp avant la nuit !'); }
+    };
     this.trek.onEnd = () => this.trekHome();
     $('tools').innerHTML = '<button class="tool" data-tool="shears">✂️</button><button class="tool" data-tool="basket">🧺</button><button class="tool" data-tool="can">🚿</button><button class="tool" data-tool="glove">🧤</button>';
     const grab = (tool: string, label: string, el: HTMLElement, e: PointerEvent) => {
@@ -531,7 +539,7 @@ export class UI {
         else this.toast('Pas assez de pièces.');
         break;
       case 'trek-go': {
-        const finds = sim.trekFinds(s, n, Math.random, 12);
+        const finds = sim.trekFinds(s, n, Math.random);
         if (!finds.length) { this.toast('Repose-toi encore un peu avant de repartir.'); break; }
         this.close();
         $('trek').className = 'on';
@@ -540,7 +548,9 @@ export class UI {
         this.trekHud();
         break;
       }
-      case 'trek-home': this.trekHome(); break;
+      case 'trek-home':
+        if (!this.trek.goHome()) this.toast('Reviens d\'abord au camp : suis la flèche ⛺.');
+        break;
       case 'seedbag':
         this.seedOpen = this.seedOpen ? 0 : Date.now();
         this.refresh(true);
@@ -683,38 +693,66 @@ export class UI {
     $('studio').className = '';
   }
 
-  /** Bandeau de l'expédition : temps restant, panier, et l'étiquette de la plante devant soi. */
+  /** Bandeau de l'expédition : jour restant, panier, boussole du camp, manette, étiquette et jauge de coupe. */
   private trekHud(): void {
     const t = this.trek;
     if (!t.active) return;
+    const px = (el: HTMLElement, x: number, y: number) => { el.style.left = x + 'px'; el.style.top = y + 'px'; };
     ($('tr-bar') as HTMLElement).style.width = (t.left / TREK_TIME) * 100 + '%';
-    const b = `🧺 ${t.basket.map((id) => EMOJI[id]).join('')}${'·'.repeat(Math.max(0, t.cap - t.basket.length))}`;
+    $('tr-bar').classList.toggle('late', t.left < 35);
+    ($('tr-night') as HTMLElement).style.opacity = String(t.night * 0.55);
+    const count: Record<string, number> = {};
+    for (const id of t.bonus) count[id] = (count[id] ?? 0) + 1;
+    const b = `🧺 ${t.basket.map((id) => EMOJI[id] + (count[id]-- > 0 ? '✨' : '')).join('')}${'·'.repeat(Math.max(0, t.cap - t.basket.length))}`;
     if ($('tr-basket').textContent !== b) $('tr-basket').textContent = b;
+    const dist = t.atCamp ? '⛺ Au camp' : `⛺ ${Math.round(t.campDist)} m`;
+    if ($('tr-dist').textContent !== dist) $('tr-dist').textContent = dist;
+    const arrow = $('tr-arrow');
+    arrow.style.transform = `rotate(${t.campAngle}rad)`;
+    arrow.style.visibility = t.atCamp ? 'hidden' : 'visible';
+    $('tr-home').classList.toggle('gold', t.atCamp);
+    const stick = $('tr-stick');
+    stick.className = t.stick ? 'on' : '';
+    if (t.stick) {
+      px(stick, t.stick.x, t.stick.y);
+      (stick.firstElementChild as HTMLElement).style.transform = `translate(${t.stick.dx}px, ${t.stick.dy}px)`;
+    }
     const lab = $('tr-label'), r = t.nearRect();
-    let html = '', hint = 'Glisse pour regarder autour de toi. Touche une plante pour t\'en approcher.';
+    let html = '', hint = t.atCamp && !t.basket.length ? 'Pose le pouce et pousse vers le haut pour marcher, sur les côtés pour tourner. Le rare est loin du camp.' : '';
     if (r && t.near >= 0) {
       const sp = SPECIES_BY_ID[t.nearId];
       html = t.nearHidden ? '<b>Un fourré…</b>' : `<b>${EMOJI[sp.id]} ${esc(sp.name)}</b>${rarTag(sp)}${this.s.disc[sp.id]?.seen ? '' : '<i>NOUVEAU</i>'}`;
-      hint = t.nearHidden ? 'Glisse le doigt dessus pour écarter les branches.' : t.full ? 'Ton panier est plein.' : 'Glisse le doigt en travers de la plante pour la prélever.';
-      lab.style.left = r.x + 'px';
-      lab.style.top = r.y + 'px';
-    }
+      hint = t.cut ? 'Touche l\'écran quand le curseur est dans le vert !' : t.nearHidden ? 'Frotte le fourré du doigt pour écarter ses branches.' : t.full ? 'Ton panier est plein : rentre au camp.' : 'Touche la plante pour sortir le sécateur.';
+      px(lab, r.x, r.y);
+    } else if (t.full) hint = 'Ton panier est plein : rentre au camp.';
+    if (t.lost) hint = 'La nuit t\'a surpris loin du camp : tu perds la moitié du panier.';
     if (html !== this.trekLabel) { this.trekLabel = html; lab.innerHTML = html; lab.className = html ? 'on' : ''; }
-    if ($('tr-hint').textContent !== hint) $('tr-hint').textContent = hint;
+    const hintEl = $('tr-hint');
+    if (hintEl.textContent !== hint) { hintEl.textContent = hint; hintEl.className = hint ? 'on' : ''; }
+    const g = $('tr-gauge');
+    g.className = t.cut ? 'on' : '';
+    if (t.cut) {
+      const c = t.cut, pc = (v: number) => Math.max(0, Math.min(100, v * 100)) + '%';
+      const set = (id: string, half: number) => { const el = $(id); el.style.left = pc(c.mid - half); el.style.width = pc(Math.min(1, c.mid + half) - Math.max(0, c.mid - half)); };
+      set('tr-ok', c.zone / 2 + 0.13);
+      set('tr-green', c.zone / 2);
+      $('tr-cur').style.left = pc(c.pos);
+    }
   }
 
   /** Retour à la serre : le panier devient des graines, fêtées comme un sachet. */
   private trekHome(): void {
     if (!this.trek.active) return;
-    const got = sim.trekEnd(this.s, this.trek.basket);
+    const lost = this.trek.lost;
+    const got = sim.trekEnd(this.s, this.trek.basket, this.trek.bonus);
     this.trek.close();
     $('trek').className = '';
     this.trekLabel = '';
     if (got.length) {
       this.showPacket(got);
       const title = $('modal').querySelector('.mtitle');
-      if (title) title.textContent = 'Ta cueillette';
-    } else this.toast('Tu rentres le panier vide. La prochaine sortie sera la bonne !');
+      if (title) title.textContent = lost ? 'Ce qu\'il reste de ta cueillette' : 'Ta cueillette';
+    } else this.toast(lost ? 'La nuit t\'a tout fait perdre. Rentre plus tôt la prochaine fois !' : 'Tu rentres le panier vide. La prochaine sortie sera la bonne !');
     this.refresh(true);
   }
 

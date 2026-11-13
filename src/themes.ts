@@ -315,7 +315,7 @@ const pavillon: Theme = {
   pot: [0xc9714a, 0xd9825a],
   showPot: [0xf4efe4, 0xffffff],
   hemi: [0xfff6e0, 0x8fae9a, 1.25],
-  sun: [0xfff0d0, 1.9, [4, 10, 6]],
+  sun: [0xfff0d0, 1.9, [1.5, 12, 5]],
   mist: at(90, 1.5, 1.0, 4.2),
   mistDir: [0.1, 0.9, -2.4],
   gear: { mist: at(90, -1.7, 2.7, 4.8), lamp: at(180, 1.75, 2.75, 4.5), heat: at(180, -0.58, 0.78, 4.78), fan: at(270, 0.58, P.bench, 4.7) },
@@ -361,9 +361,12 @@ const pavillon: Theme = {
       ...[-1.7, 1.7].flatMap((x) => [-3.95, -4.65].map((z) => box(0.12, h - 0.12, 0.12, leg, x, (h - 0.12) / 2, z))));
     // Coin d'ombre : un store tendu au-dessus des pots.
     bench(0, 0x8a6f5a, 0x6a5242);
-    const awning = box(3.9, 0.06, 1.7, 0x7f8fa6, 0, 4.25, -4.2);
-    awning.rotation.x = 0.22;
-    wall(0, awning);
+    // Un toit plein et une paroi de planches : les pots sont réellement à l'ombre, au frais.
+    wall(0, box(4.5, 0.1, 3.3, 0x5a4a40, 0, 4.45, -3.45), box(side, 3.25, 0.08, 0x6a5242, 0, 2.2, -A + 0.12),
+      ...[-1.6, -0.8, 0, 0.8, 1.6].map((x) => box(0.05, 3.25, 0.02, 0x4a3a32, x, 2.2, -A + 0.18, false)),
+      box(0.12, 4.4, 0.12, 0x5a4a40, -2.15, 2.2, -1.9), box(0.12, 4.4, 0.12, 0x5a4a40, 2.15, 2.2, -1.9),
+      // Un pan de toile retombe sur le devant.
+      box(4.5, 0.7, 0.04, 0x7f8fa6, 0, 4.1, -1.82));
     // Bassin : une auge de pierre pleine d'eau, les pots posés sur sa margelle.
     wall(90, box(3.9, P.bench, 1.1, 0xb9b2a6, 0, P.bench / 2, -P.pots - 0.05), box(3.9, 0.5, 0.7, 0xa7a096, 0, 0.25, -3.45));
     const pool = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.05, 0.5), new THREE.MeshStandardMaterial({ color: 0x6fc7e0, roughness: 0.15, flatShading: true }));
@@ -371,8 +374,26 @@ const pavillon: Theme = {
     pool.rotation.y = -Math.PI / 2;
     pool.userData.water = true;
     add(pool);
+    // Chaleur humide : la vitre est couverte de buée et de grandes feuilles retombent.
+    wall(90, glass(side - 0.2, 3.1, 0.03, 0, 2.15, -A + 0.06, 0xffffff, 0.5),
+      ...[-1.9, 1.9].flatMap((x) => [0, 1, 2].map((k) => {
+        const leaf = box(0.5, 0.04, 1.3, k % 2 ? 0x3f8552 : 0x4f9a5c, x, 3.3 - k * 0.45, -4.4);
+        leaf.rotation.set(0.5 + k * 0.25, (x > 0 ? -1 : 1) * (0.5 + k * 0.3), 0);
+        return leaf;
+      })));
     // Près de la porte : établi clair, et la porte sur le pan voisin.
     bench(180, 0xd9b98a, 0xb99667);
+    // Courant d'air : un vantail entrouvert en haut de la vitre, et des rubans qui claquent au vent.
+    const vent = box(1.9, 1.1, 0.06, 0xfdfaf2, 0.95, 3.1, -A - 0.25);
+    vent.rotation.x = -0.5;
+    wall(180, vent, box(1.7, 0.9, 0.02, 0xdff4fa, 0.95, 3.1, -A - 0.22, false));
+    for (let k = 0; k < 5; k++) {
+      const ribbon = new THREE.Group();
+      ribbon.add(box(0.07, 0.7, 0.02, k % 2 ? 0xe2604f : 0xf2c94c, 0, -0.35, 0, false));
+      ribbon.position.set(...at(180, -1.7 + k * 0.5, 3.7, 4.75));
+      ribbon.userData.flutter = k;
+      add(ribbon);
+    }
     const door = new THREE.Group();
     door.add(box(1.5, 2.9, 0.14, 0x5f9f8a, 0, 1.45, -A), box(1.0, 1.3, 0.16, 0xcfeef5, 0, 2.0, -A, false),
       box(0.1, 0.1, 0.2, 0xf2c94c, 0.55, 1.3, -A, false));
@@ -393,7 +414,20 @@ const pavillon: Theme = {
     add(blob(1.7, 0x6fb56a, ...at(135, 3.4, 3.4, g + 1.4), 1), blob(1.1, 0x86c47c, ...at(135, 4.3, 2.7, g + 1.0), 1),
       blob(1.0, 0x9ad08c, ...at(135, -4.2, 0.6, g + 3.6), 1), blob(1.3, 0x86c47c, ...at(135, 1.2, 0.8, g + 4.2), 1));
     // Table plein sud.
-    bench(270, 0xc99a66, 0xa9794f);
+    bench(270, 0xe6c28a, 0xc99a66);
+    // Plein sud : le soleil est là, derrière la vitre, et ses rayons tombent sur la table.
+    const disc = new THREE.Mesh(new THREE.SphereGeometry(1.3, 20, 12), new THREE.MeshBasicMaterial({ color: 0xffe27a }));
+    disc.position.set(...at(270, 1.3, 7.2, 16));
+    disc.userData.raw = true;
+    add(disc);
+    for (let k = 0; k < 4; k++) {
+      const ray = new THREE.Mesh(new THREE.BoxGeometry(0.55, 5.2, 0.02), new THREE.MeshBasicMaterial({ color: 0xfff1a8, transparent: true, opacity: 0.2, depthWrite: false }));
+      ray.position.set(-1.5 + k * 1.0, 2.6, -4.55);
+      ray.rotation.z = -0.22;
+      ray.userData.raw = true;
+      wall(270, ray);
+    }
+    wall(270, box(3.7, 0.02, 1.0, 0xfff1a8, 0, P.bench + 0.005, -P.pots - 0.05, false));
     // Coin atelier : tour, four et pots qui sèchent.
     wall(45, box(2.6, 0.12, 0.9, 0xb98a5a, 0, 0.9, -4.4), box(0.12, 0.84, 0.8, 0x8a5f3c, -1.2, 0.42, -4.4), box(0.12, 0.84, 0.8, 0x8a5f3c, 1.2, 0.42, -4.4),
       box(0.9, 1.1, 0.8, 0xb5654a, -0.75, 1.51, -4.45), box(0.4, 0.45, 0.06, 0x3a2a26, -0.75, 1.35, -4.03, false), box(0.3, 0.3, 0.02, 0xffb347, -0.75, 1.35, -3.99, false),
