@@ -12,6 +12,29 @@ import type { State } from './sim';
 import { EMOJI, ZONE_SHORT, SheetKind, $, fmt, stars, vname, hex, clock, potLabel, esc, rarTag } from './uikit';
 import { sheetHtml, paintTarget } from './sheets';
 
+/** Pour chaque objectif : où emmener le joueur quand il le touche, et quoi lui dire. */
+const QUEST_GUIDE: Record<string, { sheet?: SheetKind; overview?: boolean; tip: string }> = {
+  open: { sheet: 'packets', tip: 'Ouvre ton sachet gratuit.' },
+  plant: { tip: 'Glisse une graine de la barquette sur un pot vide, ou touche un pot vide.' },
+  bloom1: { tip: 'Arrose ta plante et laisse-la pousser : elle fleurit toute seule.' },
+  move: { tip: 'Pose le doigt sur un pot et fais-le glisser vers un autre emplacement.' },
+  compost: { sheet: 'packets', tip: 'Dans « Mes graines », transforme une graine en engrais.' },
+  craft: { sheet: 'atelier', tip: 'Choisis une taille, modèle le pot au tour, puis défourne-le.' },
+  zone1: { overview: true, tip: 'Touche un cadenas dans la serre pour aménager une zone.' },
+  zone2: { overview: true, tip: 'Touche chaque cadenas de la serre pour tout aménager.' },
+  show: { tip: 'Touche une plante en fleur, puis « Exposer ».' },
+  show4: { tip: 'Expose quatre plantes en fleur dans la vitrine.' },
+  paint: { tip: 'Touche un pot dans la serre, puis « Peindre ».' },
+  order: { tip: 'La commande est affichée en bas : fais fleurir la bonne famille, puis « Livrer ».' },
+  cutting: { tip: 'Touche une plante en fleur, puis « Bouturer ».' },
+  cross: { tip: 'Touche une plante en fleur, puis « Croiser », et choisis sa partenaire.' },
+  shrub: { sheet: 'atelier', tip: 'Les arbustes demandent un pot moyen ou grand : tourne-en un.' },
+  gear: { sheet: 'shop', tip: 'Installe un équipement de la boutique.' },
+  extra: { sheet: 'shop', tip: 'Les suspensions sont dans « Agrandir la serre ».' },
+  contest: { sheet: 'season', tip: 'Fais fleurir les familles de la saison.' },
+  harmony: { tip: 'Peins le fond d\'un pot dans la couleur marquée 💚 pour sa plante.' },
+};
+
 export class UI {
   kind: SheetKind = 'none';
   arg = 0;
@@ -487,6 +510,16 @@ export class UI {
         if (r) { play('coin'); this.toast(`Objectif atteint ! +${fmt(r)} 🪙`); this.bumpCoins(); this.buzz(30); }
         break;
       }
+      case 'questgo': {
+        // Toucher l'objectif y emmène, ou dit où aller.
+        const q = sim.currentQuest(s);
+        const go = q && QUEST_GUIDE[q.id];
+        if (!q || q.done(s)) break;
+        if (go?.sheet) this.open(go.sheet);
+        if (go?.overview) this.goZone(-1);
+        this.toast(go?.tip ?? 'Continue à faire fleurir de nouvelles espèces : chaque sachet peut en cacher une.');
+        break;
+      }
       case 'fiche': this.argId = arg; this.open('fiche', this.arg); break;
       case 'closemodal': $('modal').classList.remove('on'); break;
       case 'reset':
@@ -833,7 +866,7 @@ export class UI {
     const ct = sim.contestOf(s);
     const prize = !!sim.CONTEST[ct.claimed] && ct.blooms >= sim.CONTEST[ct.claimed].need;
     const ready = sim.TROPHIES.filter((x) => sim.trophyReady(s, x)).length;
-    const hud = `<div class="hudrow"><div class="pill coins">🪙 ${fmt(s.coins)}</div><button class="pill season" data-act="nav" data-arg="season">${SEASONS[se.index].icon}${prize ? '<i class="dot">!</i>' : ''}</button><button class="pill lvl" data-act="nav" data-arg="trophies">🎓 ${lv.level}<i class="xp"><i style="width:${Math.round(100 * lv.into / lv.span)}%"></i></i>${ready ? `<i class="dot">${ready}</i>` : ''}</button><button class="pill" data-act="nav" data-arg="almanac">📖 ${col.bloomed}/${SPECIES.length} <small>⭐ ${col.stars}</small></button></div><div class="tabs">${tabs}</div>${info}`;
+    const hud = `<div class="hudrow"><div class="pill coins">🪙 ${fmt(s.coins)}</div><button class="pill season" data-act="nav" data-arg="season">${SEASONS[se.index].icon}<small>${SEASONS[se.index].name}</small>${prize ? '<i class="dot">!</i>' : ''}</button><button class="pill lvl" data-act="nav" data-arg="trophies"><span>🎓 <small>Niv.</small> ${lv.level}</span><i class="xp"><i style="width:${Math.round(100 * lv.into / lv.span)}%"></i></i>${ready ? `<i class="dot">${ready}</i>` : ''}</button><button class="pill" data-act="nav" data-arg="almanac">📖 ${col.bloomed}<small>/${SPECIES.length}</small></button></div><div class="tabs">${tabs}</div>${info}`;
     if (hud !== this.lastHud && (force || !this.pointerDown)) { $('hud').innerHTML = hud; this.lastHud = hud; }
 
     // Nouvelles fiches à fêter
@@ -842,7 +875,7 @@ export class UI {
 
     // Objectif
     const q = sim.currentQuest(s);
-    const qh = q ? `<div class="qt">🎯 ${esc(q.text)}</div>${q.done(s)
+    const qh = q ? `<button class="qt" data-act="questgo">🎯 ${esc(q.text)}${q.done(s) ? '' : ' <b>›</b>'}</button>${q.done(s)
       ? `<button class="btn gold small" data-act="quest">+${q.reward} 🪙</button>`
       : `<span class="chip">+${q.reward} 🪙</span>`}` : '';
     if (qh !== this.lastQuest && (force || !this.pointerDown)) { $('quest').innerHTML = qh; this.lastQuest = qh; }
