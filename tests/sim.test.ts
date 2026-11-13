@@ -133,6 +133,18 @@ describe('simulation', () => {
     expect(got.every((g) => SPECIES_BY_ID[g.id].family === 'orchidees')).toBe(true);
   });
 
+  it('taille : demandée à mi-croissance, elle accélère la suite', () => {
+    const s = sim.newState(0);
+    const i = s.slots.findIndex((sl) => sl.pot);
+    s.slots[i].plant = { sp: 'thym', prog: 0.5, water: 1, pests: 0, q: 50, vr: 0 };
+    expect(sim.prune(s, i)).toBe(false);
+    sim.advance(s, 1000, () => 0.99);
+    expect(s.slots[i].plant!.cut).toBe(1);
+    expect(sim.prune(s, i)).toBe(true);
+    expect(sim.prune(s, i)).toBe(false);
+    expect(s.slots[i].plant!.cut).toBe(2);
+  });
+
   it('tour et pinceau : la forme et le dessin suivent le pot', () => {
     const s = sim.newState(0);
     s.clay = 5;

@@ -2,7 +2,8 @@ import { PROF_MAX, PROF_MIN, BASE_SLOTS, SEASONS, SEASON_LENGTH, CLIENTS, FAMILI
 import type { Family, Rarity, Species, Zone } from './data';
 
 /** `vr` : variante, 0 normale, 1 panachée, 2 dorée. */
-export interface Plant { sp: string; prog: number; water: number; pests: number; q: number; vr: number }
+/** `cut` : 1 = la plante demande une taille, 2 = taillée (elle pousse plus vite). */
+export interface Plant { sp: string; prog: number; water: number; pests: number; q: number; vr: number; cut?: number }
 /** Un pot façonné : taille 1..3, émail (index de GLAZES) et motif (index de PATTERNS). */
 /**
  * `prof` : forme modelée au tour (rayons de bas en haut). `paint` : dessin au pinceau, une lettre par case
@@ -244,8 +245,10 @@ function stepPlants(s: State, dt: number, rng: Rng, offline: boolean): void {
     const wet = p.water > 0;
     if (p.prog < 1) {
       // Jamais de plante morte : sans eau ou infestée, elle tourne au ralenti.
-      const speed = fit * (wet ? 1 : 0.25) * (p.pests > 0 ? 0.5 : 1) * (harmony(slot) ? HARMONY_SPEED : 1) * (inSeason(s, sp) ? SEASON_SPEED : 1);
+      const speed = fit * (wet ? 1 : 0.25) * (p.pests > 0 ? 0.5 : 1) * (harmony(slot) ? HARMONY_SPEED : 1) * (inSeason(s, sp) ? SEASON_SPEED : 1) * (p.cut === 2 ? PRUNE_SPEED : 1);
       p.prog = Math.min(1, p.prog + (dt / sp.grow) * speed);
+      // À mi-croissance, la plante fait des pousses folles : une taille la relance.
+      if (!p.cut && p.prog >= 0.45 && p.prog < 1) p.cut = 1;
       const target = 100 * fit * (wet ? 1 : 0.6) * (p.pests > 0 ? 0.5 : 1);
       p.q += (target - p.q) * Math.min(1, (dt / sp.grow) * 2.2);
       if (p.prog >= 1) {
@@ -699,6 +702,17 @@ export function water(s: State, i: number): boolean {
   const p = s.slots[i].plant;
   if (!p || p.water > 0.95) return false;
   p.water = 1;
+  return true;
+}
+
+export const PRUNE_SPEED = 1.2;
+/** Taille au sécateur : la plante gagne en qualité et finit sa croissance plus vite. */
+export function prune(s: State, i: number): boolean {
+  const p = s.slots[i].plant;
+  if (!p || p.cut !== 1 || p.prog >= 1) return false;
+  p.cut = 2;
+  p.q = Math.min(100, p.q + 6);
+  gainXp(s, 2);
   return true;
 }
 

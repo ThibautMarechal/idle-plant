@@ -150,7 +150,7 @@ export class UI {
     this.applyTheme();
     $('studio').innerHTML = '<div class="st-head"><h2 id="st-title"></h2><button class="x" data-act="st-close">✕</button></div><p id="st-hint"></p><canvas id="stgl"></canvas><div id="st-tools"></div>';
     this.studio = new Studio($('stgl') as HTMLCanvasElement);
-    $('tools').innerHTML = '<button class="tool" data-tool="basket">🧺</button><button class="tool" data-tool="can">🚿</button><button class="tool" data-tool="glove">🧤</button>';
+    $('tools').innerHTML = '<button class="tool" data-tool="shears">✂️</button><button class="tool" data-tool="basket">🧺</button><button class="tool" data-tool="can">🚿</button><button class="tool" data-tool="glove">🧤</button>';
     const grab = (tool: string, label: string, el: HTMLElement, e: PointerEvent) => {
       this.tool = tool;
       this.toolUsed = false;
@@ -278,6 +278,7 @@ export class UI {
       let fx = '';
       if (this.tool === 'can') { if (sim.water(s, i)) fx = '💧'; }
       else if (this.tool === 'glove') { if (sim.squash(s, i)) fx = slot.plant.pests > 0 ? '🐛' : '✨ Propre !'; }
+      else if (this.tool === 'shears') { if (sim.prune(s, i)) fx = '✂️ Taillée !'; }
       else if (slot.plant.prog >= 1) {
         if (sim.harvestStore(s, i)) fx = '📦';
         else if (now - this.toolAt[99] > 2000 || !this.toolAt[99]) { this.toolAt[99] = now; this.toast('La réserve est pleine : vends au Marché ou agrandis-la.'); }
@@ -303,6 +304,7 @@ export class UI {
       else this.toast('Glisse la graine jusqu\'à un pot vide assez grand pour elle.');
     } else if (!this.toolUsed) {
       this.toast(this.tool === 'can' ? 'Garde le doigt sur l\'arrosoir et promène-le au-dessus des plantes assoiffées.'
+        : this.tool === 'shears' ? 'Garde le doigt sur le sécateur et passe sur les plantes qui demandent une taille.'
         : this.tool === 'glove' ? 'Garde le doigt sur le gant et frotte les plantes envahies pour chasser les chenilles.'
         : 'Garde le doigt sur le panier et passe sur les plantes en fleur : elles partent en réserve, à vendre au bon moment.');
     }
@@ -817,7 +819,7 @@ export class UI {
 
   private needsCare(i: number): boolean {
     const p = this.s.slots[i].plant;
-    return !!p && (p.pests > 0 || p.prog >= 1 || (p.water < 0.5 && !this.s.upgrades.water));
+    return !!p && (p.pests > 0 || p.prog >= 1 || (p.cut === 1 && p.prog < 1) || (p.water < 0.5 && !this.s.upgrades.water));
   }
 
   refresh(force = false): void {
@@ -828,9 +830,11 @@ export class UI {
     const bugs = s.slots.some((sl) => sl.plant && sl.plant.pests > 0);
     const ripe = s.slots.filter((sl) => sl.plant && sl.plant.prog >= 1).length;
     const tools = $('tools').children;
-    tools[0].classList.toggle('off', ripe < 2 && this.tool !== 'basket');
-    tools[1].classList.toggle('off', !thirsty && this.tool !== 'can');
-    tools[2].classList.toggle('off', !bugs && this.tool !== 'glove');
+    const shaggy = s.slots.some((sl) => sl.plant?.cut === 1 && sl.plant.prog < 1);
+    tools[0].classList.toggle('off', !shaggy && this.tool !== 'shears');
+    tools[1].classList.toggle('off', ripe < 2 && this.tool !== 'basket');
+    tools[2].classList.toggle('off', !thirsty && this.tool !== 'can');
+    tools[3].classList.toggle('off', !bugs && this.tool !== 'glove');
     // Barquette de graines : visible dans une zone où un pot vide attend.
     if (!this.tool) {
       const z = this.scene.currentZone;
@@ -849,6 +853,7 @@ export class UI {
       tip('seeds', !!html, '🌱 Prends une graine dans la barquette et glisse-la sur un pot vide.');
       tip('can', thirsty, '🚿 Une plante a soif : prends l\'arrosoir et promène-le au-dessus d\'elle.');
       tip('glove', bugs, '🧤 Des chenilles ! Prends le gant et frotte la plante.');
+      tip('shears', shaggy, '✂️ Une plante fait des pousses folles : passe le sécateur dessus, elle poussera plus vite et plus belle.');
       tip('basket', ripe >= 2, '🧺 Plusieurs plantes en fleur : le panier les range en réserve d\'un seul geste.');
       tip('drag', s.slots.filter((sl) => sl.pot).length >= 2 && s.stats.planted >= 2, '✋ Un pot se déplace en le faisant glisser du doigt vers un autre emplacement.');
     }
@@ -875,6 +880,7 @@ export class UI {
       } else if (!slot.pot) { cls += ' ghost'; txt = '+'; }
       else if (!p) { cls += ' plus'; txt = '🌱'; }
       else if (p.pests > 0) { cls += ' alert'; txt = '🐛'.repeat(p.pests); }
+      else if (p.cut === 1 && p.prog < 1) { cls += ' alert'; txt = '✂️'; }
       else if (p.prog >= 1) { cls += ' ready'; txt = '🌸'; }
       else if (p.water < 0.5 && !s.upgrades.water) { cls += ' alert'; txt = '💧'; }
       else cls += ' hidden';
