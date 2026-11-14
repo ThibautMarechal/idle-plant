@@ -674,7 +674,8 @@ export function basketCap(s: State): number {
 }
 export function openBiome(s: State, b: number): boolean {
   const t = trekOf(s);
-  if (t.open[b] || s.coins < BIOMES[b].price) return false;
+  // Les régions s'ouvrent de proche en proche : pas de dunes sans avoir traversé le marais.
+  if (t.open[b] || (b > 0 && !t.open[b - 1]) || s.coins < BIOMES[b].price) return false;
   s.coins -= BIOMES[b].price;
   t.open[b] = true;
   return true;
@@ -716,6 +717,27 @@ export function trekFinds(s: State, b: number, rng: Rng): { id: string; hidden: 
     if (!pool.length) pool = SPECIES.filter((sp) => fams.includes(sp.family) && sp.rarity === (tier ? 'rare' : 'commun'));
     if (!pool.length) pool = SPECIES.filter((sp) => fams.includes(sp.family));
     out.push({ id: pool[Math.floor(rng() * pool.length)].id, hidden: tier === 1 || (tier === 2 && i % 2 === 1), tier });
+  }
+  return out;
+}
+/** Plantes de chaque région de la planète, par palier de rareté : la forêt près de la serre, le marais plus loin, les dunes au bout. */
+const RING_TIERS = [[0, 0, 0, 0, 0, 0, 1, 1, 2], [0, 0, 0, 1, 1, 1, 2], [0, 1, 1, 2, 2, 2]];
+/** Nombre de régions qu'on peut atteindre à pied depuis la serre : on s'arrête à la première qui n'est pas ouverte. */
+export function trekReach(s: State): number {
+  const o = trekOf(s).open;
+  let n = 0;
+  while (n < BIOMES.length && o[n]) n++;
+  return n;
+}
+/** Ce qui pousse aujourd'hui sur la planète : chaque région atteignable apporte ses plantes (`ring`), plus rares en s'éloignant. */
+export function planetFinds(s: State, rng: Rng): { id: string; hidden: boolean; tier: number; ring: number }[] {
+  const out: { id: string; hidden: boolean; tier: number; ring: number }[] = [];
+  for (let ring = 0; ring < trekReach(s); ring++) {
+    const all = trekFinds(s, ring, rng);
+    for (const tier of RING_TIERS[ring]) {
+      const k = all.findIndex((f) => f.tier === tier);
+      if (k >= 0) out.push({ ...all.splice(k, 1)[0], ring });
+    }
   }
   return out;
 }

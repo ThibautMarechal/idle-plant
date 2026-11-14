@@ -466,3 +466,8 @@ body[data-fp="1"] #nav { display: none; }
 #sl-hint.on { display: block; }
 .take { display: flex; flex-direction: column; align-items: center; gap: 6px; font-weight: 800; }
 .take b { font-size: 40px; }
+
+/* La petite planète flotte dans un ciel étoilé. */
+#trek { background: radial-gradient(circle at 50% 46%, #2f8fa8 0%, #17566f 42%, #0d2f45 100%); }
+#trek::before { content: ''; position: absolute; inset: 0; background-image: radial-gradient(#fff 1px, transparent 1.6px), radial-gradient(#cfeaf2 1px, transparent 1.4px); background-size: 97px 113px, 61px 71px; background-position: 12px 30px, 40px 8px; opacity: 0.55; }
+.btn.big { display: block; width: 100%; padding: 13px; font-size: 16px; margin: 4px 0 10px; }

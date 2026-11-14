@@ -251,15 +251,17 @@ export function trekHtml(ui: UI): string {
   const next = BASKETS[t.basket + 1];
   const rows = BIOMES.map((b, k) => {
     const fams = b.fams.map((f) => FAMILIES[f].icon).join(' ');
-    const end = !t.open[k] ? `<button class="btn ${s.coins >= b.price ? 'primary' : ''} small" data-act="trek-biome" data-arg="${k}" ${s.coins >= b.price ? '' : 'disabled'}>${fmt(b.price)} 🪙</button>`
-      : t.rest > 0 ? `<span class="chip">${clock(t.rest)}</span>`
-        : `<button class="btn gold small" data-act="trek-go" data-arg="${k}">Partir</button>`;
-    return `<div class="card"><div class="ico">${b.icon}</div><div class="mid"><div class="nm">${b.name} ${fams}</div><div class="ds">${b.text}</div></div>${end}</div>`;
+    const can = s.coins >= b.price && (k === 0 || t.open[k - 1]);
+    const end = t.open[k] ? '<span class="chip ok">Ouverte</span>'
+      : `<button class="btn ${can ? 'primary' : ''} small" data-act="trek-biome" data-arg="${k}" ${can ? '' : 'disabled'}>${fmt(b.price)} 🪙</button>`;
+    return `<div class="card"><div class="ico">${b.icon}</div><div class="mid"><div class="nm">${b.name} ${fams}</div><div class="ds">${['Autour de la serre.', 'Plus loin, derrière la forêt.', 'À l\'autre bout de la planète.'][k]} ${b.text}</div></div>${end}</div>`;
   }).join('');
   const gear = (k: 'boots' | 'lantern', n: number, ico: string, nm: string, ds: string) => `<div class="card"><div class="ico">${ico}</div><div class="mid"><div class="nm">${nm}</div><div class="ds">${ds}</div></div>${t[k]
     ? '<span class="chip ok">Dans le sac</span>' : `<button class="btn ${s.coins >= TREK_GEAR[k].price ? 'primary' : ''} small" data-act="trek-gear" data-arg="${n}" ${s.coins >= TREK_GEAR[k].price ? '' : 'disabled'}>${fmt(TREK_GEAR[k].price)} 🪙</button>`}</div>`;
   return head(ui, '🥾 Expédition') + `<div class="sh-body">
-    <p class="sub">${t.rest > 0 ? `Tu te reposes encore ${clock(t.rest)} avant de repartir.` : 'Pars du camp à pied et cueille graines et boutures sauvages. Les colonnes de lumière signalent le rare, loin du camp. Ramasse aussi l\'argile et les bourses en chemin, mais sois rentré au camp avant la nuit ou tu perdras la moitié du panier.'}</p>
+    <p class="sub">La serre est posée sur une petite planète. Pars à pied cueillir graines et boutures sauvages : plus tu t'éloignes, plus elles sont rares. Sois rentré avant la nuit, ou tu perdras la moitié du panier.</p>
+    ${t.rest > 0 ? `<div class="card"><div class="ico">😴</div><div class="mid"><div class="nm">Repos</div><div class="ds">Tu repars dans ${clock(t.rest)}.</div></div></div>` : '<button class="btn gold big" data-act="trek-go">🌍 Partir en expédition</button>'}
+    <h3>Régions</h3>
     ${rows}
     <div class="card"><div class="ico">🧺</div><div class="mid"><div class="nm">Panier : ${sim.basketCap(s)} plantes</div><div class="ds">${next ? `Un plus grand panier en porte ${next.cap}.` : 'C\'est le plus grand panier.'}</div></div>${next
       ? `<button class="btn ${s.coins >= next.price ? 'primary' : ''} small" data-act="trek-basket" ${s.coins >= next.price ? '' : 'disabled'}>${fmt(next.price)} 🪙</button>` : '<span class="chip ok">Maximum</span>'}</div>

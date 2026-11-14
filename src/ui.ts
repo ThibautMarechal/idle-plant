@@ -3,7 +3,7 @@ import type { Family } from './data';
 import type { Scene3D } from './scene';
 import { buildPlant } from './plants3d';
 import { Studio } from './studio';
-import { Trek } from './trek';
+import { Planet } from './planet';
 import { Stall } from './stall';
 import { finish, STYLES } from './styles';
 import { themeOf } from './themes';
@@ -48,7 +48,7 @@ export class UI {
   /** Pot en cours de peinture : sur un emplacement ou sur l'étagère. */
   paintAt: { where: 'slot' | 'shelf'; k: number } = { where: 'slot', k: 0 };
   private studio!: Studio;
-  private trek!: Trek;
+  private trek!: Planet;
   private stall!: Stall;
   private stallHtml = '';
   /** Outil tenu au doigt : arrosoir ou gant, promené au-dessus des plantes. */
@@ -109,9 +109,11 @@ export class UI {
     $('studio').innerHTML = '<div class="st-head"><h2 id="st-title"></h2><button class="x" data-act="st-close">✕</button></div><p id="st-hint"></p><canvas id="stgl"></canvas><div id="st-tools"></div>';
     this.studio = new Studio($('stgl') as HTMLCanvasElement);
     $('trek').innerHTML = '<canvas id="trgl"></canvas><div id="tr-night"></div><div class="tr-top"><div class="tr-time"><i id="tr-bar"></i></div><div class="tr-row"><span class="pill" id="tr-basket"></span><span class="pill" id="tr-camp"><b id="tr-arrow">▲</b><span id="tr-dist"></span></span><button class="btn small" id="tr-home" data-act="trek-home">Rentrer</button></div></div><div id="tr-stick"><i></i></div><div id="tr-label"></div><div id="tr-gauge"><span id="tr-ok"></span><span id="tr-green"></span><b id="tr-cur"></b></div><p id="tr-hint"></p>';
-    this.trek = new Trek($('trgl') as HTMLCanvasElement);
+    this.trek = new Planet($('trgl') as HTMLCanvasElement);
     this.trek.onChange = () => this.trekHud();
     this.trek.onEvent = (kind, id) => {
+      if (kind === 'wall') { this.toast('Une mer de nuages : la région suivante se débloque depuis le sac à dos de la serre.'); return; }
+      if (kind === 'region') { this.toast(`${BIOMES[Number(id)].icon} ${BIOMES[Number(id)].name}`); return; }
       if (kind === 'clay' || kind === 'coins') { play('coin'); this.buzz(12); this.toast(kind === 'clay' ? `Un filon d'argile : +${id} 🧱` : `Une bourse oubliée : +${id} 🪙`); return; }
       const name = id ? `${EMOJI[id]} ${SPECIES_BY_ID[id].name}` : '';
       if (kind === 'perfect') { play('rare'); this.buzz(30); this.toast(`Coupe parfaite ! ${name} et une graine en plus.`); }
@@ -119,7 +121,7 @@ export class UI {
       else if (kind === 'miss') { play('tap'); this.buzz(60); this.toast(`Raté : ${name} est abîmée.`); }
       else if (kind === 'reveal') { play('craft'); this.buzz(20); }
       else if (kind === 'slow') this.toast(['Des ronces ! Tu avances au ralenti.', 'De la vase ! Tu avances au ralenti.', 'Du sable mou ! Tu avances au ralenti.'][this.trek.biome]);
-      else if (kind === 'dusk') { play('tap'); this.toast('Le soleil se couche : rentre au camp avant la nuit !'); }
+      else if (kind === 'dusk') { play('tap'); this.toast('Le soleil se couche : rentre à la serre avant la nuit !'); }
     };
     this.trek.onEnd = () => this.trekHome();
     $('stall').innerHTML = '<canvas id="slgl"></canvas><div class="tr-top"><div class="tr-row"><span class="pill" id="sl-earn"></span><span class="pill" id="sl-combo"></span><span class="pill" id="sl-queue"></span><button class="btn small" data-act="stall-close">Fermer</button></div></div><div id="sl-bubbles"></div><p id="sl-hint" class="on"></p>';
@@ -565,7 +567,7 @@ export class UI {
         break;
       }
       case 'trek-biome':
-        if (sim.openBiome(s, n)) { play('craft'); this.buzz(25); this.toast(`${BIOMES[n].name} : nouveau milieu à explorer !`); }
+        if (sim.openBiome(s, n)) { play('craft'); this.buzz(25); this.toast(`${BIOMES[n].name} : la mer de nuages se retire, une nouvelle région t'attend !`); }
         else this.toast('Pas assez de pièces.');
         break;
       case 'trek-basket':
@@ -579,12 +581,11 @@ export class UI {
         break;
       }
       case 'trek-go': {
-        const finds = sim.trekFinds(s, n, Math.random);
+        const finds = sim.planetFinds(s, Math.random);
         if (!finds.length) { this.toast('Repose-toi encore un peu avant de repartir.'); break; }
         this.close();
         $('trek').className = 'on';
-        $('trek').style.background = `linear-gradient(180deg, ${BIOMES[n].sky[0]} 0%, ${BIOMES[n].sky[1]} 60%)`;
-        this.trek.open(n, finds, sim.trekSetup(s));
+        this.trek.open(finds, { ...sim.trekSetup(s), reach: sim.trekReach(s) });
         this.trekHud();
         break;
       }
@@ -599,7 +600,7 @@ export class UI {
         this.stall.shut();
         break;
       case 'trek-home':
-        if (!this.trek.goHome()) this.toast('Reviens d\'abord au camp : suis la flèche ⛺.');
+        if (!this.trek.goHome()) this.toast('Reviens d\'abord à la serre : suis la flèche 🏡.');
         break;
       case 'seedbag':
         this.seedOpen = this.seedOpen ? 0 : Date.now();
@@ -755,7 +756,7 @@ export class UI {
     for (const id of t.bonus) count[id] = (count[id] ?? 0) + 1;
     const b = `🧺 ${t.basket.map((id) => EMOJI[id] + (count[id]-- > 0 ? '✨' : '')).join('')}${'·'.repeat(Math.max(0, t.cap - t.basket.length))}${t.loot.clay ? ` 🧱${t.loot.clay}` : ''}${t.loot.coins ? ` 🪙${t.loot.coins}` : ''}`;
     if ($('tr-basket').textContent !== b) $('tr-basket').textContent = b;
-    const dist = t.atCamp ? '⛺ Au camp' : `⛺ ${Math.round(t.campDist)} m`;
+    const dist = t.atCamp ? '🏡 À la serre' : `🏡 ${Math.round(t.campDist)} m`;
     if ($('tr-dist').textContent !== dist) $('tr-dist').textContent = dist;
     const arrow = $('tr-arrow');
     arrow.style.transform = `rotate(${t.campAngle}rad)`;
@@ -768,14 +769,14 @@ export class UI {
       (stick.firstElementChild as HTMLElement).style.transform = `translate(${t.stick.dx}px, ${t.stick.dy}px)`;
     }
     const lab = $('tr-label'), r = t.nearRect();
-    let html = '', hint = t.atCamp && !t.basket.length ? 'Pose le pouce et pousse vers le haut pour marcher, sur les côtés pour tourner. Le rare est loin du camp.' : '';
+    let html = '', hint = t.atCamp && !t.basket.length ? 'Pose le pouce n\'importe où et pousse dans la direction où aller. Plus tu t\'éloignes de la serre, plus les plantes sont rares.' : '';
     if (r && t.near >= 0) {
       const sp = SPECIES_BY_ID[t.nearId];
       html = t.nearHidden ? '<b>Un fourré…</b>' : `<b>${EMOJI[sp.id]} ${esc(sp.name)}</b>${rarTag(sp)}${this.s.disc[sp.id]?.seen ? '' : '<i>NOUVEAU</i>'}`;
-      hint = t.cut ? 'Touche l\'écran quand le curseur est dans le vert !' : t.nearHidden ? 'Frotte le fourré du doigt pour écarter ses branches.' : t.full ? 'Ton panier est plein : rentre au camp.' : 'Touche la plante pour sortir le sécateur.';
+      hint = t.cut ? 'Touche l\'écran quand le curseur est dans le vert !' : t.nearHidden ? 'Frotte le fourré du doigt pour écarter ses branches.' : t.full ? 'Ton panier est plein : rentre à la serre.' : 'Touche la plante pour sortir le sécateur.';
       px(lab, r.x, r.y);
-    } else if (t.full) hint = 'Ton panier est plein : rentre au camp.';
-    if (t.lost) hint = 'La nuit t\'a surpris loin du camp : tu perds la moitié du panier.';
+    } else if (t.full) hint = 'Ton panier est plein : rentre à la serre.';
+    if (t.lost) hint = 'La nuit t\'a surpris loin de la serre : tu perds la moitié du panier.';
     if (html !== this.trekLabel) { this.trekLabel = html; lab.innerHTML = html; lab.className = html ? 'on' : ''; }
     const hintEl = $('tr-hint');
     if (hintEl.textContent !== hint) { hintEl.textContent = hint; hintEl.className = hint ? 'on' : ''; }

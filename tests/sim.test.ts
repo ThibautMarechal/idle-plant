@@ -323,4 +323,17 @@ describe('simulation', () => {
     expect(sim.stallWish([], () => 0.9)).toBeNull();
     expect(sim.stallWish(s.stock, () => 0.9)).toBe('aromatiques');
   });
+
+  it('ouvre les régions de la planète de proche en proche', () => {
+    const s = sim.newState(0);
+    s.coins = 5000;
+    expect(sim.trekReach(s)).toBe(1);
+    expect(sim.planetFinds(s, Math.random).length).toBe(9);
+    expect(sim.openBiome(s, 2)).toBe(false);
+    expect(sim.openBiome(s, 1)).toBe(true);
+    expect(sim.openBiome(s, 2)).toBe(true);
+    const finds = sim.planetFinds(s, Math.random);
+    expect(finds.length).toBe(22);
+    expect(finds.filter((f) => f.ring === 2 && f.tier === 2).length).toBe(3);
+  });
 });
