@@ -4,6 +4,7 @@ import type { Scene3D } from './scene';
 import { buildPlant } from './plants3d';
 import { Studio } from './studio';
 import { Planet } from './planet';
+import { Pick, PICK_OF, PICK_TEXT } from './pick';
 import { Stall } from './stall';
 import { finish, STYLES } from './styles';
 import { themeOf } from './themes';
@@ -49,6 +50,7 @@ export class UI {
   paintAt: { where: 'slot' | 'shelf'; k: number } = { where: 'slot', k: 0 };
   private studio!: Studio;
   private trek!: Planet;
+  private pick!: Pick;
   private stall!: Stall;
   private stallHtml = '';
   /** Outil tenu au doigt : arrosoir ou gant, promené au-dessus des plantes. */
@@ -108,15 +110,25 @@ export class UI {
     this.applyTheme();
     $('studio').innerHTML = '<div class="st-head"><h2 id="st-title"></h2><button class="x" data-act="st-close">✕</button></div><p id="st-hint"></p><canvas id="stgl"></canvas><div id="st-tools"></div>';
     this.studio = new Studio($('stgl') as HTMLCanvasElement);
-    $('trek').innerHTML = '<canvas id="trgl"></canvas><div id="tr-night"></div><div class="tr-top"><div class="tr-time"><i id="tr-bar"></i></div><div class="tr-row"><span class="pill" id="tr-basket"></span><span class="pill" id="tr-camp"><b id="tr-arrow">▲</b><span id="tr-dist"></span></span><button class="btn small" id="tr-home" data-act="trek-home">Rentrer</button></div></div><div id="tr-stick"><i></i></div><div id="tr-label"></div><div id="tr-gauge"><span id="tr-ok"></span><span id="tr-green"></span><b id="tr-cur"></b></div><p id="tr-hint"></p>';
+    $('trek').innerHTML = '<canvas id="trgl"></canvas><div id="tr-night"></div><div class="tr-top"><div class="tr-time"><i id="tr-bar"></i></div><div class="tr-row"><span class="pill" id="tr-basket"></span><span class="pill" id="tr-camp"><b id="tr-arrow">▲</b><span id="tr-dist"></span></span><button class="btn small" id="tr-home" data-act="trek-home">Rentrer</button></div></div><div id="tr-stick"><i></i></div><div id="tr-label"></div><p id="tr-hint"></p><div id="pick"><div class="pk-card"><b id="pk-title"></b><canvas id="pkc"></canvas><p id="pk-hint"></p></div></div>';
     this.trek = new Planet($('trgl') as HTMLCanvasElement);
     this.trek.onChange = () => this.trekHud();
+    this.pick = new Pick($('pkc') as HTMLCanvasElement);
+    // Chaque famille se cueille d'un geste différent, plus exigeant quand la plante est rare.
+    this.trek.onPick = (id) => {
+      const sp = SPECIES_BY_ID[id], kind = PICK_OF[sp.family];
+      $('pick').className = 'on';
+      $('pk-title').textContent = `${EMOJI[id]} ${sp.name} · ${PICK_TEXT[kind].title}`;
+      $('pk-hint').textContent = PICK_TEXT[kind].hint;
+      play('tap');
+      this.pick.start(kind, EMOJI[id], Object.keys(RARITIES).indexOf(sp.rarity), (score) => { $('pick').className = ''; this.trek.resolve(score); });
+    };
     this.trek.onEvent = (kind, id) => {
       if (kind === 'wall') { this.toast('Une mer de nuages : la région suivante se débloque depuis le sac à dos de la serre.'); return; }
       if (kind === 'region') { this.toast(`${BIOMES[Number(id)].icon} ${BIOMES[Number(id)].name}`); return; }
       if (kind === 'clay' || kind === 'coins') { play('coin'); this.buzz(12); this.toast(kind === 'clay' ? `Un filon d'argile : +${id} 🧱` : `Une bourse oubliée : +${id} 🪙`); return; }
       const name = id ? `${EMOJI[id]} ${SPECIES_BY_ID[id].name}` : '';
-      if (kind === 'perfect') { play('rare'); this.buzz(30); this.toast(`Coupe parfaite ! ${name} et une graine en plus.`); }
+      if (kind === 'perfect') { play('rare'); this.buzz(30); this.toast(`Cueillette parfaite ! ${name} et une graine en plus.`); }
       else if (kind === 'pick') { play('plant'); this.buzz(15); this.toast(`${name} dans le panier.`); }
       else if (kind === 'miss') { play('tap'); this.buzz(60); this.toast(`Raté : ${name} est abîmée.`); }
       else if (kind === 'reveal') { play('craft'); this.buzz(20); }
@@ -773,22 +785,13 @@ export class UI {
     if (r && t.near >= 0) {
       const sp = SPECIES_BY_ID[t.nearId];
       html = t.nearHidden ? '<b>Un fourré…</b>' : `<b>${EMOJI[sp.id]} ${esc(sp.name)}</b>${rarTag(sp)}${this.s.disc[sp.id]?.seen ? '' : '<i>NOUVEAU</i>'}`;
-      hint = t.cut ? 'Touche l\'écran quand le curseur est dans le vert !' : t.nearHidden ? 'Frotte le fourré du doigt pour écarter ses branches.' : t.full ? 'Ton panier est plein : rentre à la serre.' : 'Touche la plante pour sortir le sécateur.';
+      hint = t.picking ? '' : t.nearHidden ? 'Frotte le fourré du doigt pour écarter ses branches.' : t.full ? 'Ton panier est plein : rentre à la serre.' : 'Touche la plante pour la cueillir.';
       px(lab, r.x, r.y);
     } else if (t.full) hint = 'Ton panier est plein : rentre à la serre.';
     if (t.lost) hint = 'La nuit t\'a surpris loin de la serre : tu perds la moitié du panier.';
     if (html !== this.trekLabel) { this.trekLabel = html; lab.innerHTML = html; lab.className = html ? 'on' : ''; }
     const hintEl = $('tr-hint');
     if (hintEl.textContent !== hint) { hintEl.textContent = hint; hintEl.className = hint ? 'on' : ''; }
-    const g = $('tr-gauge');
-    g.className = t.cut ? 'on' : '';
-    if (t.cut) {
-      const c = t.cut, pc = (v: number) => Math.max(0, Math.min(100, v * 100)) + '%';
-      const set = (id: string, half: number) => { const el = $(id); el.style.left = pc(c.mid - half); el.style.width = pc(Math.min(1, c.mid + half) - Math.max(0, c.mid - half)); };
-      set('tr-ok', c.zone / 2 + 0.13);
-      set('tr-green', c.zone / 2);
-      $('tr-cur').style.left = pc(c.pos);
-    }
   }
 
   /** Bandeau de l'étal : recette, série, clients à venir, et une bulle par client qui attend. */
@@ -835,6 +838,8 @@ export class UI {
     const loot = { ...this.trek.loot };
     const got = sim.trekEnd(this.s, this.trek.basket, this.trek.bonus, loot);
     const extra = [loot.clay ? `+${loot.clay} argile` : '', loot.coins ? `+${fmt(loot.coins)} 🪙` : ''].filter(Boolean).join(' et ');
+    this.pick.stop();
+    $('pick').className = '';
     this.trek.close();
     $('trek').className = '';
     this.trekLabel = '';
