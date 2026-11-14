@@ -37,6 +37,7 @@ const SPEED = 4.4;
 const GROUND = [0x8fc27a, 0x6fa98a, 0xe9d3a0].map((c) => new THREE.Color(c));
 const MIST = new THREE.Color(0xf4f8fa);
 const UP = new THREE.Vector3(0, 1, 0);
+const WATER = new THREE.MeshStandardMaterial({ color: 0x6fc0d0, roughness: 0.15, flatShading: true });
 
 function mesh(geo: THREE.BufferGeometry, color: number, x: number, y: number, z: number, shadow = true): THREE.Mesh {
   const m = new THREE.Mesh(geo, mat(color));
@@ -44,6 +45,14 @@ function mesh(geo: THREE.BufferGeometry, color: number, x: number, y: number, z:
   m.castShadow = shadow;
   m.receiveShadow = true;
   return m;
+}
+/** Une calotte qui épouse la planète : mare, plaque de sable. `s` est son rayon au sol, `h` sa hauteur au-dessus du sol. */
+const caps = new Map<string, THREE.BufferGeometry>();
+function cap(s: number, h: number): THREE.BufferGeometry {
+  const key = `${s.toFixed(1)}-${h}`;
+  let g = caps.get(key);
+  if (!g) { g = new THREE.SphereGeometry(R + h, 22, 5, 0, Math.PI * 2, 0, s / R).translate(0, -R, 0); caps.set(key, g); }
+  return g;
 }
 const group = (...parts: THREE.Object3D[]) => { const g = new THREE.Group(); g.add(...parts); return g; };
 
@@ -54,6 +63,10 @@ function makeGeo() {
   const blades = [-1, 0, 1].map((i) => new THREE.ConeGeometry(0.05, 0.45, 4).rotateZ(-i * 0.35).translate(i * 0.07, 0.22, 0));
   return {
     tuft: mergeGeometries(blades),
+    // La tête d'un palmier : six palmes retombantes.
+    crown: mergeGeometries([0, 1, 2, 3, 4, 5].map((i) => new THREE.ConeGeometry(0.2, 1.3, 4).scale(1, 1, 0.35).rotateZ(-1.9).translate(0.55, -0.12, 0).rotateY((i / 6) * Math.PI * 2))),
+    log: new THREE.CylinderGeometry(0.22, 0.24, 1.6, 8).rotateZ(Math.PI / 2), reed: new THREE.CylinderGeometry(0.025, 0.03, 1.1, 5).translate(0, 0.55, 0), reedTop: new THREE.CylinderGeometry(0.06, 0.06, 0.28, 6).translate(0, 1.05, 0),
+    petal: new THREE.IcosahedronGeometry(0.11, 0).translate(0, 0.3, 0), stalk: new THREE.CylinderGeometry(0.02, 0.02, 0.3, 4).translate(0, 0.15, 0),
     trunk: new THREE.CylinderGeometry(0.16, 0.24, 1, 7), cone: new THREE.ConeGeometry(1, 1, 7), ball: new THREE.IcosahedronGeometry(1, 1), rock: new THREE.IcosahedronGeometry(1, 0),
     stem: new THREE.CylinderGeometry(0.1, 0.12, 0.26, 7), cap: new THREE.SphereGeometry(0.24, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2),
     spike: new THREE.ConeGeometry(0.24, 0.8, 5), disc: new THREE.CylinderGeometry(1, 1, 0.05, 14), pad: new THREE.CylinderGeometry(0.25, 0.25, 0.03, 10), cactus: new THREE.CylinderGeometry(0.2, 0.22, 1, 8),
@@ -114,6 +127,7 @@ export class Planet {
   private clouds = new THREE.Group();
   private hero = new THREE.Group();
   private ground: THREE.Mesh | null = null;
+  private uni: { uP: { value: THREE.Vector2 } } | null = null;
   /** Pour chaque sommet du sol : son décalage sur la carte par rapport au personnage. */
   private offs = new Float32Array(0);
   /** Position sur la carte, et direction du regard. */
@@ -212,7 +226,7 @@ export class Planet {
 
   /** Région d'un point de la carte : 0 forêt, 1 marais, 2 dunes, avec des frontières ondulées. */
   private ringAt(x: number, z: number): number {
-    const d = Math.hypot(x, z) + Math.sin(Math.atan2(x, -z) * 7) * 2.2;
+    const d = Math.hypot(x, z) + Math.sin(Math.atan2(x, -z) * 7) * 2.2 + Math.sin(x * 0.9) * Math.sin(z * 0.8) * 0.9;
     return d < RINGS[0] ? 0 : d < RINGS[1] ? 1 : 2;
   }
   /** Jusqu'où l'on peut marcher : le bord de la dernière région ouverte. */
@@ -269,9 +283,35 @@ export class Planet {
       this.offs[i * 2] = (x / h) * d;
       this.offs[i * 2 + 1] = (z / h) * d;
     }
-    geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(pos.count * 3), 3));
+    geo.setAttribute('aOff', new THREE.BufferAttribute(this.offs, 2));
+    // La peinture se calcule au pixel près d'après la carte : frontières nettes, cernées d'un trait, quel que soit le maillage.
     const gm = mat(0xffffff).clone() as THREE.MeshToonMaterial;
-    gm.vertexColors = true;
+    const uni = { uP: { value: new THREE.Vector2() }, uEdge: { value: this.edge }, uC0: { value: GROUND[0] }, uC1: { value: GROUND[1] }, uC2: { value: GROUND[2] }, uMist: { value: MIST } };
+    this.uni = uni;
+    gm.onBeforeCompile = (sh) => {
+      Object.assign(sh.uniforms, uni);
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec2 aOff;\nvarying vec2 vOff;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvOff = aOff;');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform vec2 uP;\nuniform float uEdge;\nuniform vec3 uC0;\nuniform vec3 uC1;\nuniform vec3 uC2;\nuniform vec3 uMist;\nvarying vec2 vOff;')
+        .replace('#include <color_fragment>', `#include <color_fragment>
+        {
+          vec2 m = uP + vOff;
+          float d0 = length(m);
+          float d = d0 + sin(atan(m.x, -m.y) * 7.0) * 2.2 + sin(m.x * 0.9) * sin(m.y * 0.8) * 0.9;
+          float r0 = ${RINGS[0].toFixed(1)}, r1 = ${RINGS[1].toFixed(1)};
+          vec3 g = d < r0 ? uC0 : d < r1 ? uC1 : uC2;
+          // Grandes taches claires et petits points sombres : le sol n'est pas un aplat.
+          if (sin(m.x * 0.45) * sin(m.y * 0.38 + m.x * 0.1) > 0.3) g *= 1.05;
+          if (sin(m.x * 2.3 + m.y * 0.7) * sin(m.y * 2.1 - m.x * 0.5) > 0.9) g *= 0.93;
+          // Entre deux régions : un trait d'encre, bordé d'un liseré clair du côté de la serre.
+          float b = min(abs(d - r0), abs(d - r1));
+          if (b < 0.09) g *= 0.42;
+          else if (b < 0.55 && (d < r0 || (d > r0 + 1.0 && d < r1))) g = mix(g, vec3(1.0), 0.22);
+          if (d0 < ${CAMP.toFixed(1)}) g *= 1.1;
+          if (d0 > uEdge + 0.3) g = uMist;
+          diffuseColor.rgb = g;
+        }`);
+    };
+    gm.customProgramCacheKey = () => 'planet-ground';
     this.ground = new THREE.Mesh(geo, gm);
     this.ground.receiveShadow = true;
     this.ground.userData.raw = true;
@@ -316,7 +356,9 @@ export class Planet {
     });
 
     // Place libre : ni sur le parvis de la serre, ni sur une plante, ni dans un tronc.
-    const free = (x: number, z: number, r: number) => Math.hypot(x, z) > CAMP + r + 0.6 && this.finds.every((f) => Math.hypot(f.thing.x - x, f.thing.z - z) > r + 1.5) && this.solids.every((s) => Math.hypot(s.x - x, s.z - z) > r + s.r);
+    const free = (x: number, z: number, r: number) => Math.hypot(x, z) > CAMP + r + 0.6 && this.finds.every((f) => Math.hypot(f.thing.x - x, f.thing.z - z) > r + 1.5) && this.solids.every((s) => Math.hypot(s.x - x, s.z - z) > r + s.r)
+      // Seules les herbes et les roseaux poussent dans l'eau et les ronces.
+      && (r < 0.3 || this.slows.every((s) => Math.hypot(s.x - x, s.z - z) > r + s.r));
     /** Sème `n` objets entre deux distances de la serre. */
     const scatter = (n: number, r0: number, r1: number, size: number, make: (x: number, z: number, k: number) => void) => {
       for (let k = 0; k < n; k++) {
@@ -344,12 +386,23 @@ export class Planet {
       solid(x, z, 0.2 + h * 0.1);
     };
     const pond = (x: number, z: number, s: number) => {
-      const water = new THREE.Mesh(G.disc, new THREE.MeshStandardMaterial({ color: 0x6fc0d0, roughness: 0.15, flatShading: true }));
-      water.position.y = 0.06;
-      water.scale.set(s, 1, s);
+      s = Math.round(s * 10) / 10;
+      const water = new THREE.Mesh(cap(s, 0.06), WATER);
       water.receiveShadow = true;
-      this.add(group(flat(water), flat(part(G.pad, 0x5fae68, s * 0.35, 0.1, s * 0.15, 1.1)), flat(part(G.pad, 0x6fbf78, -s * 0.4, 0.1, -s * 0.1, 0.8))), x, z, rnd() * 6);
+      // Une berge sombre déborde sous l'eau : la mare est cernée, et posée sur la courbure.
+      this.add(group(flat(mesh(cap(s + 0.22, 0.03), 0x3f6f6a, 0, 0, 0, false)), flat(water), flat(part(G.pad, 0x5fae68, s * 0.3, 0.09, s * 0.12, 1.1)), flat(part(G.pad, 0x6fbf78, -s * 0.35, 0.09, -s * 0.1, 0.8))), x, z, rnd() * 6);
       slow(x, z, s);
+    };
+    const bush = (x: number, z: number, c1: number, c2: number, s = 0.45 + rnd() * 0.3) => {
+      this.add(group(part(G.ball, c1, 0, s * 0.7, 0, s), part(G.ball, c2, s * 0.75, s * 0.5, 0.1, s * 0.7), part(G.ball, c1, -s * 0.6, s * 0.45, 0.25, s * 0.6)), x, z, rnd() * 6);
+      solid(x, z, s * 0.9);
+    };
+    const palm = (x: number, z: number) => {
+      const h = 1.8 + rnd() * 1.2;
+      const trunk = part(G.trunk, 0xb58a5a, 0.12, h / 2, 0, 0.7, h, 0.7);
+      trunk.rotation.z = -0.12;
+      this.add(group(trunk, part(G.crown, 0x5fae5a, 0.24, h, 0, 1), part(G.rock, 0x8a5f3c, 0.24, h - 0.1, 0, 0.16)), x, z, rnd() * 6);
+      solid(x, z, 0.3);
     };
     const [F, M, D] = RINGS;
 
@@ -379,28 +432,39 @@ export class Planet {
       slow(x, z, 1.6);
     });
     scatter(150, 2, F, 0.2, (x, z, k) => tuft(x, z, k % 2 ? 0x6fae5a : 0x7fbf6a));
+    scatter(50, 5, F, 0.7, (x, z, k) => bush(x, z, k % 2 ? 0x5fae68 : 0x4f9a5c, 0x6fbf78));
+    scatter(18, 6, F, 1.1, (x, z) => { this.add(group(part(G.log, 0x8a5f3c, 0, 0.22, 0), part(G.cap, 0x6fbf78, 0.2, 0.4, 0, 0.7, 0.4, 0.7)), x, z, rnd() * 6); solid(x, z, 0.55); });
+    scatter(70, 4, F, 0.2, (x, z, k) => this.add(group(part(G.stalk, 0x4f9a5c, 0, 0, 0, 1, 1, 1, false), part(G.petal, [0xf2c94c, 0xe58ab0, 0xfdfaf2, 0x8a6fd0][k % 4], 0, 0, 0, 1, 1, 1, false)), x, z));
 
     // Marais : des mares où l'on patauge, des arbres à grosse tête, des roseaux.
-    scatter(46, F + 2, M - 2, 2.0, (x, z) => pond(x, z, 1.3 + rnd() * 0.9));
-    scatter(130, F + 1, M - 1, 0.9, (x, z, k) => {
+    scatter(80, F + 2, M - 2, 2.2, (x, z) => pond(x, z, 1.3 + rnd() * 1.3));
+    scatter(300, F + 1, M - 1, 0.9, (x, z, k) => {
       const h = 1.5 + rnd() * 0.9, s = 0.8 + rnd() * 0.35;
       this.add(group(part(G.trunk, 0x7a6a55, 0, h / 2, 0, 1, h, 1), part(G.ball, k % 2 ? 0x6fa27a : 0x5f946c, 0, h + 0.4, 0, s)), x, z);
       solid(x, z, 0.4);
     });
-    scatter(150, F, M, 0.2, (x, z, k) => tuft(x, z, k % 2 ? 0x8fb86a : 0x7fa85a, 2));
+    scatter(320, F, M, 0.2, (x, z, k) => tuft(x, z, k % 2 ? 0x8fb86a : 0x7fa85a, 2));
+    scatter(260, F, M, 0.2, (x, z) => { const h = 0.8 + rnd() * 0.5; this.add(group(part(G.reed, 0x7fa85a, 0, 0, 0, 1, h, 1, false), part(G.reedTop, 0x7a4a2a, 0, 0, 0, 1, h, 1, false), part(G.reed, 0x8fb86a, 0.12, 0, 0.05, 1, h * 0.7, 1, false)), x, z, rnd() * 6); });
+    scatter(110, F + 1, M, 0.7, (x, z, k) => bush(x, z, k % 2 ? 0x5f946c : 0x4f8a7a, 0x6fa27a));
+    scatter(60, F + 1, M, 0.7, (x, z) => rock(x, z, 0x7f8f86));
+    scatter(60, F, M, 0.4, (x, z) => this.add(group(part(G.stem, 0xe9dcc6, 0, 0.13, 0), part(G.cap, 0x8a6fd0, 0, 0.26, 0)), x, z));
 
     // Dunes : cactus, pierres chaudes, bosses de sable et plaques de sable mou.
-    scatter(36, M + 2, D - 1, 1.6, (x, z) => { const s = 1.3 + rnd() * 0.7; this.add(group(flat(part(G.disc, 0xc9a86a, 0, 0.07, 0, s, 1, s, false))), x, z); slow(x, z, s); });
-    scatter(40, M + 1, D + 4, 1.6, (x, z, k) => { const s = 1.8 + rnd(); this.add(group(flat(part(G.dome, k % 2 ? 0xf0dcae : 0xe6cd96, 0, -0.1, 0, s, s * 0.35, s, false))), x, z); });
-    scatter(110, M + 1, D + 4, 0.8, (x, z, k) => {
+    scatter(90, M + 2, D - 1, 1.8, (x, z) => { const s = Math.round((1.3 + rnd() * 1.0) * 10) / 10; this.add(group(flat(mesh(cap(s, 0.04), 0xc9a86a, 0, 0, 0, false))), x, z); slow(x, z, s); });
+    // Des oasis : une mare et ses palmiers.
+    scatter(9, M + 5, D - 4, 5, (x, z) => { pond(x, z, 2.4); for (let i = 0; i < 4; i++) { const a = i * 1.6 + rnd(); palm(x + Math.sin(a) * 3.3, z + Math.cos(a) * 3.3); } });
+    scatter(150, M + 1, D + 4, 1.6, (x, z, k) => { const s = 1.8 + rnd(); this.add(group(flat(part(G.dome, k % 2 ? 0xf0dcae : 0xe6cd96, 0, -0.1, 0, s, s * 0.35, s, false))), x, z); });
+    scatter(380, M + 1, D + 4, 0.8, (x, z, k) => {
       const h = 1.0 + rnd() * 1.2;
       const g = group(part(G.cactus, 0x5f9a6a, 0, h / 2, 0, 1, h, 1));
       if (k % 2) g.add(part(G.arm, 0x5f9a6a, 0.36, h * 0.55, 0));
       this.add(g, x, z, rnd() * 6);
       solid(x, z, 0.4);
     });
-    scatter(60, M + 1, D + 4, 0.7, (x, z) => rock(x, z, 0xc9a27a));
-    scatter(100, M, D + 4, 0.2, (x, z, k) => tuft(x, z, k % 2 ? 0xb9b86a : 0xa9a85a, 0.9));
+    scatter(240, M + 1, D + 4, 0.7, (x, z) => rock(x, z, 0xc9a27a));
+    scatter(90, M + 1, D + 4, 0.6, palm);
+    scatter(140, M + 1, D + 4, 0.6, (x, z, k) => bush(x, z, k % 2 ? 0xb9a86a : 0xa9985a, 0xc9b87a, 0.3 + rnd() * 0.2));
+    scatter(300, M, D + 4, 0.2, (x, z, k) => tuft(x, z, k % 2 ? 0xb9b86a : 0xa9a85a, 0.9));
 
     // À ramasser en marchant : des mottes d'argile et des pièces perdues, plus généreuses loin de la serre.
     scatter(10 + this.reach * 12, 7, this.edge - 2, 0.6, (x, z, k) => {
@@ -471,19 +535,9 @@ export class Planet {
     for (const t of this.things) this.wrap(t);
   }
 
-  /** Repeint le sol d'après la carte, là où se trouve le personnage. */
+  /** Fait défiler la peinture du sol sous le personnage. */
   private paint(): void {
-    if (!this.ground) return;
-    const col = this.ground.geometry.getAttribute('color') as THREE.BufferAttribute;
-    const arr = col.array as Float32Array, o = this.offs, lim = this.edge;
-    for (let i = 0, n = o.length / 2; i < n; i++) {
-      const x = this.px + o[i * 2], z = this.pz + o[i * 2 + 1], d = Math.hypot(x, z);
-      const c = d > lim + 0.3 ? MIST : GROUND[this.ringAt(x, z)];
-      // De grandes taches plus claires, et le parvis de la serre, pour que le sol ne soit pas un aplat.
-      const k = (d < CAMP ? 1.1 : 1) + (Math.sin(x * 0.45) * Math.sin(z * 0.38 + x * 0.1) > 0.3 ? 0.04 : 0);
-      arr[i * 3] = c.r * k; arr[i * 3 + 1] = c.g * k; arr[i * 3 + 2] = c.b * k;
-    }
-    col.needsUpdate = true;
+    this.uni?.uP.value.set(this.px, this.pz);
   }
 
   // ---------- lecture pour l'interface ----------
