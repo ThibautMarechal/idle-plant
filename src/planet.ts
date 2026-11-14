@@ -416,10 +416,11 @@ export class Planet {
     });
 
     // Au bord de la dernière région ouverte, une mer de nuages cache la suite.
-    if (this.reach < RINGS.length) {
-      const n = Math.round((this.edge * Math.PI * 2) / 1.9);
+    // Elle commence là où l'on est arrêté : on bute dans les nuages, jamais dans le vide.
+    {
+      const n = Math.round((this.edge * Math.PI * 2) / 1.1);
       for (let k = 0; k < n; k++) {
-        const s = 1.0 + rnd() * 0.6, a = (k / n) * Math.PI * 2, r = this.edge + 0.8 + rnd() * 1.2;
+        const s = 1.0 + rnd() * 0.6, a = (k / n) * Math.PI * 2, r = this.edge - 0.3 + (k % 3) * 1.2 + rnd() * 0.5;
         this.add(group(part(G.ball, 0xfdfdfd, 0, s * 0.5, 0, s, s, s, false), part(G.ball, 0xeef4f8, 0.5, s * 0.9, 0.9, s * 0.7, s * 0.7, s * 0.7, false)), Math.sin(a) * r, -Math.cos(a) * r, rnd() * 6);
       }
     }
@@ -474,10 +475,10 @@ export class Planet {
   private paint(): void {
     if (!this.ground) return;
     const col = this.ground.geometry.getAttribute('color') as THREE.BufferAttribute;
-    const arr = col.array as Float32Array, o = this.offs, lim = this.reach < RINGS.length ? this.edge : Infinity;
+    const arr = col.array as Float32Array, o = this.offs, lim = this.edge;
     for (let i = 0, n = o.length / 2; i < n; i++) {
       const x = this.px + o[i * 2], z = this.pz + o[i * 2 + 1], d = Math.hypot(x, z);
-      const c = d > lim + 1.5 ? MIST : GROUND[this.ringAt(x, z)];
+      const c = d > lim + 0.3 ? MIST : GROUND[this.ringAt(x, z)];
       // De grandes taches plus claires, et le parvis de la serre, pour que le sol ne soit pas un aplat.
       const k = (d < CAMP ? 1.1 : 1) + (Math.sin(x * 0.45) * Math.sin(z * 0.38 + x * 0.1) > 0.3 ? 0.04 : 0);
       arr[i * 3] = c.r * k; arr[i * 3 + 1] = c.g * k; arr[i * 3 + 2] = c.b * k;
@@ -624,13 +625,6 @@ export class Planet {
     this.onChange();
   }
 
-  /** Rentrer : sans risque à la serre ; ailleurs, seulement quand la nuit vous y force. */
-  goHome(): boolean {
-    if (!this.active || this.ended || !this.atCamp) return false;
-    this.finish();
-    return true;
-  }
-
   private finish(): void {
     if (this.ended) return;
     this.ended = true;
@@ -683,12 +677,14 @@ export class Planet {
           if (d < min && d > 0.001) { this.px = o.x + (dx / d) * min; this.pz = o.z + (dz / d) * min; }
         }
         // Le bout du monde connu : la mer de nuages, ou le bord de la carte.
-        const far = Math.hypot(this.px, this.pz), lim = this.edge - 0.6;
+        const far = Math.hypot(this.px, this.pz), lim = this.edge + 0.2;
         if (far > lim) {
           this.px *= lim / far; this.pz *= lim / far;
-          if (this.reach < RINGS.length && now - this.wallAt > 6000) { this.wallAt = now; this.onEvent('wall'); }
+          if (now - this.wallAt > 5000) { this.wallAt = now; this.onEvent('wall', this.reach < RINGS.length ? 'lock' : 'end'); }
         }
-        const ring = this.ringAt(this.px, this.pz);
+        // Rentrer, c'est revenir pousser la porte de la serre.
+        if (far < 3.05 && this.total - this.left > 1.5 && -(this.fx * this.px + this.fz * this.pz) > 0.3 * far) this.finish();
+        const ring = Math.min(this.reach - 1, this.ringAt(this.px, this.pz));
         if (ring !== this.biome) { this.biome = ring; this.onEvent('region', String(ring)); }
       }
     }

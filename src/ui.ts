@@ -110,7 +110,7 @@ export class UI {
     this.applyTheme();
     $('studio').innerHTML = '<div class="st-head"><h2 id="st-title"></h2><button class="x" data-act="st-close">✕</button></div><p id="st-hint"></p><canvas id="stgl"></canvas><div id="st-tools"></div>';
     this.studio = new Studio($('stgl') as HTMLCanvasElement);
-    $('trek').innerHTML = '<canvas id="trgl"></canvas><div id="tr-night"></div><div class="tr-top"><div class="tr-time"><i id="tr-bar"></i></div><div class="tr-row"><span class="pill" id="tr-basket"></span><span class="pill" id="tr-camp"><b id="tr-arrow">▲</b><span id="tr-dist"></span></span><button class="btn small" id="tr-home" data-act="trek-home">Rentrer</button></div></div><div id="tr-stick"><i></i></div><div id="tr-label"></div><p id="tr-hint"></p><div id="pick"><div class="pk-card"><b id="pk-title"></b><canvas id="pkc"></canvas><p id="pk-hint"></p></div></div>';
+    $('trek').innerHTML = '<canvas id="trgl"></canvas><div id="tr-night"></div><div class="tr-top"><div class="tr-time"><i id="tr-bar"></i></div><div class="tr-row"><span class="pill" id="tr-basket"></span><span class="pill" id="tr-camp"><b id="tr-arrow">▲</b><span id="tr-dist"></span></span></div></div><div id="tr-stick"><i></i></div><div id="tr-label"></div><p id="tr-hint"></p><div id="pick"><div class="pk-card"><b id="pk-title"></b><canvas id="pkc"></canvas><p id="pk-hint"></p></div></div>';
     this.trek = new Planet($('trgl') as HTMLCanvasElement);
     this.trek.onChange = () => this.trekHud();
     this.pick = new Pick($('pkc') as HTMLCanvasElement);
@@ -124,7 +124,7 @@ export class UI {
       this.pick.start(kind, EMOJI[id], Object.keys(RARITIES).indexOf(sp.rarity), (score) => { $('pick').className = ''; this.trek.resolve(score); });
     };
     this.trek.onEvent = (kind, id) => {
-      if (kind === 'wall') { this.toast('Une mer de nuages : la région suivante se débloque depuis le sac à dos de la serre.'); return; }
+      if (kind === 'wall') { this.toast(id === 'lock' ? 'Une mer de nuages : la région suivante se débloque depuis le sac à dos de la serre.' : 'La mer de nuages : c\'est le bout du monde connu.'); return; }
       if (kind === 'region') { this.toast(`${BIOMES[Number(id)].icon} ${BIOMES[Number(id)].name}`); return; }
       if (kind === 'clay' || kind === 'coins') { play('coin'); this.buzz(12); this.toast(kind === 'clay' ? `Un filon d'argile : +${id} 🧱` : `Une bourse oubliée : +${id} 🪙`); return; }
       const name = id ? `${EMOJI[id]} ${SPECIES_BY_ID[id].name}` : '';
@@ -611,9 +611,6 @@ export class UI {
       case 'stall-close':
         this.stall.shut();
         break;
-      case 'trek-home':
-        if (!this.trek.goHome()) this.toast('Reviens d\'abord à la serre : suis la flèche 🏡.');
-        break;
       case 'seedbag':
         this.seedOpen = this.seedOpen ? 0 : Date.now();
         this.refresh(true);
@@ -768,12 +765,11 @@ export class UI {
     for (const id of t.bonus) count[id] = (count[id] ?? 0) + 1;
     const b = `🧺 ${t.basket.map((id) => EMOJI[id] + (count[id]-- > 0 ? '✨' : '')).join('')}${'·'.repeat(Math.max(0, t.cap - t.basket.length))}${t.loot.clay ? ` 🧱${t.loot.clay}` : ''}${t.loot.coins ? ` 🪙${t.loot.coins}` : ''}`;
     if ($('tr-basket').textContent !== b) $('tr-basket').textContent = b;
-    const dist = t.atCamp ? '🏡 À la serre' : `🏡 ${Math.round(t.campDist)} m`;
+    const dist = t.atCamp ? '🏡 Pousse la porte' : `🏡 ${Math.round(t.campDist)} m`;
     if ($('tr-dist').textContent !== dist) $('tr-dist').textContent = dist;
     const arrow = $('tr-arrow');
     arrow.style.transform = `rotate(${t.campAngle}rad)`;
     arrow.style.visibility = t.atCamp ? 'hidden' : 'visible';
-    $('tr-home').classList.toggle('gold', t.atCamp);
     const stick = $('tr-stick');
     stick.className = t.stick ? 'on' : '';
     if (t.stick) {
@@ -781,7 +777,7 @@ export class UI {
       (stick.firstElementChild as HTMLElement).style.transform = `translate(${t.stick.dx}px, ${t.stick.dy}px)`;
     }
     const lab = $('tr-label'), r = t.nearRect();
-    let html = '', hint = t.atCamp && !t.basket.length ? 'Pose le pouce n\'importe où et pousse dans la direction où aller. Plus tu t\'éloignes de la serre, plus les plantes sont rares.' : '';
+    let html = '', hint = !t.atCamp ? '' : t.day > 0.93 && !t.basket.length ? 'Pose le pouce n\'importe où et pousse dans la direction où aller. Plus tu t\'éloignes de la serre, plus les plantes sont rares.' : 'Pour rentrer, marche jusqu\'à la serre et pousse sa porte.';
     if (r && t.near >= 0) {
       const sp = SPECIES_BY_ID[t.nearId];
       html = t.nearHidden ? '<b>Un fourré…</b>' : `<b>${EMOJI[sp.id]} ${esc(sp.name)}</b>${rarTag(sp)}${this.s.disc[sp.id]?.seen ? '' : '<i>NOUVEAU</i>'}`;
