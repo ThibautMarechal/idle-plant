@@ -2,6 +2,7 @@ import './style.css';
 import { Scene3D } from './scene';
 import * as sim from './sim';
 import { UI } from './ui';
+import { installIcons } from './icons';
 
 const params = new URLSearchParams(location.search);
 const speed = Math.max(1, Number(params.get('vitesse')) || 1);
@@ -17,6 +18,7 @@ if (!state.hints?.bd) { state.style = 'bd'; (state.hints ??= {}).bd = true; }
 // Essai en cours : la vue à la première personne. Elle devient le décor par défaut, une fois.
 if (!state.hints?.fp) { state.theme = 'pavillon'; (state.hints ??= {}).fp = true; }
 const scene = new Scene3D(document.getElementById('gl') as HTMLCanvasElement, state.theme, state.style);
+installIcons();
 const ui = new UI(state, scene, () => {
   sim.wipe();
   const { theme, style } = state;

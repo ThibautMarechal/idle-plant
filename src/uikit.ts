@@ -4,17 +4,11 @@ import type { Species } from './data';
 
 
 import * as sim from './sim';
+import { SPECIES_MARK } from './icons';
 
 
-export const EMOJI: Record<string, string> = {
-  echeveria: '🪴', aloe: '🌵', lithops: '🪨', basilic: '🌿', menthe: '🍃', lavande: '🪻', boston: '☘️', capillaire: '🍀',
-  pensee: '🌼', pelargonium: '🌺', strelitzia: '🦜', phalaenopsis: '🌸', paphiopedilum: '🥿', fantome: '👻',
-  haworthia: '🦓', echinocactus: '🌵', opuntia: '🌵', thym: '🌿', romarin: '🌿', ciboulette: '🧅', platycerium: '🦌', asplenium: '🪺',
-  cattleya: '💮', dendrobium: '🌸', tournesol: '🌻', tulipe: '🌷', hibiscus: '🌺', semper: '🌷', monstera: '🌴', calathea: '🍃',
-  pilea: '🪙', chlorophytum: '🕷️', anthurium: '❤️', dionee: '🪤', drosera: '💧', sarracenia: '🏺',
-  figuier: '🌳', hortensia: '💠', olivier: '🫒', citronnier: '🍋', camelia: '🏵️', erable: '🍁', bonsai: '🎍',
-  dahlia: '🌺', muguet: '🔔', rose: '🌹', pivoine: '🌸',
-};
+/** Le signe d'une espèce dans un texte : un caractère privé, remplacé à l'affichage par son portrait. */
+export const EMOJI: Record<string, string> = SPECIES_MARK;
 export const ZONE_SHORT = ['Ombre', 'Bassin', 'Porte', 'Plein sud'];
 
 export type SheetKind = 'trek' | 'season' | 'trophies' | 'atelier' | 'paint' | 'vitrine' | 'none' | 'seed' | 'buypot' | 'plant' | 'harvest' | 'packets' | 'market' | 'shop' | 'almanac' | 'fiche' | 'zone';

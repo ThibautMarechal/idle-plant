@@ -1,4 +1,5 @@
 import type { Family } from './data';
+import { drawIcon } from './icons';
 
 /** Les trois gestes de cueillette. */
 export type PickKind = 'seeds' | 'pull' | 'slice';
@@ -228,10 +229,7 @@ export class Pick {
     c.save();
     c.translate(x, y);
     c.rotate(rot);
-    c.font = `${size}px serif`;
-    c.textAlign = 'center';
-    c.textBaseline = 'alphabetic';
-    c.fillText(this.emoji, 0, 0);
+    drawIcon(c, this.emoji, 0, -size * 0.5, size * 1.15, true);
     c.restore();
   }
 
@@ -254,7 +252,7 @@ export class Pick {
       this.plant(w / 2 + Math.sin(this.t * 30) * this.shake * 7, h * 0.3, 118, Math.sin(this.t * 26) * this.shake * 0.12);
       for (const d of this.drops) {
         if (d.done) continue;
-        if (d.bug) { c.font = '30px serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('🐛', d.x, d.y); }
+        if (d.bug) drawIcon(c, '🐛', d.x, d.y, 34);
         else { this.blob(d.x, d.y, 9, 13, '#c98a3c', d.rot); this.blob(d.x - 2, d.y - 3, 2.5, 4, '#f6d99a', d.rot); }
       }
       // Le panier.
@@ -311,8 +309,7 @@ export class Pick {
         c.translate(s.x, cut ? s.cut + s.fall * s.fall * 500 : top);
         c.rotate(cut ? s.fall * 2.4 * (s.x < w / 2 ? -1 : 1) : Math.sin(this.t * 1.7 + s.phase) * 0.05);
         if (cut) { c.beginPath(); c.moveTo(0, 0); c.lineTo(0, top - s.cut); c.strokeStyle = INK; c.lineWidth = 15; c.stroke(); c.strokeStyle = '#4f9a5c'; c.lineWidth = 9; c.stroke(); }
-        c.font = '62px serif'; c.textAlign = 'center'; c.textBaseline = 'alphabetic';
-        c.fillText(this.emoji, 0, (cut ? top - s.cut : 0) + 8);
+        drawIcon(c, this.emoji, 0, (cut ? top - s.cut : 0) - 22, 76, true);
         c.restore();
         if (!cut) {
           // Le trait où couper, et le repère qui monte et descend.
@@ -320,7 +317,7 @@ export class Pick {
           c.beginPath(); c.moveTo(s.x - 30, my); c.lineTo(s.x + 30, my);
           c.strokeStyle = '#fff'; c.lineWidth = 6; c.stroke();
           c.strokeStyle = '#e2473a'; c.lineWidth = 3; c.setLineDash([6, 5]); c.stroke(); c.setLineDash([]);
-          c.font = '20px serif'; c.textBaseline = 'middle'; c.fillText('✂️', s.x + 44, my);
+          drawIcon(c, '✂️', s.x + 44, my, 24);
         } else this.text(s.score === 2 ? 'Net !' : s.score === 1 ? 'Bien' : 'Raté', s.x, s.cut - 24 - Math.min(20, s.fall * 60), 16, s.score ? '#2a8a4a' : '#e2473a');
       }
       // La trace du doigt.
