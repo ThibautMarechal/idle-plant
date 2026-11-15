@@ -46,6 +46,8 @@ export class Scene3D {
   /** Où l'on se tient : 0 dans la serre, 1 au jardin. */
   spot = 0;
   private doors: THREE.Object3D[] = [];
+  /** Parcelles du jardin : jardinières achetées et carrés de terre encore à vendre. */
+  private beds: THREE.Object3D[] = [];
   private flutters: THREE.Object3D[] = [];
   private now = 0;
   private theme!: Theme;
@@ -131,8 +133,9 @@ export class Scene3D {
 
     t.build(add);
     this.doors = [];
+    this.beds = [];
     this.flutters = [];
-    this.world.traverse((o) => { if (o.userData.water) this.waters.push(o); if (o.userData.door) this.doors.push(o); if (o.userData.flutter !== undefined) this.flutters.push(o); });
+    this.world.traverse((o) => { if (o.userData.water) this.waters.push(o); if (o.userData.door) this.doors.push(o); if (o.userData.ext || o.userData.plot) this.beds.push(o); if (o.userData.flutter !== undefined) this.flutters.push(o); });
 
     const mistMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35, depthWrite: false });
     for (let k = 0; k < 6; k++) {
@@ -454,6 +457,7 @@ export class Scene3D {
   /** Aligne le décor sur l'état du jeu. Ne reconstruit un modèle que si son aspect change. */
   sync(s: State): void {
     for (const d of this.doors) d.visible = !s.zonesOpen[GARDEN_INDEX];
+    for (const b of this.beds) b.visible = b.userData.ext ? (s.gardenExt ?? 0) >= b.userData.ext : (s.gardenExt ?? 0) < b.userData.plot;
     for (const k of Object.keys(this.gear)) this.gear[k].visible = !!s.upgrades[k as keyof State['upgrades']];
     s.showcase.forEach((h, k) => {
       const v = this.shows[k];

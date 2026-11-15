@@ -479,3 +479,30 @@ body[data-fp="1"] #nav { display: none; }
 .ic > svg, .ic > canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
 .ic.pl { width: 1.5em; height: 1.5em; vertical-align: -0.42em; }
 .card .ico .ic.pl, .seedchip > .ic.pl, .sp .e .ic.pl, .rc .e .ic.pl { width: 1.75em; height: 1.75em; vertical-align: middle; }
+
+/* Graines à ouvrir : après un sachet ou une cueillette. La grille s'adapte au nombre de graines. */
+.seeds { display: grid; grid-template-columns: repeat(var(--cols, 3), minmax(0, 1fr)); gap: 14px 6px; width: min(100%, calc(var(--cols, 3) * 112px)); max-height: 58vh; overflow-y: auto; padding: 14px 10px 6px; justify-items: center; align-items: start; }
+.sd { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; min-width: 0; text-align: center; font-size: 11.5px; font-weight: 800; line-height: 1.15; color: var(--ink); background: none; border: 0; padding: 0; }
+.sd > svg { width: min(64px, 78%); height: auto; filter: drop-shadow(0 4px 0 rgba(60, 40, 10, 0.25)); opacity: 0; animation: seedin 0.4s cubic-bezier(0.2, 1.4, 0.4, 1) forwards; animation-delay: calc(var(--k, 0) * 45ms); }
+.sd.next > svg { animation: seedin 0.4s cubic-bezier(0.2, 1.4, 0.4, 1) forwards, wobble 1s ease-in-out 0.4s infinite; animation-delay: calc(var(--k, 0) * 45ms), 0.4s; }
+.sd b { max-width: 100%; overflow-wrap: break-word; }
+.sd .disc { position: relative; width: min(72px, 86%); aspect-ratio: 1; border-radius: 50%; background: #fff; border: 3px solid var(--ink); display: flex; align-items: center; justify-content: center; font-size: 30px; flex: none; }
+.sd.glow .disc { border-color: var(--glow); box-shadow: 0 0 0 3px color-mix(in srgb, var(--glow) 35%, transparent), 0 0 18px var(--glow); }
+.sd .disc .ic.pl { width: 1.8em; height: 1.8em; vertical-align: middle; }
+.sd .new { position: absolute; top: -9px; right: -12px; background: var(--red); color: #fff; font-size: 9px; padding: 2px 6px; border-radius: 8px; transform: rotate(8deg); z-index: 1; }
+.sd.pop .disc { animation: sprout 0.5s cubic-bezier(0.2, 1.5, 0.4, 1); }
+.sd.pop b, .sd.pop .rar { animation: fadeup 0.35s ease 0.15s both; }
+.sd .half { position: absolute; top: 8px; left: 50%; width: 26px; height: 56px; margin-left: -26px; background: #c98f52; border: 3px solid #2b2118; border-radius: 100% 0 0 100% / 60% 0 0 40%; pointer-events: none; animation: crackl 0.5s ease-out forwards; }
+.sd .half.r { margin-left: 0; border-radius: 0 100% 100% 0 / 0 60% 40% 0; animation-name: crackr; }
+@keyframes seedin { from { opacity: 0; transform: translateY(-40px) rotate(-25deg) scale(0.5); } to { opacity: 1; transform: none; } }
+@keyframes sprout { 0% { transform: scale(0.2); } 60% { transform: scale(1.15); } 100% { transform: none; } }
+@keyframes fadeup { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes crackl { to { transform: translate(-34px, 26px) rotate(-70deg); opacity: 0; } }
+@keyframes crackr { to { transform: translate(34px, 26px) rotate(70deg); opacity: 0; } }
+#modal .mrowb .sub { width: 100%; margin: 0; }
+.seeds.c4 .sd { font-size: 11px; }
+.seeds.c4 .disc { font-size: 26px; }
+.seeds.c5 { gap: 12px 3px; padding-left: 4px; padding-right: 4px; }
+.seeds.c5 .sd { font-size: 10px; }
+.seeds.c5 .disc { font-size: 20px; border-width: 2.5px; }
+.seeds.c5 .sd .rar, .seeds.c5 .sd .new { font-size: 7.5px; padding: 1px 4px; }

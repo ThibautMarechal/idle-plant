@@ -1,4 +1,4 @@
-import { BIOMES, GARDEN_INDEX, SEASONS, FAMILIES, FAMILY_IDS, GLAZES, PAINTS, POT_SIZES, RARITIES, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, STAGES, ZONES } from './data';
+import { BIOMES, GARDEN_EXT, GARDEN_INDEX, SEASONS, FAMILIES, FAMILY_IDS, GLAZES, PAINTS, POT_SIZES, RARITIES, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, STAGES, ZONES } from './data';
 import type { Family } from './data';
 import type { Scene3D } from './scene';
 import { buildPlant } from './plants3d';
@@ -37,6 +37,9 @@ const QUEST_GUIDE: Record<string, { sheet?: SheetKind; overview?: boolean; tip: 
   contest: { sheet: 'season', tip: 'Fais fleurir les familles de la saison.' },
   harmony: { tip: 'Peins le fond d\'un pot dans la couleur marquée 💚 pour sa plante.' },
 };
+
+/** Une graine fermée, dessinée au trait. */
+const SEED_SVG = '<svg viewBox="0 0 48 60" aria-hidden="true"><path d="M24 4C38 14 44 28 40 42 37 52 31 57 24 57S11 52 8 42C4 28 10 14 24 4z" fill="#c98f52" stroke="#2b2118" stroke-width="3" stroke-linejoin="round"/><path d="M24 13v36" fill="none" stroke="#9a6534" stroke-width="2.2" stroke-linecap="round"/><path d="M17 19c-4.500 6.500-5.500 14-3.500 21" fill="none" stroke="#f3d6a4" stroke-width="3.500" stroke-linecap="round"/></svg>';
 
 export class UI {
   kind: SheetKind = 'none';
@@ -393,6 +396,7 @@ export class UI {
       b.innerHTML = `<span>${h.label}</span>`;
       b.onclick = () => {
         if (Date.now() - this.swipedAt < 350) return;
+        if (h.act.startsWith('gext')) return this.open('gext', Number(h.act.slice(4)) - 1);
         if (h.act !== 'door') return this.act('nav', h.act);
         if (!this.s.zonesOpen[GARDEN_INDEX]) return this.open('zone', GARDEN_INDEX);
         this.scene.walk(this.scene.spot ? 0 : 1, this.scene.spot ? 315 : 135);
@@ -481,6 +485,8 @@ export class UI {
         break;
       case 'gear': sim.toggleGear(s, arg as sim.ClimateGear); break;
       case 'flip': this.flipNext(); break;
+      case 'flipall': this.flipAll(); break;
+      case 'buygext': if (sim.buyGardenExt(s)) { this.toast(`${GARDEN_EXT[(s.gardenExt ?? 1) - 1].name} : parcelle aménagée, trois emplacements de plus !`); this.buzz(30); play('coin'); this.close(); this.scene.walk(1, (s.gardenExt ?? 1) === 1 ? 45 : 225); } break;
       case 'trophy': {
         const r = sim.claimTrophy(s, arg);
         if (r) { this.toast(`Trophée obtenu ! +${fmt(r)} 🪙`); play('coin'); this.bumpCoins(); this.buzz(30); }
@@ -948,17 +954,28 @@ export class UI {
 
   private renderPack(): void {
     const s = this.s;
-    const done = this.flipped >= this.pack.length;
-    const cards = this.pack.map((g, k) => {
+    const n = this.pack.length;
+    const done = this.flipped >= n;
+    const seeds = this.pack.map((g, k) => {
       const sp = SPECIES_BY_ID[g.id];
       const col = RARITIES[sp.rarity].color;
-      if (k >= this.flipped) return `<button class="rc back${k === this.flipped ? ' next' : ''}" data-act="flip"><span class="e">🌱</span>?</button>`;
-      return `<div class="rc${k === this.flipped - 1 ? ' pop' : ''}${sp.rarity !== 'commun' ? ' glow' : ''}" style="border-color:${col};--glow:${col}">${g.isNew ? '<span class="new">NOUVEAU</span>' : ''}<span class="e">${EMOJI[sp.id]}</span>${esc(sp.name)}${rarTag(sp)}</div>`;
+      if (k >= this.flipped) return `<button class="sd${k === this.flipped ? ' next' : ''}" data-act="flip" style="--k:${k}" aria-label="Graine à ouvrir">${SEED_SVG}</button>`;
+      const fresh = k === this.flipped - 1;
+      return `<div class="sd open${fresh ? ' pop' : ''}${sp.rarity !== 'commun' ? ' glow' : ''}" style="--glow:${col}">${fresh ? '<i class="half l"></i><i class="half r"></i>' : ''}<span class="disc">${g.isNew ? '<span class="new">NOUVEAU</span>' : ''}<span class="e">${EMOJI[sp.id]}</span></span><b>${esc(sp.name)}</b>${rarTag(sp)}</div>`;
     }).join('');
     const best = this.pack.slice(0, this.flipped).some((g) => SPECIES_BY_ID[g.id].rarity !== 'commun');
-    $('modal').innerHTML = `<div class="mtitle">${done ? (best ? 'Belle trouvaille !' : 'Voilà tes graines') : 'Retourne tes graines'}</div><div class="reveal" data-act="flip">${cards}</div>${done
+    // Le nombre de colonnes suit le nombre de graines : tout tient à l'écran, même après une grosse cueillette.
+    const cols = n <= 3 ? n : n === 4 ? 2 : n <= 9 ? 3 : n <= 16 ? 4 : 5;
+    $('modal').innerHTML = `<div class="mtitle">${done ? (best ? 'Belle trouvaille !' : 'Voilà tes graines') : n > 1 ? `Ouvre tes ${n} graines` : 'Ouvre ta graine'}</div><div class="seeds c${cols}" data-act="flip" style="--cols:${cols}">${seeds}</div>${done
       ? `<div class="mrowb">${s.packets > 0 ? `<button class="btn gold" data-act="free">🎁 Sachet suivant (${s.packets})</button>` : ''}<button class="btn primary" data-act="closemodal">Au jardin !</button></div>`
-      : '<p class="sub">Touche une graine pour la retourner.</p>'}`;
+      : `<div class="mrowb"><p class="sub">Touche une graine pour voir ce qu'elle donnera.</p>${n - this.flipped > 3 ? '<button class="btn small" data-act="flipall">Tout ouvrir</button>' : ''}</div>`}`;
+  }
+
+  /** Ouvre toutes les graines restantes, l'une après l'autre. */
+  private flipAll(): void {
+    if (this.flipped >= this.pack.length) return;
+    this.flipNext();
+    setTimeout(() => { if ($('modal').classList.contains('on') && $('modal').querySelector('.seeds')) this.flipAll(); }, 170);
   }
 
   private flipNext(): void {
@@ -1115,6 +1132,11 @@ export class UI {
       let txt = h.label, alert = false;
       if (h.act === 'door' && this.drag >= 0 && s.zonesOpen[GARDEN_INDEX]) { txt = '🚪 Tiens le pot ici'; alert = true; }
       else if (h.act === 'door') txt = !s.zonesOpen[GARDEN_INDEX] ? `🔒 Jardin · ${fmt(sim.ZONE_PRICES[GARDEN_INDEX])} 🪙` : this.scene.spot ? '🚪 Rentrer' : '🌳 Jardin';
+      else if (h.act.startsWith('gext')) {
+        const n = Number(h.act.slice(4)) - 1, got = s.gardenExt ?? 0;
+        txt = n < got ? '' : n === got ? `🔒 ${GARDEN_EXT[n].name} · ${fmt(GARDEN_EXT[n].price)} 🪙` : `🔒 ${GARDEN_EXT[n].name}`;
+        alert = n === got && s.coins >= GARDEN_EXT[n].price;
+      }
       else if (h.act === 'packets') { alert = s.packets > 0; txt = alert ? `🎁 ${s.packets} à ouvrir` : `🎁 ${clock(pwait)}`; }
       else if (h.act === 'atelier') { alert = kilnDone; txt = kilnDone ? '🏺 Pot cuit !' : kilnOn ? `🔥 ${clock(s.kiln!.left)}` : h.label; }
       else if (h.act === 'trek') { alert = rest <= 0; txt = rest > 0 ? `🥾 ${clock(rest)}` : '🥾 Partir'; }
@@ -1122,6 +1144,7 @@ export class UI {
       const sp = el.firstElementChild!;
       if (sp.textContent !== txt) sp.textContent = txt;
       sp.classList.toggle('alert', alert);
+      el.style.display = txt ? '' : 'none';
     });
     this.lockEls.forEach((el, r) => {
       el.hidden = s.zonesOpen[r];

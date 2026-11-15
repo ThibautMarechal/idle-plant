@@ -1,4 +1,4 @@
-import { BASKETS, BIOMES, TREK_GEAR, TREK_REST, TREK_TIME, GARDEN, GARDEN_CLIMATE, GARDEN_FIRST, GARDEN_INDEX, PROF_MAX, PROF_MIN, BASE_SLOTS, SEASONS, SEASON_LENGTH, CLIENTS, FAMILIES, FAMILY_IDS, GLAZES, NEWS, POT_SIZES, RARITIES, SLOT_COUNT, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, ZONES } from './data';
+import { BASKETS, BIOMES, GARDEN_BASE, GARDEN_EXT, TREK_GEAR, TREK_REST, TREK_TIME, GARDEN, GARDEN_CLIMATE, GARDEN_FIRST, GARDEN_INDEX, PROF_MAX, PROF_MIN, BASE_SLOTS, SEASONS, SEASON_LENGTH, CLIENTS, FAMILIES, FAMILY_IDS, GLAZES, NEWS, POT_SIZES, RARITIES, SLOT_COUNT, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, ZONES } from './data';
 import type { Family, Rarity, Species, Zone } from './data';
 
 /** `vr` : variante, 0 normale, 1 panachée, 2 dorée. */
@@ -64,6 +64,8 @@ export interface State {
   /** Expérience et niveau de jardinier. */
   /** Suspensions achetées, une par zone. */
   extra?: boolean[];
+  /** Nombre de parcelles ajoutées au jardin. */
+  gardenExt?: number;
   /** Temps de jeu écoulé, qui fait tourner les saisons. */
   seasonT?: number;
   /** Concours de la saison : numéro de la saison, floraisons comptées, paliers réclamés. */
@@ -934,7 +936,16 @@ export function zoneIndexOfSlot(i: number): number {
 /** Un emplacement est utilisable si sa zone est aménagée et, pour une suspension, si elle est achetée. */
 export function slotOpen(s: State, i: number): boolean {
   const z = zoneIndexOfSlot(i);
-  return !!s.zonesOpen[z] && (i < BASE_SLOTS || i >= GARDEN_FIRST || !!s.extra?.[z]);
+  if (i >= GARDEN_FIRST) return !!s.zonesOpen[z] && i - GARDEN_FIRST < GARDEN_BASE * (1 + (s.gardenExt ?? 0));
+  return !!s.zonesOpen[z] && (i < BASE_SLOTS || !!s.extra?.[z]);
+}
+/** Ajoute la parcelle suivante au jardin. */
+export function buyGardenExt(s: State): boolean {
+  const n = s.gardenExt ?? 0;
+  if (!s.zonesOpen[GARDEN_INDEX] || n >= GARDEN_EXT.length || s.coins < GARDEN_EXT[n].price) return false;
+  s.coins -= GARDEN_EXT[n].price;
+  s.gardenExt = n + 1;
+  return true;
 }
 export function buyExtra(s: State, z: number): boolean {
   if (!s.zonesOpen[z] || s.extra?.[z] || s.coins < EXTRA_PRICES[z]) return false;

@@ -1,5 +1,5 @@
 /** Le contenu de chaque panneau, un par fonction. `ui` donne l'état et le panneau ouvert. */
-import { BASKETS, TREK_GEAR, BIOMES, GARDEN, GARDEN_FIRST, GARDEN_INDEX, SEASONS, FAMILIES, FAMILY_IDS, GLAZES, LEVEL_WORDS, POT_SIZES, RARITIES, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, STAGES, ZONES } from './data';
+import { BASKETS, GARDEN_EXT, TREK_GEAR, BIOMES, GARDEN, GARDEN_FIRST, GARDEN_INDEX, SEASONS, FAMILIES, FAMILY_IDS, GLAZES, LEVEL_WORDS, POT_SIZES, RARITIES, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, STAGES, ZONES } from './data';
 import type { Species } from './data';
 import { THEMES } from './themes';
 import * as sim from './sim';
@@ -25,6 +25,7 @@ export function sheetHtml(ui: UI): string {
     case 'almanac': return almanacHtml(ui);
     case 'fiche': return ficheHtml(ui, SPECIES_BY_ID[ui.argId]);
     case 'zone': return zoneHtml(ui);
+    case 'gext': return gardenExtHtml(ui);
     case 'vitrine': return vitrineHtml(ui);
     case 'atelier': return atelierHtml(ui);
     case 'trophies': return trophiesHtml(ui);
@@ -58,6 +59,20 @@ export function vitrineHtml(ui: UI): string {
     <button class="btn gold wide" data-act="tips" ${tips > 0 ? '' : 'disabled'}>Ramasser les pourboires · ${fmt(tips)} 🪙</button>
     ${rows}
     ${free ? `<p class="sub center">${free} socle${free > 1 ? 's' : ''} libre${free > 1 ? 's' : ''} : touche une plante en fleur, puis « Exposer ».</p>` : ''}</div>`;
+}
+
+/** Agrandir le jardin : la parcelle suivante, son prix, ce qu'elle apporte. */
+export function gardenExtHtml(ui: UI): string {
+  const s = ui.s;
+  const n = s.gardenExt ?? 0;
+  const e = GARDEN_EXT[Math.min(n, GARDEN_EXT.length - 1)];
+  if (n >= GARDEN_EXT.length) return head(ui, '🌳 Le jardin') + '<div class="sh-body"><p class="sub">Toutes les parcelles du jardin sont aménagées.</p></div>';
+  const early = ui.arg > n;
+  const can = !early && s.coins >= e.price;
+  return head(ui, `🌳 ${e.name}`) + `<div class="sh-body">
+    <p class="sub">${early ? `Cette parcelle viendra après « ${e.name} », de l'autre côté de l'allée.` : e.text + ' Comme le reste du jardin, son climat change à chaque saison.'}</p>
+    <button class="btn primary wide" data-act="buygext" ${can ? '' : 'disabled'}>Aménager ${e.name.toLowerCase()} · ${fmt(e.price)} 🪙</button>
+    ${can || early ? '' : `<p class="sub center">Il te manque ${fmt(e.price - s.coins)} 🪙.</p>`}</div>`;
 }
 
 export function zoneHtml(ui: UI): string {

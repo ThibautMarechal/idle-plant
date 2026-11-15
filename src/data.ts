@@ -256,10 +256,16 @@ export const SLOTS_PER_ZONE = 3;
 export const BASE_SLOTS = ZONES.length * SLOTS_PER_ZONE;
 /** S'y ajoute une suspension par zone (emplacements 12 à 15), à acheter. */
 export const HANG_SLOTS = ZONES.length;
-/** Le jardin, derrière la porte : trois emplacements en plein air (16 à 18). Son climat suit les saisons. */
+/** Le jardin, derrière la porte : trois emplacements en plein air (16 à 18), puis trois de plus par parcelle achetée. Son climat suit les saisons. */
 export const GARDEN: Zone = { id: 'jardin', name: 'Le jardin', icon: '🌳', light: 3, temp: 2, hum: 2, desc: 'En plein air : le climat change à chaque saison' };
 export const GARDEN_INDEX = ZONES.length;
-export const GARDEN_SLOTS = 3;
+/** Parcelles à ajouter au jardin, dans l'ordre : chacune apporte trois emplacements. */
+export const GARDEN_EXT = [
+  { name: 'Le potager', price: 1500, text: 'Une plate-bande à gauche de l\'allée : trois emplacements de plus en plein air.' },
+  { name: 'La rocaille', price: 4000, text: 'Une plate-bande à droite de l\'allée : encore trois emplacements en plein air.' },
+];
+export const GARDEN_BASE = 3;
+export const GARDEN_SLOTS = GARDEN_BASE * (1 + GARDEN_EXT.length);
 export const GARDEN_FIRST = BASE_SLOTS + HANG_SLOTS;
 /** Climat du jardin au printemps, en été, en automne, en hiver. */
 export const GARDEN_CLIMATE = [{ light: 3, temp: 2, hum: 2 }, { light: 3, temp: 3, hum: 1 }, { light: 2, temp: 2, hum: 3 }, { light: 2, temp: 1, hum: 2 }];

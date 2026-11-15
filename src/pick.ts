@@ -12,7 +12,7 @@ export const PICK_OF: Record<Family, PickKind> = {
 };
 export const PICK_TEXT: Record<PickKind, { title: string; hint: string }> = {
   seeds: { title: 'Secoue et rattrape', hint: 'Glisse le panier sous les graines qui tombent. Laisse passer les chenilles !' },
-  pull: { title: 'Arrache en douceur', hint: 'Tire vers le haut. Quand la racine résiste, relâche un peu ou la tige casse !' },
+  pull: { title: 'Déterre et tire', hint: 'Secoue la plante de gauche à droite pour la déterrer, puis tire-la d\'un coup vers le haut. Le temps est compté !' },
   slice: { title: 'Tranche au bon endroit', hint: 'Tranche chaque tige d\'un coup de doigt, pile sur le trait rouge qui monte et descend.' },
 };
 
@@ -50,13 +50,16 @@ export class Pick {
   private bugs = 0;
   private total = 6;
   private shake = 0;
-  // Arrachage
-  private prog = 0;
-  private tension = 0;
-  private maxT = 0;
-  private burst = 0;
-  private warn = 0;
-  private nextBurst = 1.2;
+  // Déterrage : on secoue de gauche à droite, puis on tire d'un coup
+  private loose = 0;
+  private lean = 0;
+  private side = 0;
+  private stage = 0;
+  private lift = 0;
+  private fly = 0;
+  private left = 8;
+  private span = 8;
+  private bits: { x: number; y: number; vx: number; vy: number; life: number }[] = [];
   // Tiges à trancher
   private stems: Stem[] = [];
   private trail: { x: number; y: number; t: number }[] = [];
@@ -111,8 +114,9 @@ export class Pick {
       for (let k = 0; k < level + 1; k++) this.queue.push({ at: 1.2 + rnd() * 4.2, bug: true });
       this.queue.sort((a, b) => a.at - b.at);
     } else if (kind === 'pull') {
-      this.prog = this.tension = this.maxT = this.burst = this.warn = 0;
-      this.nextBurst = 0.9 + rnd() * 0.6;
+      this.loose = this.lean = this.side = this.stage = this.lift = this.fly = 0;
+      this.left = this.span = 8;
+      this.bits = [];
     } else {
       this.stems = [0, 1, 2].map((k) => ({ x: this.w * (0.22 + k * 0.28), phase: rnd() * TAU, speed: 1.6 + level * 0.45 + k * 0.35, cut: -1, score: 0, fall: 0 }));
     }
@@ -183,18 +187,38 @@ export class Pick {
         this.end(n >= this.total - 1 ? 2 : n >= 3 ? 1 : 0);
       }
     } else if (this.kind === 'pull') {
-      const f = this.ptr ? Math.max(0, Math.min(1, (this.ptr.sy - this.ptr.y) / 130)) : 0;
-      // La racine résiste par à-coups, annoncés d'un tremblement.
-      this.nextBurst -= dt;
-      if (this.nextBurst <= 0 && this.burst <= 0 && this.warn <= 0) this.warn = 0.4;
-      if (this.warn > 0) { this.warn -= dt; if (this.warn <= 0) this.burst = 0.75 + this.level * 0.12 + rnd() * 0.3; }
-      if (this.burst > 0) { this.burst -= dt; if (this.burst <= 0) this.nextBurst = Math.max(0.6, 1.5 - this.level * 0.2) + rnd() * 0.8; }
-      const goal = f * (this.burst > 0 ? 1.75 : 0.72);
-      this.tension += (goal - this.tension) * Math.min(1, dt * (goal > this.tension ? 2.4 : 5));
-      this.maxT = Math.max(this.maxT, this.tension);
-      this.prog = Math.max(0, Math.min(1, this.prog + (f > 0.06 ? f * (this.burst > 0 ? 0.08 : 0.3) : -0.07) * dt));
-      if (this.tension >= 1) this.end(0);
-      else if (this.prog >= 1) this.end(this.maxT < 0.86 ? 2 : 1);
+      const cx = this.w / 2, ground = this.h * 0.66;
+      if (this.stage < 2) this.left -= dt;
+      if (this.stage === 0) {
+        const want = this.ptr ? Math.max(-1, Math.min(1, (this.ptr.x - cx) / 70)) : 0;
+        this.lean += (want - this.lean) * Math.min(1, dt * 20);
+        // Seuls les vrais allers-retours comptent : il faut pencher franchement d'un côté puis de l'autre.
+        const side = this.lean > 0.55 ? 1 : this.lean < -0.55 ? -1 : 0;
+        if (side && side !== this.side) {
+          if (this.side) {
+            this.loose = Math.min(1, this.loose + 1 / (7 + this.level * 2));
+            this.shake = 0.25;
+            for (let k = 0; k < 7; k++) this.bits.push({ x: cx + side * (20 + rnd() * 30), y: ground - 4, vx: side * (40 + rnd() * 150), vy: -150 - rnd() * 190, life: 0.7 });
+          }
+          this.side = side;
+        }
+        if (this.loose >= 1) { this.stage = 1; if (this.ptr) this.ptr.sy = this.ptr.y; }
+      } else if (this.stage === 1) {
+        this.lean *= 1 - Math.min(1, dt * 10);
+        const up = this.ptr ? this.ptr.sy - this.ptr.y : 0;
+        this.lift = Math.max(0, Math.min(1, up / 110));
+        if (up >= 110) {
+          this.stage = 2;
+          for (let k = 0; k < 16; k++) this.bits.push({ x: cx + (rnd() - 0.5) * 70, y: ground - 4, vx: (rnd() - 0.5) * 320, vy: -200 - rnd() * 260, life: 0.9 });
+        }
+      } else {
+        this.fly += dt;
+        if (this.fly > 0.55) this.end(this.left / this.span > 0.35 ? 2 : 1);
+      }
+      this.shake = Math.max(0, this.shake - dt);
+      for (const b of this.bits) { b.x += b.vx * dt; b.y += b.vy * dt; b.vy += 900 * dt; b.life -= dt; }
+      this.bits = this.bits.filter((b) => b.life > 0);
+      if (this.left <= 0 && this.stage < 2) this.end(0);
     } else {
       for (const s of this.stems) if (s.cut >= 0) s.fall += dt;
       if (this.t > 9 && this.result < 0) {
@@ -216,11 +240,29 @@ export class Pick {
     c.strokeStyle = INK;
     c.stroke();
   }
+  /** Une flèche pleine, pointe vers (dx, dy). */
+  private arrow(x: number, y: number, dx: number, dy: number): void {
+    const c = this.ctx;
+    c.save();
+    c.translate(x, y);
+    c.rotate(Math.atan2(dy, dx));
+    c.beginPath();
+    c.moveTo(16, 0); c.lineTo(0, -13); c.lineTo(0, -5); c.lineTo(-16, -5); c.lineTo(-16, 5); c.lineTo(0, 5); c.lineTo(0, 13);
+    c.closePath();
+    c.fillStyle = '#ffd23f'; c.fill();
+    c.lineWidth = 3; c.lineJoin = 'round'; c.strokeStyle = INK; c.stroke();
+    c.restore();
+  }
   private text(s: string, x: number, y: number, size: number, color = INK, align: CanvasTextAlign = 'center'): void {
     const c = this.ctx;
     c.font = `800 ${size}px Inter, system-ui, sans-serif`;
     c.textAlign = align;
     c.textBaseline = 'middle';
+    // Un liseré clair garde le texte lisible sur le ciel comme sur la terre.
+    c.lineJoin = 'round';
+    c.lineWidth = Math.max(3, size * 0.28);
+    c.strokeStyle = color === '#fff' ? INK : '#fff';
+    c.strokeText(s, x, y);
     c.fillStyle = color;
     c.fillText(s, x, y);
   }
@@ -249,7 +291,7 @@ export class Pick {
     c.fillRect(0, ground - 1.5, w, 3);
 
     if (this.kind === 'seeds') {
-      this.plant(w / 2 + Math.sin(this.t * 30) * this.shake * 7, h * 0.3, 118, Math.sin(this.t * 26) * this.shake * 0.12);
+      this.plant(w / 2 + Math.sin(this.t * 30) * this.shake * 7, h * 0.4, 118, Math.sin(this.t * 26) * this.shake * 0.12);
       for (const d of this.drops) {
         if (d.done) continue;
         if (d.bug) drawIcon(c, '🐛', d.x, d.y, 34);
@@ -265,36 +307,55 @@ export class Pick {
       c.moveTo(this.bx - 40, by + 12); c.lineTo(this.bx + 40, by + 12);
       c.lineWidth = 2; c.stroke();
       this.blob(this.bx, by - 6, 46, 7, '#b9803c');
-      this.text(`🌰 ${this.caught}/${this.total}${this.bugs ? `   🐛 −${this.bugs}` : ''}`, w / 2, 26, 17);
+      this.text(`Graines ${this.caught}/${this.total}${this.bugs ? ` · chenilles −${this.bugs}` : ''}`, w / 2, 20, 15);
     } else if (this.kind === 'pull') {
-      const lift = this.prog * h * 0.3, jit = (this.warn > 0 || this.burst > 0 ? 5 : this.tension * 3) * Math.sin(this.t * 60);
-      const px = w / 2 + jit, py = ground + 8 - lift;
-      // Les racines sortent de terre avec la plante.
+      const cx = w / 2;
+      const rise = this.loose * 16 + this.lift * 46 + this.fly * this.fly * 2600;
+      const rot = this.lean * 0.34 + (this.stage === 1 ? Math.sin(this.t * 40) * 0.02 : 0);
+      // Les racines : cachées sous terre tant que la plante tient, visibles dès qu'elle sort.
       c.save();
-      c.beginPath(); c.rect(0, 0, w, ground); c.clip();
-      c.strokeStyle = '#e9dcc6'; c.lineWidth = 7; c.lineCap = 'round';
-      for (const k of [-1, 0, 1]) { c.beginPath(); c.moveTo(px + k * 8, py - 6); c.quadraticCurveTo(px + k * 26, py + 34, px + k * 34 + Math.sin(k + 2) * 8, py + 78); c.stroke(); }
-      c.restore();
-      this.plant(px, py, 124, jit * 0.008);
-      this.blob(w / 2, ground + 6, 62 - this.prog * 16, 13, '#7a5236');
-      // La corde entre le doigt et la plante.
-      if (this.ptr) {
-        c.beginPath(); c.moveTo(px, py - 70); c.lineTo(this.ptr.x, this.ptr.y);
-        c.strokeStyle = INK; c.lineWidth = 3; c.setLineDash([7, 6]); c.stroke(); c.setLineDash([]);
-        this.blob(this.ptr.x, this.ptr.y, 15, 15, '#fff');
+      if (this.stage < 2) { c.beginPath(); c.rect(0, 0, w, ground); c.clip(); }
+      c.translate(cx, ground + 6 - rise);
+      c.rotate(rot);
+      c.strokeStyle = INK; c.lineWidth = 10; c.lineCap = 'round';
+      for (const pass of [0, 1]) {
+        if (pass) { c.strokeStyle = '#efe2c8'; c.lineWidth = 5.5; }
+        for (const k of [-1, 0, 1]) { c.beginPath(); c.moveTo(k * 7, -8); c.quadraticCurveTo(k * 22, 22, k * 30 + Math.sin(k + 2) * 7, 56); c.stroke(); }
       }
-      if (this.warn > 0 || this.burst > 0) this.text(this.burst > 0 ? 'Ça résiste !' : '!', w / 2, h * 0.2, this.burst > 0 ? 22 : 40, '#e2473a');
-      // La jauge de tension et l'avancée.
-      const gx = 26, gw = w - 52, gy = 22;
-      c.fillStyle = '#4fbf6a'; c.fillRect(gx, gy, gw * 0.6, 16);
-      c.fillStyle = '#f2c94c'; c.fillRect(gx + gw * 0.6, gy, gw * 0.26, 16);
-      c.fillStyle = '#e2604f'; c.fillRect(gx + gw * 0.86, gy, gw * 0.14, 16);
-      c.lineWidth = 3; c.strokeStyle = INK; c.strokeRect(gx, gy, gw, 16);
-      this.blob(gx + gw * Math.min(1, this.tension), gy + 8, 6, 13, '#fff');
-      this.text('Tension', gx, gy + 32, 12, INK, 'left');
-      c.fillStyle = '#fff'; c.fillRect(w - 22, h * 0.2, 10, h * 0.42);
-      c.fillStyle = '#4fbf6a'; c.fillRect(w - 22, h * 0.2 + h * 0.42 * (1 - this.prog), 10, h * 0.42 * this.prog);
-      c.strokeRect(w - 22, h * 0.2, 10, h * 0.42);
+      c.restore();
+      this.plant(cx, ground + 6 - rise, 124, rot);
+      // La motte, qui se fissure à mesure que la plante se déchausse.
+      if (this.stage < 2) {
+        this.blob(cx, ground + 6, 64 - this.loose * 14, 13, '#7a5236');
+        c.strokeStyle = INK; c.lineWidth = 2.5; c.lineCap = 'round';
+        const cracks = Math.round(this.loose * 6);
+        for (let k = 0; k < cracks; k++) {
+          const dir = k % 2 ? 1 : -1, x0 = cx + dir * (16 + k * 7);
+          c.beginPath(); c.moveTo(x0, ground + 3); c.lineTo(x0 + dir * 9, ground + 9 + (k % 3) * 2); c.lineTo(x0 + dir * 15, ground + 5); c.stroke();
+        }
+      } else this.blob(cx, ground + 6, 46, 11, '#5f3f2a');
+      for (const b of this.bits) this.blob(b.x, b.y, 5, 5, '#7a5236');
+      // Le doigt, et ce qu'il faut faire maintenant.
+      if (this.ptr && this.stage < 2) this.blob(this.ptr.x, this.ptr.y, 15, 15, 'rgba(255,255,255,0.85)');
+      if (this.result < 0) {
+        if (this.stage === 0) {
+          const sway = Math.sin(this.t * 7) * 16;
+          this.text('Secoue !', cx, h * 0.84, 22);
+          this.arrow(cx - 78 + sway, h * 0.835, -1, 0);
+          this.arrow(cx + 78 + sway, h * 0.835, 1, 0);
+        } else if (this.stage === 1) {
+          const bob = Math.abs(Math.sin(this.t * 6)) * 14;
+          this.text('Tire !', cx, h * 0.86, 26, '#e2473a');
+          this.arrow(cx, h * 0.78 - bob, 0, -1);
+        }
+      }
+      // Le temps qui reste, puis l'avancée du déterrage.
+      const gx = 26, gw = w - 52, gy = 20, part = Math.max(0, this.left / this.span);
+      c.fillStyle = '#fff'; c.fillRect(gx, gy, gw, 14);
+      c.fillStyle = part > 0.35 ? '#4fbf6a' : '#e2604f'; c.fillRect(gx, gy, gw * part, 14);
+      c.lineWidth = 3; c.strokeStyle = INK; c.strokeRect(gx, gy, gw, 14);
+      c.fillStyle = INK; c.fillRect(gx + gw * 0.35 - 1, gy - 4, 2.5, 22);
+      this.text(this.stage ? 'Elle est déterrée !' : `Déterrée à ${Math.round(this.loose * 100)} %`, cx, gy + 34, 13);
     } else {
       const top = h * 0.24, bot = ground;
       for (const s of this.stems) {

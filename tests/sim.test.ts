@@ -258,7 +258,7 @@ describe('simulation', () => {
 
   it('suspension : un emplacement de plus par zone aménagée', () => {
     const s = sim.newState(0);
-    expect(s.slots.length).toBe(19);
+    expect(s.slots.length).toBe(25);
     expect(sim.slotOpen(s, 14)).toBe(false);
     s.coins = 1000;
     expect(sim.buyExtra(s, 0)).toBe(false); // zone pas encore aménagée
@@ -335,5 +335,24 @@ describe('simulation', () => {
     const finds = sim.planetFinds(s, Math.random);
     expect(finds.length).toBe(22);
     expect(finds.filter((f) => f.ring === 2 && f.tier === 2).length).toBe(3);
+  });
+});
+
+describe('extensions du jardin', () => {
+  it('ouvre trois emplacements de plus par parcelle, dans l\'ordre et contre des pièces', () => {
+    const s = sim.newState(0);
+    s.zonesOpen[4] = true;
+    expect(sim.slotOpen(s, 18)).toBe(true);
+    expect(sim.slotOpen(s, 19)).toBe(false);
+    s.coins = 100;
+    expect(sim.buyGardenExt(s)).toBe(false);
+    s.coins = 6000;
+    expect(sim.buyGardenExt(s)).toBe(true);
+    expect(s.coins).toBe(4500);
+    expect(sim.slotOpen(s, 21)).toBe(true);
+    expect(sim.slotOpen(s, 22)).toBe(false);
+    expect(sim.buyGardenExt(s)).toBe(true);
+    expect(sim.slotOpen(s, 24)).toBe(true);
+    expect(sim.buyGardenExt(s)).toBe(false);
   });
 });
