@@ -375,7 +375,8 @@ const pavillon: Theme = {
     // Un toit plein et une paroi de planches : les pots sont réellement à l'ombre, au frais.
     wall(0, box(4.5, 0.1, 3.3, 0x5a4a40, 0, 4.45, -3.45), box(side, 3.25, 0.08, 0x6a5242, 0, 2.2, -A + 0.12),
       ...[-1.6, -0.8, 0, 0.8, 1.6].map((x) => box(0.05, 3.25, 0.02, 0x4a3a32, x, 2.2, -A + 0.18, false)),
-      box(0.12, 4.4, 0.12, 0x5a4a40, -2.15, 2.2, -1.9), box(0.12, 4.4, 0.12, 0x5a4a40, 2.15, 2.2, -1.9),
+      // Le store est tenu par deux tirants fixés à la charpente : pas de poteau au milieu de la pièce.
+      box(0.05, 0.05, 2.0, 0x5a4a40, -2.15, 4.75, -2.6, false), box(0.05, 0.05, 2.0, 0x5a4a40, 2.15, 4.75, -2.6, false),
       // Un pan de toile retombe sur le devant.
       box(4.5, 0.7, 0.04, 0x7f8fa6, 0, 4.1, -1.82));
     // Bassin : une auge de pierre pleine d'eau, les pots posés sur sa margelle.
@@ -477,6 +478,32 @@ const pavillon: Theme = {
     wall(P.showDeg, box(3.3, 0.1, 0.8, 0xf4efe4, 0, 1.0, -4.45), box(3.3, 0.95, 0.7, 0xa9794f, 0, 0.475, -4.45), box(3.3, 0.06, 0.06, 0xf2c94c, 0, 0.9, -4.08, false));
   },
 };
+
+/**
+ * Agrandit un décor à la première personne sans toucher aux pots : la pièce, ses meubles et la hauteur des yeux
+ * grandissent ensemble, si bien que les pots paraissent plus petits et les établis plus dégagés.
+ */
+function grow(t: Theme, k: number): void {
+  const up = (p: V3): V3 => [p[0] * k, p[1] * k, p[2] * k];
+  t.slots = t.slots.map(up);
+  t.shows = t.shows.map(up);
+  t.mist = up(t.mist);
+  t.gear = { mist: up(t.gear.mist), lamp: up(t.gear.lamp), heat: up(t.gear.heat), fan: up(t.gear.fan) };
+  t.bounds = [up(t.bounds[0]), up(t.bounds[1])];
+  if (t.fp) {
+    t.fp.eye *= k;
+    t.fp.spots = t.fp.spots.map(up);
+    t.fp.hot = t.fp.hot.map((h) => ({ ...h, at: up(h.at), r: h.r * k }));
+  }
+  const build = t.build.bind(t);
+  t.build = (add) => {
+    const room = new THREE.Group();
+    room.scale.setScalar(k);
+    build((...o) => { room.add(...o); });
+    add(room);
+  };
+}
+grow(pavillon, 1.4);
 
 export const THEMES: Theme[] = [pavillon, verriere, appartement, balcon];
 export function themeOf(id: string | undefined): Theme {

@@ -31,7 +31,7 @@ const v3 = (p: V3) => new THREE.Vector3(p[0], p[1], p[2]);
 /** En première personne, la vue se cale tous les huitièmes de tour. */
 const STEP = Math.PI / 4;
 /** Demi-champ horizontal, vue calée : un pan de mur et ses trois pots tiennent dans la largeur. */
-const HALF_FOV = 0.43;
+const HALF_FOV = 0.48;
 
 export class Scene3D {
   private renderer: THREE.WebGLRenderer;
@@ -124,7 +124,7 @@ export class Scene3D {
     sun.castShadow = true;
     sun.shadow.mapSize.set(1024, 1024);
     const sc = sun.shadow.camera;
-    const far = t.fp ? 17 : 7;
+    const far = t.fp ? 24 : 7;
     if (t.fp) sun.shadow.mapSize.set(2048, 2048);
     sc.left = -far; sc.right = far; sc.top = far; sc.bottom = -far; sc.near = 1; sc.far = 34 + far;
     sun.shadow.bias = -0.002;
