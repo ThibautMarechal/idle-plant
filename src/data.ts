@@ -29,6 +29,8 @@ export interface Species {
   size?: number;
   /** Plante nocturne : elle pousse plus vite la nuit que le jour. */
   night?: boolean;
+  /** Plante d'un autre continent : on ne la trouve qu'en expédition, dans ce milieu. */
+  home?: string;
 }
 
 export const FAMILIES: Record<Family, { name: string; icon: string; color: string; glaze: number }> = {
@@ -103,7 +105,7 @@ export const SPECIES: Species[] = [
     light: 1, temp: 2, hum: 3, grow: 480, value: 150, shape: 'orchid', leaf: 0x4a8a4a, flower: 0xc9d85a,
     fact: 'Son labelle en forme de sabot piège les insectes pour les forcer à la polliniser.',
     tip: 'Contrairement aux autres orchidées, garde son substrat toujours légèrement frais.', height: '20 à 40 cm' },
-  { id: 'fantome', name: 'Orchidée fantôme', latin: 'Dendrophylax lindenii', family: 'orchidees', rarity: 'legendaire', origin: 'Floride et Cuba',
+  { id: 'fantome', name: 'Orchidée fantôme', latin: 'Dendrophylax lindenii', family: 'orchidees', rarity: 'legendaire', origin: 'Floride et Cuba', night: true,
     light: 1, temp: 3, hum: 3, grow: 720, value: 420, shape: 'orchid', leaf: 0x7fae8a, flower: 0xffffff,
     fact: 'Elle n\'a pas de feuilles : ce sont ses racines vertes qui font la photosynthèse.',
     tip: 'Presque impossible à cultiver chez soi : elle se contemple en serre botanique.', height: 'racines de 50 cm' },
@@ -241,6 +243,112 @@ export const SPECIES: Species[] = [
     light: 2, temp: 1, hum: 2, grow: 700, value: 420, shape: 'rose', leaf: 0x3f7f4a, flower: 0xf2a6c4,
     fact: 'Une pivoine peut vivre plus de cinquante ans au même endroit.',
     tip: 'Ne l\'enterre pas trop profond et ne la déplace jamais : elle bouderait plusieurs années.', height: '70 cm à 1 m', pets: 'toxique' },
+  // ---- L'archipel : jungle, mangrove, volcan
+  { id: 'alocasia', name: 'Oreille d\'éléphant', latin: 'Alocasia macrorrhizos', family: 'tropicales', rarity: 'commun', origin: 'Asie du Sud-Est', size: 2, home: 'jungle',
+    light: 2, temp: 3, hum: 3, grow: 420, value: 48, shape: 'bigleaf', leaf: 0x3f9a5a, flower: 0xf2ecc6,
+    fact: 'Ses feuilles dépassent parfois un mètre de long : on s\'en sert comme parapluie sous les averses tropicales.',
+    tip: 'Garde le terreau frais et brumise souvent : un air sec fait brunir le bord des feuilles.', height: '1 à 2 m', pets: 'toxique' },
+  { id: 'vanille', name: 'Vanillier', latin: 'Vanilla planifolia', family: 'orchidees', rarity: 'rare', origin: 'Mexique', home: 'jungle',
+    light: 2, temp: 3, hum: 3, grow: 960, value: 260, shape: 'orchid', leaf: 0x5fae5a, flower: 0xe9e6a0,
+    fact: 'C\'est la seule orchidée cultivée pour son fruit. Hors du Mexique, chaque fleur doit être fécondée à la main.',
+    tip: 'C\'est une liane : donne-lui un tuteur moussu et une lumière tamisée.', height: 'Liane de plusieurs mètres', pets: 'ok' },
+  { id: 'cyathea', name: 'Fougère arborescente', latin: 'Sphaeropteris cooperi', family: 'fougeres', rarity: 'exotique', origin: 'Australie', size: 2, home: 'jungle',
+    light: 1, temp: 2, hum: 3, grow: 1800, value: 1100, shape: 'fern', leaf: 0x4f9f58, flower: 0x8a6a4a,
+    fact: 'Les fougères arborescentes formaient déjà des forêts bien avant les premiers dinosaures.',
+    tip: 'Arrose aussi le tronc : c\'est par lui qu\'elle boit le plus.', height: '2 à 4 m', pets: 'ok' },
+  { id: 'epiphyllum', name: 'Reine de la nuit', latin: 'Epiphyllum oxypetalum', family: 'succulentes', rarity: 'exotique', origin: 'Amérique centrale', home: 'jungle', night: true,
+    light: 2, temp: 3, hum: 2, grow: 1700, value: 1250, shape: 'paradise', leaf: 0x5aa868, flower: 0xfdfaf2,
+    fact: 'Sa grande fleur blanche s\'ouvre à la nuit tombée et fane avant l\'aube : on veille pour la voir.',
+    tip: 'C\'est un cactus de forêt : mi-ombre et arrosages réguliers, sauf en hiver.', height: '1 à 2 m', pets: 'ok' },
+  { id: 'titan', name: 'Arum titan', latin: 'Amorphophallus titanum', family: 'tropicales', rarity: 'legendaire', origin: 'Sumatra', size: 3, home: 'jungle', night: true,
+    light: 2, temp: 3, hum: 3, grow: 3300, value: 7200, shape: 'pitcher', leaf: 0x4a8f52, flower: 0x8a2f4a,
+    fact: 'Sa floraison, haute de plus de deux mètres, ne dure que deux jours et sent la viande avariée pour attirer les mouches.',
+    tip: 'Son tubercule peut peser plus de cinquante kilos : il lui faut un pot énorme et des années de patience.', height: 'Jusqu\'à 3 m', pets: 'toxique' },
+  { id: 'jacinthe', name: 'Jacinthe d\'eau', latin: 'Pontederia crassipes', family: 'tropicales', rarity: 'commun', origin: 'Amazonie', home: 'mangrove',
+    light: 3, temp: 3, hum: 3, grow: 400, value: 44, shape: 'coin', leaf: 0x5fb86a, flower: 0xb09ae6,
+    fact: 'Elle flotte grâce à ses pétioles gonflés d\'air et peut doubler sa surface en deux semaines.',
+    tip: 'Ne la relâche jamais dans la nature : elle étouffe les rivières des pays chauds.', height: '20 à 40 cm', pets: 'ok' },
+  { id: 'nepenthes', name: 'Népenthès', latin: 'Nepenthes alata', family: 'carnivores', rarity: 'rare', origin: 'Philippines', home: 'mangrove',
+    light: 2, temp: 3, hum: 3, grow: 1000, value: 280, shape: 'pitcher', leaf: 0x5aa85a, flower: 0xb8483a,
+    fact: 'Ses urnes pendantes contiennent un liquide digestif où se noient les insectes.',
+    tip: 'Eau de pluie uniquement, et ne remplis pas les urnes toi-même.', height: 'Liane de 1 à 3 m', pets: 'ok' },
+  { id: 'lotus', name: 'Lotus sacré', latin: 'Nelumbo nucifera', family: 'fleurs', rarity: 'exotique', origin: 'Asie', size: 2, home: 'mangrove',
+    light: 3, temp: 3, hum: 3, grow: 1900, value: 1300, shape: 'rose', leaf: 0x5fae7a, flower: 0xf6b0c8,
+    fact: 'Des graines de lotus vieilles de plus de mille ans ont germé. Ses feuilles restent propres : l\'eau y roule en emportant la poussière.',
+    tip: 'Plante le rhizome dans un grand bac d\'eau peu profonde, en plein soleil.', height: '1 à 1,5 m', pets: 'ok' },
+  { id: 'heliamphora', name: 'Héliamphore', latin: 'Heliamphora nutans', family: 'carnivores', rarity: 'exotique', origin: 'Venezuela', home: 'mangrove',
+    light: 3, temp: 2, hum: 3, grow: 1800, value: 1200, shape: 'trap', leaf: 0x6fb85a, flower: 0xd8503a,
+    fact: 'Elle vit au sommet des tepuis, ces montagnes-tables noyées dans les nuages.',
+    tip: 'Beaucoup de lumière mais des nuits fraîches : elle redoute la chaleur étouffante.', height: '15 à 30 cm', pets: 'ok' },
+  { id: 'aeonium', name: 'Aeonium', latin: 'Aeonium arboreum', family: 'succulentes', rarity: 'commun', origin: 'Îles Canaries', home: 'volcan',
+    light: 3, temp: 2, hum: 1, grow: 440, value: 52, shape: 'rosette', leaf: 0x6a3f5a, flower: 0xf6d04a,
+    fact: 'À l\'inverse des autres succulentes, il pousse en hiver et se repose en été, rosettes refermées.',
+    tip: 'Arrose-le surtout à la saison fraîche et laisse-le au sec en plein été.', height: '50 cm à 1 m', pets: 'ok' },
+  { id: 'agave', name: 'Agave bleu', latin: 'Agave tequilana', family: 'succulentes', rarity: 'rare', origin: 'Mexique', size: 2, home: 'volcan',
+    light: 3, temp: 3, hum: 1, grow: 1100, value: 300, shape: 'aloe', leaf: 0x7fa8b8, flower: 0xe9d870,
+    fact: 'Il ne fleurit qu\'une fois, après des années, puis meurt. C\'est son cœur qu\'on cuit pour faire la tequila.',
+    tip: 'Plein soleil, sol très drainant, et attention à ses pointes.', height: '1,2 à 1,8 m', pets: 'toxique' },
+  { id: 'protea', name: 'Protée royale', latin: 'Protea cynaroides', family: 'fleurs', rarity: 'exotique', origin: 'Afrique du Sud', size: 2, home: 'volcan',
+    light: 3, temp: 2, hum: 1, grow: 2000, value: 1400, shape: 'rose', leaf: 0x6f9a6a, flower: 0xf08aa0,
+    fact: 'Sa fleur large comme une assiette résiste aux incendies : la plante repart de sa souche après le feu.',
+    tip: 'Jamais d\'engrais riche en phosphore : ses racines ne le supportent pas.', height: '1 à 2 m', pets: 'ok' },
+  { id: 'sabre', name: 'Sabre d\'argent', latin: 'Argyroxiphium sandwicense', family: 'succulentes', rarity: 'legendaire', origin: 'Hawaï', home: 'volcan',
+    light: 3, temp: 1, hum: 1, grow: 3600, value: 8000, shape: 'aloe', leaf: 0xcfd8dc, flower: 0x9a3f5a,
+    fact: 'Il ne pousse que sur les volcans d\'Hawaï, vit des dizaines d\'années, fleurit une seule fois puis meurt.',
+    tip: 'Ses poils argentés le protègent du soleil d\'altitude : ne les frotte jamais.', height: '50 cm, 2 m en fleur' },
+  // ---- Le grand nord : taïga, toundra, cimes
+  { id: 'myrtille', name: 'Myrtillier', latin: 'Vaccinium myrtillus', family: 'arbustes', rarity: 'commun', origin: 'Europe du Nord', size: 2, home: 'taiga',
+    light: 2, temp: 1, hum: 2, grow: 480, value: 56, shape: 'shrub', leaf: 0x5a9a5a, flower: 0x5a5fae,
+    fact: 'Un seul pied peut s\'étendre sur plusieurs mètres grâce à ses tiges souterraines.',
+    tip: 'Il lui faut une terre acide, comme la terre de bruyère, et jamais de calcaire.', height: '20 à 50 cm', pets: 'ok' },
+  { id: 'autruche', name: 'Fougère plume d\'autruche', latin: 'Matteuccia struthiopteris', family: 'fougeres', rarity: 'commun', origin: 'Hémisphère nord', home: 'taiga',
+    light: 1, temp: 1, hum: 3, grow: 460, value: 50, shape: 'fern', leaf: 0x6fb85a, flower: 0x8a6a4a,
+    fact: 'Ses jeunes crosses enroulées, les « têtes de violon », se mangent au printemps au Canada.',
+    tip: 'À l\'ombre et les pieds au frais : elle s\'étend alors toute seule.', height: '80 cm à 1,5 m', pets: 'ok' },
+  { id: 'bouleau', name: 'Bouleau nain', latin: 'Betula nana', family: 'arbustes', rarity: 'rare', origin: 'Régions arctiques', size: 2, home: 'taiga',
+    light: 3, temp: 1, hum: 2, grow: 1200, value: 320, shape: 'tree', leaf: 0x8fb84a, flower: 0xd8b84a,
+    fact: 'Cet arbre dépasse rarement le genou : il se plaque au sol pour échapper au vent polaire.',
+    tip: 'Il supporte tous les froids mais pas la chaleur : garde-le dehors, au nord.', height: '30 cm à 1 m', pets: 'ok' },
+  { id: 'sapin', name: 'Sapin de Corée', latin: 'Abies koreana', family: 'arbustes', rarity: 'exotique', origin: 'Corée', size: 3, home: 'taiga',
+    light: 2, temp: 1, hum: 2, grow: 2200, value: 1500, shape: 'tree', leaf: 0x3f7f6a, flower: 0x7a5fb8,
+    fact: 'Il porte tout jeune des cônes violets dressés comme des bougies.',
+    tip: 'Pousse très lentement : inutile de le tailler, il garde sa forme tout seul.', height: '1 à 3 m en pot', pets: 'ok' },
+  { id: 'linaigrette', name: 'Linaigrette', latin: 'Eriophorum vaginatum', family: 'fleurs', rarity: 'commun', origin: 'Tourbières du nord', home: 'toundra',
+    light: 3, temp: 1, hum: 3, grow: 450, value: 50, shape: 'grass', leaf: 0x7fa86a, flower: 0xfdfdf6,
+    fact: 'Ses houppes blanches ressemblent à du coton : on en a bourré des oreillers et fait des mèches de bougie.',
+    tip: 'Elle veut une terre acide toujours détrempée, comme dans une tourbière.', height: '30 à 60 cm', pets: 'ok' },
+  { id: 'pavot', name: 'Pavot arctique', latin: 'Papaver radicatum', family: 'fleurs', rarity: 'rare', origin: 'Arctique', home: 'toundra',
+    light: 3, temp: 1, hum: 1, grow: 1050, value: 290, shape: 'stem', leaf: 0x7fa870, flower: 0xf6e04a,
+    fact: 'Sa fleur suit le soleil toute la journée : sa coupe concentre la chaleur et réchauffe les insectes.',
+    tip: 'Sème-le en place : sa racine pivot déteste être repiquée.', height: '10 à 20 cm' },
+  { id: 'labrador', name: 'Thé du Labrador', latin: 'Rhododendron groenlandicum', family: 'aromatiques', rarity: 'rare', origin: 'Canada et Groenland', home: 'toundra',
+    light: 2, temp: 1, hum: 3, grow: 1100, value: 310, shape: 'bush', leaf: 0x4f8a5a, flower: 0xfdfaf2,
+    fact: 'Les peuples du Grand Nord infusent ses feuilles parfumées, feutrées de roux en dessous.',
+    tip: 'Sol acide et frais, comme pour un rhododendron.', height: '50 cm à 1 m' },
+  { id: 'saxifrage', name: 'Saxifrage pourpre', latin: 'Saxifraga oppositifolia', family: 'fleurs', rarity: 'exotique', origin: 'Arctique et hautes montagnes', home: 'toundra',
+    light: 3, temp: 1, hum: 2, grow: 2000, value: 1350, shape: 'rosette', leaf: 0x5f8f6a, flower: 0xc85aa8,
+    fact: 'C\'est l\'une des plantes à fleurs qui poussent le plus au nord du monde, à l\'extrême pointe du Groenland.',
+    tip: 'Un coussin de graviers, du froid et du soleil : la chaleur humide la fait pourrir.', height: '3 à 5 cm', pets: 'ok' },
+  { id: 'joubarbe', name: 'Joubarbe des toits', latin: 'Sempervivum tectorum', family: 'succulentes', rarity: 'commun', origin: 'Montagnes d\'Europe', home: 'cimes',
+    light: 3, temp: 1, hum: 1, grow: 470, value: 54, shape: 'rosette', leaf: 0x7fae7a, flower: 0xd8708a,
+    fact: 'On la plantait sur les toits pour éloigner la foudre. Son nom latin veut dire « toujours vivante ».',
+    tip: 'Elle résiste au gel comme à la sécheresse : oublie-la au soleil.', height: '5 à 15 cm', pets: 'ok' },
+  { id: 'gentiane', name: 'Gentiane acaule', latin: 'Gentiana acaulis', family: 'fleurs', rarity: 'rare', origin: 'Alpes et Pyrénées', home: 'cimes',
+    light: 3, temp: 1, hum: 2, grow: 1150, value: 330, shape: 'stem', leaf: 0x4f9a5a, flower: 0x2f4fd0,
+    fact: 'Sa trompette d\'un bleu profond se referme dès qu\'un nuage cache le soleil.',
+    tip: 'Sol frais et caillouteux, jamais détrempé en hiver.', height: '5 à 10 cm', pets: 'ok' },
+  { id: 'rhodo', name: 'Rhododendron ferrugineux', latin: 'Rhododendron ferrugineum', family: 'arbustes', rarity: 'rare', origin: 'Alpes et Pyrénées', size: 2, home: 'cimes',
+    light: 2, temp: 1, hum: 2, grow: 1250, value: 340, shape: 'shrub', leaf: 0x3f7f4a, flower: 0xe84a7a,
+    fact: 'La « rose des Alpes » couvre de rose des versants entiers en été. Le dessous de ses feuilles est couleur rouille.',
+    tip: 'Terre de bruyère obligatoire et arrosage à l\'eau de pluie.', height: '50 cm à 1 m', pets: 'toxique' },
+  { id: 'edelweiss', name: 'Edelweiss', latin: 'Leontopodium nivale', family: 'fleurs', rarity: 'exotique', origin: 'Alpes', home: 'cimes',
+    light: 3, temp: 1, hum: 1, grow: 2100, value: 1450, shape: 'stem', leaf: 0xa8b8a8, flower: 0xf6f6ee,
+    fact: 'Son duvet blanc la protège du soleil d\'altitude et du gel. Elle est protégée dans presque toutes les Alpes.',
+    tip: 'Un sol pauvre et calcaire, en plein soleil : trop d\'engrais lui fait perdre son duvet.', height: '5 à 20 cm', pets: 'ok' },
+  { id: 'meconopsis', name: 'Pavot bleu de l\'Himalaya', latin: 'Meconopsis betonicifolia', family: 'fleurs', rarity: 'legendaire', origin: 'Tibet', home: 'cimes',
+    light: 1, temp: 1, hum: 3, grow: 3600, value: 8500, shape: 'stem', leaf: 0x5f9a6a, flower: 0x4fa8e8,
+    fact: 'Découvert au Tibet à la fin du XIXe siècle, ce pavot d\'un bleu de ciel a longtemps passé pour une légende de botaniste.',
+    tip: 'Étés frais, air humide et mi-ombre : il meurt dès qu\'il a trop chaud.', height: '80 cm à 1,2 m' },
 ];
 const MEDIUM = ['monstera', 'strelitzia', 'tournesol', 'hibiscus', 'opuntia'];
 for (const sp of SPECIES) if (MEDIUM.includes(sp.id)) sp.size = 2;
@@ -349,12 +457,26 @@ export const PAINT_W = 144;
 export const PAINT_H = 48;
 
 /** Milieux d'expédition : on y cueille soi-même graines et boutures sauvages. */
-export interface Biome { id: string; name: string; icon: string; fams: Family[]; price: number; text: string; sky: [string, string]; ground: number; fog: number }
+export interface Biome { id: string; name: string; icon: string; fams: Family[]; price: number; text: string; sky: [string, string]; ground: number; fog: number; slow: string; need?: number }
+/** Trois milieux par continent, du plus proche de la serre au plus lointain. */
 export const BIOMES: Biome[] = [
-  { id: 'foret', name: 'La forêt', icon: '🌲', fams: ['fougeres', 'arbustes', 'fleurs'], price: 0, text: 'Sous-bois frais : fougères, arbustes et fleurs.', sky: ['#bfe3ee', '#e9f4dc'], ground: 0x8fc27a, fog: 0xd9ecd4 },
-  { id: 'marais', name: 'Le marais', icon: '🪷', fams: ['carnivores', 'tropicales', 'orchidees'], price: 400, text: 'Eau tiède et brume : carnivores, tropicales et orchidées.', sky: ['#b9d8d6', '#e4efe0'], ground: 0x7fae8a, fog: 0xcfe3dc },
-  { id: 'dunes', name: 'Les dunes', icon: '🏜️', fams: ['succulentes', 'aromatiques'], price: 900, text: 'Sable chaud et vent sec : succulentes et aromatiques.', sky: ['#a9d8f2', '#fbe9c6'], ground: 0xe9d3a0, fog: 0xf6e7c8 },
+  { id: 'foret', name: 'La forêt', icon: '🌲', fams: ['fougeres', 'arbustes', 'fleurs'], price: 0, text: 'Sous-bois frais : fougères, arbustes et fleurs.', sky: ['#bfe3ee', '#e9f4dc'], ground: 0x8fc27a, fog: 0xd9ecd4, slow: 'Des ronces !' },
+  { id: 'marais', name: 'Le marais', icon: '🪷', fams: ['carnivores', 'tropicales', 'orchidees'], price: 400, text: 'Eau tiède et brume : carnivores, tropicales et orchidées.', sky: ['#b9d8d6', '#e4efe0'], ground: 0x6fa98a, fog: 0xcfe3dc, slow: 'De la vase !' },
+  { id: 'dunes', name: 'Les dunes', icon: '🏜️', fams: ['succulentes', 'aromatiques'], price: 900, text: 'Sable chaud et vent sec : succulentes et aromatiques.', sky: ['#a9d8f2', '#fbe9c6'], ground: 0xe9d3a0, fog: 0xf6e7c8, slow: 'Du sable mou !' },
+  { id: 'jungle', name: 'La jungle', icon: '🌴', fams: ['tropicales', 'fougeres', 'orchidees'], price: 3000, need: 25, text: 'Chaleur moite et lianes : des géantes qu\'on ne trouve nulle part ailleurs.', sky: ['#bfe3ee', '#e9f4dc'], ground: 0x4fb060, fog: 0xd9ecd4, slow: 'Des lianes !' },
+  { id: 'mangrove', name: 'La mangrove', icon: '🪷', fams: ['carnivores', 'tropicales', 'fleurs'], price: 6000, text: 'Les pieds dans l\'eau salée : carnivores et fleurs d\'eau.', sky: ['#b9d8d6', '#e4efe0'], ground: 0x3f9488, fog: 0xcfe3dc, slow: 'De la vase !' },
+  { id: 'volcan', name: 'Le volcan', icon: '🌋', fams: ['succulentes', 'fleurs'], price: 10000, text: 'Cendres chaudes et roche noire : des plantes qui ne craignent pas le feu.', sky: ['#a9d8f2', '#fbe9c6'], ground: 0x6a5a58, fog: 0xf6e7c8, slow: 'De la cendre molle !' },
+  { id: 'taiga', name: 'La taïga', icon: '🌲', fams: ['arbustes', 'fougeres'], price: 15000, need: 45, text: 'Une forêt de conifères sans fin : arbustes et fougères du froid.', sky: ['#bfe3ee', '#e9f4dc'], ground: 0x8fb89a, fog: 0xd9ecd4, slow: 'Des broussailles !' },
+  { id: 'toundra', name: 'La toundra', icon: '❄️', fams: ['fleurs', 'aromatiques'], price: 22000, text: 'Mousses, vent et sol gelé : de petites fleurs très coriaces.', sky: ['#b9d8d6', '#e4efe0'], ground: 0xc4c8a4, fog: 0xcfe3dc, slow: 'Une tourbière !' },
+  { id: 'cimes', name: 'Les cimes', icon: '🏔️', fams: ['fleurs', 'succulentes', 'arbustes'], price: 30000, text: 'Neige et rocaille : les joyaux des hautes montagnes.', sky: ['#a9d8f2', '#fbe9c6'], ground: 0xeef3f6, fog: 0xf6e7c8, slow: 'De la neige profonde !' },
 ];
+/** Les continents de la planète : chacun regroupe trois milieux de BIOMES, dans l'ordre. */
+export const LANDS: { id: string; name: string; icon: string; text: string }[] = [
+  { id: 'pays', name: 'Le pays de la serre', icon: '🌍', text: 'Autour de chez toi.' },
+  { id: 'archipel', name: 'L\'archipel', icon: '🌴', text: 'Des îles chaudes, de l\'autre côté de l\'océan.' },
+  { id: 'nord', name: 'Le grand nord', icon: '🏔️', text: 'Le froid, le vent et les sommets.' },
+];
+export const LAND_BIOMES = 3;
 /** Durée d'une sortie (s), repos entre deux sorties (s), tailles et prix du panier. */
 /** Une journée de jeu dure une heure : le jour se lève à 6 h, la nuit tombe vers 21 h. */
 export const DAY_LENGTH = 3600;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SPECIES_BY_ID, ZONES } from '../src/data';
+import { SPECIES, SPECIES_BY_ID, ZONES } from '../src/data';
 import * as sim from '../src/sim';
 
 function rngOf(seed: number): sim.Rng {
@@ -394,5 +394,29 @@ describe('jour, nuit et arrosage automatique', () => {
     s.coins = 1000;
     expect(sim.buyTank(s)).toBe(true);
     expect(sim.tankCap(s)).toBe(500);
+  });
+
+  it('continents : débloqués par l\'almanach et les pièces, avec leurs espèces à eux', () => {
+    const s = sim.newState(0);
+    s.coins = 100000;
+    expect(sim.landOpen(s, 1)).toBe(false);
+    expect(sim.openBiome(s, 3)).toBe(false);
+    expect(sim.biomeBlock(s, 3)).toContain('25');
+    for (const sp of SPECIES.filter((x) => !x.home).slice(0, 25)) s.disc[sp.id] = { seen: true, bloomed: true, best: 50, vars: [true, false, false] } as never;
+    expect(sim.openBiome(s, 4)).toBe(false);
+    expect(sim.openBiome(s, 3)).toBe(true);
+    expect(sim.setLand(s, 2)).toBe(false);
+    expect(sim.setLand(s, 1)).toBe(true);
+    expect(sim.trekReach(s)).toBe(1);
+    const finds = sim.planetFinds(s, Math.random);
+    expect(finds.length).toBe(9);
+    for (const f of finds) expect(SPECIES_BY_ID[f.id].home).toBe('jungle');
+    expect(sim.openBiome(s, 4)).toBe(true);
+    expect(sim.planetFinds(s, Math.random).some((f) => SPECIES_BY_ID[f.id].home === 'mangrove')).toBe(true);
+    // Chez soi, on ne trouve jamais les plantes des autres continents, ni dans les sachets.
+    for (const f of sim.planetFinds(s, Math.random, 0)) expect(SPECIES_BY_ID[f.id].home).toBeUndefined();
+    for (let k = 0; k < 40; k++) for (const id of sim.rollSeeds(s, Math.random)) expect(SPECIES_BY_ID[id].home).toBeUndefined();
+    // Chaque milieu lointain a de quoi remplir tous les paliers.
+    for (const h of ['jungle', 'mangrove', 'volcan', 'taiga', 'toundra', 'cimes']) expect(SPECIES.filter((x) => x.home === h).length).toBeGreaterThanOrEqual(4);
   });
 });

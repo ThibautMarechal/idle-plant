@@ -1,4 +1,4 @@
-import { BIOMES, GARDEN_EXT, GARDEN_INDEX, SEASONS, FAMILIES, FAMILY_IDS, GLAZES, PAINTS, POT_SIZES, RARITIES, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, STAGES, ZONES } from './data';
+import { BIOMES, LAND_BIOMES, LANDS, GARDEN_EXT, GARDEN_INDEX, SEASONS, FAMILIES, FAMILY_IDS, GLAZES, PAINTS, POT_SIZES, RARITIES, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, STAGES, ZONES } from './data';
 import type { Family } from './data';
 import type { Scene3D } from './scene';
 import { buildPlant } from './plants3d';
@@ -128,14 +128,14 @@ export class UI {
     };
     this.trek.onEvent = (kind, id) => {
       if (kind === 'wall') { this.toast(id === 'lock' ? 'Une mer de nuages : la région suivante se débloque depuis le sac à dos de la serre.' : 'La mer de nuages : c\'est le bout du monde connu.'); return; }
-      if (kind === 'region') { this.toast(`${BIOMES[Number(id)].icon} ${BIOMES[Number(id)].name}`); return; }
+      if (kind === 'region') { const b = BIOMES[this.trek.land * LAND_BIOMES + Number(id)]; this.toast(`${b.icon} ${b.name}`); return; }
       if (kind === 'clay' || kind === 'coins') { play('coin'); this.buzz(12); this.toast(kind === 'clay' ? `Un filon d'argile : +${id} 🧱` : `Une bourse oubliée : +${id} 🪙`); return; }
       const name = id ? `${EMOJI[id]} ${SPECIES_BY_ID[id].name}` : '';
       if (kind === 'perfect') { play('rare'); this.buzz(30); this.toast(`Cueillette parfaite ! ${name} et une graine en plus.`); }
       else if (kind === 'pick') { play('plant'); this.buzz(15); this.toast(`${name} dans le panier.`); }
       else if (kind === 'miss') { play('tap'); this.buzz(60); this.toast(`Raté : ${name} est abîmée.`); }
       else if (kind === 'reveal') { play('craft'); this.buzz(20); }
-      else if (kind === 'slow') this.toast(['Des ronces ! Tu avances au ralenti.', 'De la vase ! Tu avances au ralenti.', 'Du sable mou ! Tu avances au ralenti.'][this.trek.biome]);
+      else if (kind === 'slow') this.toast(`${BIOMES[this.trek.land * LAND_BIOMES + this.trek.biome].slow} Tu avances au ralenti.`);
       else if (kind === 'dusk') { play('tap'); this.toast('Le soleil se couche : rentre à la serre avant la nuit !'); }
     };
     this.trek.onEnd = () => this.trekHome();
@@ -588,8 +588,14 @@ export class UI {
         break;
       }
       case 'trek-biome':
-        if (sim.openBiome(s, n)) { play('craft'); this.buzz(25); this.toast(`${BIOMES[n].name} : la mer de nuages se retire, une nouvelle région t'attend !`); }
-        else this.toast('Pas assez de pièces.');
+        if (sim.openBiome(s, n)) {
+          play('craft'); this.buzz(25);
+          if (n % LAND_BIOMES === 0) { sim.setLand(s, n / LAND_BIOMES); this.toast(`${LANDS[n / LAND_BIOMES].name} : un nouveau continent s'ouvre à toi, avec des plantes qu'on ne trouve que là-bas !`); }
+          else this.toast(`${BIOMES[n].name} : la mer de nuages se retire, une nouvelle région t'attend !`);
+        } else this.toast(sim.biomeBlock(s, n) || 'Pas assez de pièces.');
+        break;
+      case 'trek-land':
+        if (sim.setLand(s, n)) play('tap');
         break;
       case 'trek-basket':
         if (sim.buyBasket(s)) { play('craft'); this.buzz(20); }
@@ -606,7 +612,7 @@ export class UI {
         if (!finds.length) { this.toast('Repose-toi encore un peu avant de repartir.'); break; }
         this.close();
         $('trek').className = 'on';
-        this.trek.open(finds, { ...sim.trekSetup(s), reach: sim.trekReach(s) });
+        this.trek.open(finds, { ...sim.trekSetup(s), reach: sim.trekReach(s), land: sim.landOf(s) });
         this.trekHud();
         break;
       }

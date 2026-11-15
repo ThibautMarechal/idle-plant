@@ -1,3 +1,4 @@
+import { SPECIES } from './data';
 import './style.css';
 import { Scene3D } from './scene';
 import * as sim from './sim';
@@ -85,7 +86,7 @@ function frame(nowMs: number): void {
 requestAnimationFrame(frame);
 
 // Accès console pour le débogage et les tests.
-(window as unknown as Record<string, unknown>).grainier = { get state() { return state; }, sim, scene, ui };
+(window as unknown as Record<string, unknown>).grainier = { get state() { return state; }, sim, scene, ui, ids: SPECIES.map((sp) => sp.id) };
 
 // Les icônes arrivent après le démarrage : elles ne doivent jamais pouvoir l'empêcher.
 installIcons((sc, cam, rt, out) => scene.snap(sc, cam, rt, out));

@@ -1,4 +1,4 @@
-import { BASKETS, BIOMES, DAY_LENGTH, TANKS, GARDEN_BASE, GARDEN_EXT, TREK_GEAR, TREK_TIME, GARDEN, GARDEN_CLIMATE, GARDEN_FIRST, GARDEN_INDEX, PROF_MAX, PROF_MIN, BASE_SLOTS, SEASONS, SEASON_LENGTH, CLIENTS, FAMILIES, FAMILY_IDS, GLAZES, NEWS, POT_SIZES, RARITIES, SLOT_COUNT, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, ZONES } from './data';
+import { BASKETS, BIOMES, LANDS, LAND_BIOMES, DAY_LENGTH, TANKS, GARDEN_BASE, GARDEN_EXT, TREK_GEAR, TREK_TIME, GARDEN, GARDEN_CLIMATE, GARDEN_FIRST, GARDEN_INDEX, PROF_MAX, PROF_MIN, BASE_SLOTS, SEASONS, SEASON_LENGTH, CLIENTS, FAMILIES, FAMILY_IDS, GLAZES, NEWS, POT_SIZES, RARITIES, SLOT_COUNT, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, ZONES } from './data';
 import type { Family, Rarity, Species, Zone } from './data';
 
 /** `vr` : variante, 0 normale, 1 panachée, 2 dorée. */
@@ -85,7 +85,7 @@ export interface State {
   /** Astuces déjà montrées une fois. */
   hints?: Record<string, boolean>;
   /** Expéditions : repos restant (s), taille du panier, milieux ouverts, sorties faites. */
-  trek?: { rest: number; basket: number; open: boolean[]; done: number; boots?: boolean; lantern?: boolean; day?: number };
+  trek?: { rest: number; basket: number; open: boolean[]; done: number; boots?: boolean; lantern?: boolean; day?: number; land?: number };
   /** Horloge du jeu, en secondes : elle fait tourner le jour et la nuit. */
   clock?: number;
   /** Arrosage automatique : arrosages restants dans la cuve, taille de la cuve, zones dont la vanne est fermée. */
@@ -530,8 +530,8 @@ export function cross(s: State, i: number, j: number, rng: Rng = Math.random): {
   if (crossBlock(s, i, j)) return null;
   const x = SPECIES_BY_ID[s.slots[i].plant!.sp];
   const rar = NEXT_RARITY[x.rarity];
-  let pool = SPECIES.filter((sp) => sp.rarity === rar && sp.family === x.family);
-  if (pool.length === 0) pool = SPECIES.filter((sp) => sp.rarity === rar);
+  let pool = SPECIES.filter((sp) => !sp.home && sp.rarity === rar && sp.family === x.family);
+  if (pool.length === 0) pool = SPECIES.filter((sp) => !sp.home && sp.rarity === rar);
   // On favorise les espèces encore absentes de l'almanach.
   const fresh = pool.filter((sp) => !s.disc[sp.id]?.bloomed);
   if (fresh.length) pool = fresh;
@@ -710,10 +710,10 @@ export function rollSeeds(s: State, rng: Rng, family?: Family, prestige = false)
     let rar = rollRarity(rng);
     if (prestige && rar === 'commun') rar = rng() < 0.82 ? 'rare' : 'exotique';
     for (let k = 0; k < 4 && pool.length === 0; k++) {
-      pool = SPECIES.filter((sp) => sp.rarity === rar && (!family || sp.family === family));
+      pool = SPECIES.filter((sp) => !sp.home && sp.rarity === rar && (!family || sp.family === family));
       if (pool.length === 0) rar = 'commun';
     }
-    if (pool.length === 0) pool = SPECIES.filter((sp) => sp.family === family);
+    if (pool.length === 0) pool = SPECIES.filter((sp) => !sp.home && sp.family === family);
     const w = pool.map((sp) => Math.pow(s.market[sp.family].p, 1.5));
     let r = rng() * w.reduce((a, b) => a + b, 0);
     let pick = pool[0];
@@ -739,15 +739,45 @@ function grant(s: State, ids: string[]): { id: string; isNew: boolean }[] {
 // ---------- expéditions ----------
 
 export function trekOf(s: State): NonNullable<State['trek']> {
-  return (s.trek ??= { rest: 0, basket: 0, open: BIOMES.map((b) => b.price === 0), done: 0 });
+  const t = (s.trek ??= { rest: 0, basket: 0, open: BIOMES.map((b) => b.price === 0), done: 0 });
+  while (t.open.length < BIOMES.length) t.open.push(false);
+  return t;
 }
 export function basketCap(s: State): number {
   return BASKETS[trekOf(s).basket].cap;
 }
+/** Ce qui empêche d'ouvrir un milieu, pièces mises à part ('' : rien). */
+export function biomeBlock(s: State, b: number): string {
+  const t = trekOf(s), B = BIOMES[b];
+  if (!B || t.open[b]) return 'Déjà ouvert';
+  if (b % LAND_BIOMES > 0 && !t.open[b - 1]) return `Ouvre d'abord ${BIOMES[b - 1].name.toLowerCase()}`;
+  if (B.need && collection(s).bloomed < B.need) return `Fais fleurir ${B.need} espèces (${collection(s).bloomed}/${B.need})`;
+  return '';
+}
+/** Vrai si le continent est accessible : son premier milieu est ouvert. */
+export function landOpen(s: State, land: number): boolean {
+  return !!trekOf(s).open[land * LAND_BIOMES];
+}
+/** Continent choisi pour la prochaine expédition. */
+export function landOf(s: State): number {
+  const l = trekOf(s).land ?? 0;
+  return landOpen(s, l) ? l : 0;
+}
+export function setLand(s: State, land: number): boolean {
+  if (!LANDS[land] || !landOpen(s, land)) return false;
+  trekOf(s).land = land;
+  return true;
+}
+/** Espèces d'un milieu : sur les autres continents, uniquement celles qui n'existent que là. */
+function biomePool(b: number): Species[] {
+  const B = BIOMES[b];
+  const own = SPECIES.filter((sp) => sp.home === B.id);
+  return own.length ? own : SPECIES.filter((sp) => !sp.home && B.fams.includes(sp.family));
+}
 export function openBiome(s: State, b: number): boolean {
   const t = trekOf(s);
   // Les régions s'ouvrent de proche en proche : pas de dunes sans avoir traversé le marais.
-  if (t.open[b] || (b > 0 && !t.open[b - 1]) || s.coins < BIOMES[b].price) return false;
+  if (biomeBlock(s, b) || s.coins < BIOMES[b].price) return false;
   s.coins -= BIOMES[b].price;
   t.open[b] = true;
   return true;
@@ -778,16 +808,18 @@ export function buyBasket(s: State): boolean {
  */
 export function trekFinds(s: State, b: number, rng: Rng): { id: string; hidden: boolean; tier: number }[] {
   if (!trekOf(s).open[b] || trekOf(s).rest > 0) return [];
-  const fams = BIOMES[b].fams;
+  const all = biomePool(b);
   const out: { id: string; hidden: boolean; tier: number }[] = [];
   for (let i = 0; i < 18; i++) {
     const tier = i < 8 ? 0 : i < 14 ? 1 : 2;
     let rar = rollRarity(rng);
+    // Sur les autres continents, peu d'espèces par milieu : on mêle des rares aux communes pour varier le panier.
+    if (tier === 0 && all[0]?.home && rar === 'commun' && rng() < 0.2) rar = 'rare';
     if (tier === 1 && rar === 'commun') rar = rng() < 0.75 ? 'rare' : 'exotique';
     if (tier === 2) { const r = rng(); rar = r < 0.1 ? 'legendaire' : r < 0.6 ? 'exotique' : 'rare'; }
-    let pool = SPECIES.filter((sp) => fams.includes(sp.family) && sp.rarity === rar);
-    if (!pool.length) pool = SPECIES.filter((sp) => fams.includes(sp.family) && sp.rarity === (tier ? 'rare' : 'commun'));
-    if (!pool.length) pool = SPECIES.filter((sp) => fams.includes(sp.family));
+    let pool = all.filter((sp) => sp.rarity === rar);
+    if (!pool.length) pool = all.filter((sp) => sp.rarity === (tier ? 'rare' : 'commun'));
+    if (!pool.length) pool = all;
     out.push({ id: pool[Math.floor(rng() * pool.length)].id, hidden: tier === 1 || (tier === 2 && i % 2 === 1), tier });
   }
   return out;
@@ -795,17 +827,17 @@ export function trekFinds(s: State, b: number, rng: Rng): { id: string; hidden: 
 /** Plantes de chaque région de la planète, par palier de rareté : la forêt près de la serre, le marais plus loin, les dunes au bout. */
 const RING_TIERS = [[0, 0, 0, 0, 0, 0, 1, 1, 2], [0, 0, 0, 1, 1, 1, 2], [0, 1, 1, 2, 2, 2]];
 /** Nombre de régions qu'on peut atteindre à pied depuis la serre : on s'arrête à la première qui n'est pas ouverte. */
-export function trekReach(s: State): number {
+export function trekReach(s: State, land = landOf(s)): number {
   const o = trekOf(s).open;
   let n = 0;
-  while (n < BIOMES.length && o[n]) n++;
+  while (n < LAND_BIOMES && o[land * LAND_BIOMES + n]) n++;
   return n;
 }
 /** Ce qui pousse aujourd'hui sur la planète : chaque région atteignable apporte ses plantes (`ring`), plus rares en s'éloignant. */
-export function planetFinds(s: State, rng: Rng): { id: string; hidden: boolean; tier: number; ring: number }[] {
+export function planetFinds(s: State, rng: Rng, land = landOf(s)): { id: string; hidden: boolean; tier: number; ring: number }[] {
   const out: { id: string; hidden: boolean; tier: number; ring: number }[] = [];
-  for (let ring = 0; ring < trekReach(s); ring++) {
-    const all = trekFinds(s, ring, rng);
+  for (let ring = 0; ring < trekReach(s, land); ring++) {
+    const all = trekFinds(s, land * LAND_BIOMES + ring, rng);
     for (const tier of RING_TIERS[ring]) {
       const k = all.findIndex((f) => f.tier === tier);
       if (k >= 0) out.push({ ...all.splice(k, 1)[0], ring });

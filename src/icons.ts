@@ -74,6 +74,8 @@ const ICONS: Record<string, string> = {
   warn: '<path d="M12 3l10 17.500H2z" fill="#f8cf45"/><path d="M12 9.500v5"/><circle cx="12" cy="17.5" r=".9" fill="#3b2a20" stroke="none"/>',
   moon: '<path d="M19.5 14.500A8.5 8.5 0 0 1 9.5 4.500a8.5 8.5 0 1 0 10 10z" fill="#8f97b8"/>',
   snow: '<path d="M12 2v20M3.5 7l17 10M3.5 17l17-10M9.5 3.500L12 6l2.5-2.500M9.5 20.500L12 18l2.5 2.5" stroke="#5db4de" stroke-width="1.8"/>',
+  volcano: '<path d="M2.5 21L9 8h6l6.5 13z" fill="#7a6a66"/><path d="M9 8l1.500 3 1.500-2 1.500 2.500L15 8z" fill="#f0703a"/><path d="M12 5.500V2.500M8.500 5L7 3M15.500 5L17 3" stroke="#f0703a" stroke-width="1.6"/>',
+  peak: '<path d="M2 20.500L9.500 5l4 7 2.500-3.500 6 12z" fill="#9fb4c4"/><path d="M9.500 5L7 10.200l2.500-1.200 1.500 1.500 1.300-1.500z" fill="#fff"/>',
   pine: '<path d="M12 15v6.5" stroke-width="3"/><path d="M12 2l5 7h-2.500l4.5 6.500H5L9.5 9H7z" fill="#4f9d69"/>',
   lotus: '<path d="M3 17.500c3 3 15 3 18 0" stroke="#3f9d6b" stroke-width="2.2"/><path d="M4 9c4 0 7 3 8 7.5-4 0-8-2.5-8-7.500zM20 9c-4 0-7 3-8 7.5 4 0 8-2.5 8-7.500z" fill="#f7c2d6"/><path d="M12 5c3 3 3 8.5 0 11.5-3-3-3-8.5 0-11.500z" fill="#f3a8c4"/>',
   dunes: '<circle cx="17" cy="7" r="3.2" fill="#f8cf45"/><path d="M2 19.500c4-6.5 8-6.5 11-2 2-3 6-3 9 2z" fill="#ecd08f"/>',
@@ -103,7 +105,7 @@ const OF: Record<string, string> = {
   '🧤': 'glove', '🏡': 'house', '🌍': 'planet', '🏮': 'lantern', '🥇': 'gold', '🥈': 'silver', '🥉': 'bronze', '❔': 'question',
   '🔊': 'sound', '🔇': 'mute', '📅': 'calendar', '🧽': 'sponge', '⬇': 'down', '🎯': 'target', '🌫': 'fog', '💡': 'bulb', '♨': 'heat',
   '😴': 'sleep', '☀': 'sun', '🌡': 'thermo', '⚠': 'warn', '🌑': 'moon', '❄': 'snow', '🌲': 'pine', '🪷': 'lotus', '🏜': 'dunes',
-  '🌵': 'cactus', '🌿': 'herb', '🍃': 'fern', '🍂': 'autumn', '🌸': 'orchid', '🌼': 'flower', '💐': 'bouquet', '🌴': 'palm',
+  '🌵': 'cactus', '🌿': 'herb', '🍃': 'fern', '🍂': 'autumn', '🌸': 'orchid', '🌼': 'flower', '💐': 'bouquet', '🌴': 'palm', '🌋': 'volcano', '🏔': 'peak',
   '🪰': 'flytrap', '🌳': 'tree', '🌱': 'sprout', '🌰': 'seed', '💚': 'hgreen', '💛': 'hgold', '🤍': 'hwhite',
 };
 
@@ -253,7 +255,14 @@ function portraits(snap: Snap): void {
       rt.dispose();
       return;
     }
-    if (i < SPECIES.length) setTimeout(step, 60); else rt.dispose();
+    if (i < SPECIES.length) setTimeout(step, 60);
+    else {
+      rt.dispose();
+      // Dernier passage : une pastille créée pendant le rendu peut avoir gardé le dessin d'attente.
+      const sweep = () => document.querySelectorAll<HTMLElement>('.ic[data-k^="p"]:not([data-ok])').forEach((el) => { if (shots.has(el.dataset.k ?? '')) fill(el, el.dataset.k!); });
+      sweep();
+      setTimeout(sweep, 1500);
+    }
   };
   setTimeout(step, 400);
 }

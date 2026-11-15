@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OutlineEffect } from 'three/examples/jsm/effects/OutlineEffect.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { SPECIES_BY_ID, TREK_TIME } from './data';
+import { BIOMES, LAND_BIOMES, SPECIES_BY_ID, TREK_TIME } from './data';
 import { buildPlant } from './plants3d';
 import { artStyle, finish, mat } from './styles';
 
@@ -34,13 +34,29 @@ const VIS_NEAR = 1.5;
 const REACH = 2.4;
 export const CAMP = 4.6;
 const SPEED = 4.4;
-const GROUND = [0x8fc27a, 0x6fa98a, 0xe9d3a0].map((c) => new THREE.Color(c));
+/**
+ * Teinte du décor, par continent et par région : les mêmes arbres et rochers prennent les couleurs du lieu.
+ * [couleur vers laquelle on tire, force, saturation ajoutée]
+ */
+const TINTS: ([number, number, number] | null)[][] = [
+  [null, null, null],
+  [[0x2f9a4a, 0.12, 0.04], [0x2f8a7a, 0.14, 0.03], [0x3c3436, 0.72, -0.08]],
+  [[0xdfeaf0, 0.2, -0.05], [0xd9d8b8, 0.4, -0.05], [0xffffff, 0.68, 0]],
+];
+let TINT: [number, number, number] | null = null;
+const _t1 = new THREE.Color(), _t2 = new THREE.Color();
+function tinted(color: number): number {
+  if (!TINT) return color;
+  _t1.setHex(color).lerp(_t2.setHex(TINT[0]), TINT[1]);
+  if (TINT[2]) _t1.offsetHSL(0, TINT[2], 0);
+  return _t1.getHex();
+}
 const MIST = new THREE.Color(0xf4f8fa);
 const UP = new THREE.Vector3(0, 1, 0);
 const WATER = new THREE.MeshStandardMaterial({ color: 0x6fc0d0, roughness: 0.15, flatShading: true });
 
 function mesh(geo: THREE.BufferGeometry, color: number, x: number, y: number, z: number, shadow = true): THREE.Mesh {
-  const m = new THREE.Mesh(geo, mat(color));
+  const m = new THREE.Mesh(geo, mat(tinted(color)));
   m.position.set(x, y, z);
   m.castShadow = shadow;
   m.receiveShadow = true;
@@ -93,6 +109,8 @@ export class Planet {
   near = -1;
   /** Région où l'on se trouve : 0 forêt, 1 marais, 2 dunes. */
   biome = 0;
+  /** Continent où l'on marche : ses trois régions sont BIOMES[land * 3 + région]. */
+  land = 0;
   /** Vrai pendant le jeu de cueillette : le monde et le jour attendent. */
   picking = false;
   /** Manette sous le pouce, en pixels : origine et écart. */
@@ -156,7 +174,8 @@ export class Planet {
     window.addEventListener('resize', () => { if (this.active) this.resize(); });
   }
 
-  open(finds: { id: string; hidden: boolean; tier: number; ring: number }[], setup: { time: number; speed: number; cap: number; reach: number }): void {
+  open(finds: { id: string; hidden: boolean; tier: number; ring: number }[], setup: { time: number; speed: number; cap: number; reach: number; land?: number }): void {
+    this.land = setup.land ?? 0;
     this.total = setup.time;
     this.speed = setup.speed;
     this.reach = Math.max(1, setup.reach);
@@ -260,6 +279,10 @@ export class Planet {
   private build(list: { id: string; hidden: boolean; tier: number; ring: number }[]): void {
     const w = this.world;
     const rnd = Math.random;
+    const L = this.land;
+    const ground = [0, 1, 2].map((k) => new THREE.Color(BIOMES[L * LAND_BIOMES + k].ground));
+    const tint = (ring: number) => { TINT = ring < 0 ? null : TINTS[L]?.[ring] ?? null; };
+    tint(-1);
     const G = GEO ?? (GEO = makeGeo());
     const part = (geo: THREE.BufferGeometry, color: number, x: number, y: number, z: number, sx = 1, sy = sx, sz = sx, shadow = true) => { const m = mesh(geo, color, x, y, z, shadow); m.scale.set(sx, sy, sz); return m; };
     this.amb = new THREE.AmbientLight(0xffffff, 1.35);
@@ -286,7 +309,7 @@ export class Planet {
     geo.setAttribute('aOff', new THREE.BufferAttribute(this.offs, 2));
     // La peinture se calcule au pixel près d'après la carte : frontières nettes, cernées d'un trait, quel que soit le maillage.
     const gm = mat(0xffffff).clone() as THREE.MeshToonMaterial;
-    const uni = { uP: { value: new THREE.Vector2() }, uEdge: { value: this.edge }, uC0: { value: GROUND[0] }, uC1: { value: GROUND[1] }, uC2: { value: GROUND[2] }, uMist: { value: MIST } };
+    const uni = { uP: { value: new THREE.Vector2() }, uEdge: { value: this.edge }, uC0: { value: ground[0] }, uC1: { value: ground[1] }, uC2: { value: ground[2] }, uMist: { value: MIST } };
     this.uni = uni;
     gm.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, uni);
@@ -405,11 +428,34 @@ export class Planet {
       solid(x, z, 0.3);
     };
     const [F, M, D] = RINGS;
+    /** Un arbre à tête ronde : feuillu de la jungle, arbre du marais. */
+    const broad = (x: number, z: number, k: number, h = 1.5 + rnd() * 0.9, c1 = 0x6fa27a, c2 = 0x5f946c) => {
+      const s = (0.8 + rnd() * 0.35) * (h / 2);
+      this.add(group(part(G.trunk, 0x7a6a55, 0, h / 2, 0, Math.max(1, h / 2.5), h, Math.max(1, h / 2.5)), part(G.ball, k % 2 ? c1 : c2, 0, h + s * 0.5, 0, s), part(G.ball, k % 2 ? c2 : c1, s * 0.6, h + s * 0.1, 0.2, s * 0.6)), x, z, rnd() * 6);
+      solid(x, z, 0.3 + h * 0.06);
+    };
+    /** Une aiguille de glace, pour les cimes. */
+    const ice = (x: number, z: number) => {
+      const h = 0.9 + rnd() * 1.5;
+      this.add(group(part(G.cone, 0xbfe2f2, 0, h / 2, 0, 0.32, h, 0.32), part(G.cone, 0xdff2fa, 0.3, h * 0.3, 0.1, 0.2, h * 0.6, 0.2)), x, z, rnd() * 6);
+      solid(x, z, 0.4);
+    };
+    // Les arbres du continent : sapins chez soi et dans le nord, feuillus et palmiers dans l'archipel.
+    const tree = L === 1 ? (x: number, z: number, k: number) => (k % 3 ? broad(x, z, k, 2.2 + rnd() * 1.4, 0x4fae5a, 0x3f9a52) : palm(x, z)) : pine;
 
     // Trois repères qu'on reconnaît de loin : l'arbre géant, le grand lac, les pierres levées.
-    pine(-13, -17, 0, 6.5);
+    tint(0);
+    if (L === 1) broad(-13, -17, 0, 6, 0x4fae5a, 0x3f9a52); else pine(-13, -17, 0, 6.5);
+    tint(1);
     pond(34, 30, 6);
-    for (let i = 0; i < 7; i++) {
+    tint(2);
+    if (L === 1) {
+      // Dans l'archipel, c'est un volcan qui fume au bout du monde.
+      const lava = new THREE.Mesh(G.cone, new THREE.MeshBasicMaterial({ color: 0xff7a3a }));
+      lava.position.set(0, 7.4, 0); lava.scale.set(1.5, 1.2, 1.5); lava.userData.raw = true;
+      this.add(group(part(G.cone, 0x6a5a58, 0, 3.6, 0, 6.5, 7.6, 6.5), lava, part(G.ball, 0xe9e4e0, 0.4, 9.3, 0, 1.1, 1.1, 1.1, false), part(G.ball, 0xf4f0ec, -0.5, 10.8, 0.3, 1.5, 1.5, 1.5, false)), -52, 52);
+      solid(-52, 52, 6.2);
+    } else for (let i = 0; i < 7; i++) {
       const sa = (i / 7) * Math.PI * 2;
       const x = -52 + Math.sin(sa) * 3.2, z = 52 + Math.cos(sa) * 3.2;
       this.add(group(part(G.slab, 0xc9a27a, 0, 0.8 + (i % 2) * 0.2, 0, 1, 1 + (i % 2) * 0.25, 1)), x, z, -sa);
@@ -417,7 +463,8 @@ export class Planet {
     }
 
     // Forêt : sapins, rochers, champignons, et des ronces qui ralentissent.
-    scatter(170, 5, F - 1, 0.9, pine);
+    tint(0);
+    scatter(170, 5, F - 1, 0.9, tree);
     scatter(40, 5, F, 0.7, (x, z) => rock(x, z, 0x9a9a92));
     scatter(40, 5, F, 0.4, (x, z) => this.add(group(part(G.stem, 0xe9dcc6, 0, 0.13, 0), part(G.cap, 0xe2604f, 0, 0.26, 0)), x, z));
     scatter(24, 8, F - 2, 1.7, (x, z) => {
@@ -437,8 +484,11 @@ export class Planet {
     scatter(70, 4, F, 0.2, (x, z, k) => this.add(group(part(G.stalk, 0x4f9a5c, 0, 0, 0, 1, 1, 1, false), part(G.petal, [0xf2c94c, 0xe58ab0, 0xfdfaf2, 0x8a6fd0][k % 4], 0, 0, 0, 1, 1, 1, false)), x, z));
 
     // Marais : des mares où l'on patauge, des arbres à grosse tête, des roseaux.
-    scatter(80, F + 2, M - 2, 2.2, (x, z) => pond(x, z, 1.3 + rnd() * 1.3));
-    scatter(300, F + 1, M - 1, 0.9, (x, z, k) => {
+    tint(1);
+    scatter(L === 2 ? 30 : 80, F + 2, M - 2, 2.2, (x, z) => pond(x, z, 1.3 + rnd() * 1.3));
+    scatter(L === 2 ? 90 : 300, F + 1, M - 1, 0.9, (x, z, k) => {
+      // La toundra n'a presque plus d'arbres : quelques sapins rabougris.
+      if (L === 2) { pine(x, z, k, 0.9 + rnd() * 0.6); return; }
       const h = 1.5 + rnd() * 0.9, s = 0.8 + rnd() * 0.35;
       this.add(group(part(G.trunk, 0x7a6a55, 0, h / 2, 0, 1, h, 1), part(G.ball, k % 2 ? 0x6fa27a : 0x5f946c, 0, h + 0.4, 0, s)), x, z);
       solid(x, z, 0.4);
@@ -450,11 +500,13 @@ export class Planet {
     scatter(60, F, M, 0.4, (x, z) => this.add(group(part(G.stem, 0xe9dcc6, 0, 0.13, 0), part(G.cap, 0x8a6fd0, 0, 0.26, 0)), x, z));
 
     // Dunes : cactus, pierres chaudes, bosses de sable et plaques de sable mou.
+    tint(2);
     scatter(90, M + 2, D - 1, 1.8, (x, z) => { const s = Math.round((1.3 + rnd() * 1.0) * 10) / 10; this.add(group(flat(mesh(cap(s, 0.04), 0xc9a86a, 0, 0, 0, false))), x, z); slow(x, z, s); });
     // Des oasis : une mare et ses palmiers.
-    scatter(9, M + 5, D - 4, 5, (x, z) => { pond(x, z, 2.4); for (let i = 0; i < 4; i++) { const a = i * 1.6 + rnd(); palm(x + Math.sin(a) * 3.3, z + Math.cos(a) * 3.3); } });
+    scatter(9, M + 5, D - 4, 5, (x, z) => { pond(x, z, 2.4); for (let i = 0; i < 4; i++) { const a = i * 1.6 + rnd(); (L === 2 ? ice : palm)(x + Math.sin(a) * 3.3, z + Math.cos(a) * 3.3); } });
     scatter(150, M + 1, D + 4, 1.6, (x, z, k) => { const s = 1.8 + rnd(); this.add(group(flat(part(G.dome, k % 2 ? 0xf0dcae : 0xe6cd96, 0, -0.1, 0, s, s * 0.35, s, false))), x, z); });
     scatter(380, M + 1, D + 4, 0.8, (x, z, k) => {
+      if (L === 2) { ice(x, z); return; }
       const h = 1.0 + rnd() * 1.2;
       const g = group(part(G.cactus, 0x5f9a6a, 0, h / 2, 0, 1, h, 1));
       if (k % 2) g.add(part(G.arm, 0x5f9a6a, 0.36, h * 0.55, 0));
@@ -462,10 +514,11 @@ export class Planet {
       solid(x, z, 0.4);
     });
     scatter(240, M + 1, D + 4, 0.7, (x, z) => rock(x, z, 0xc9a27a));
-    scatter(90, M + 1, D + 4, 0.6, palm);
+    scatter(90, M + 1, D + 4, 0.6, L === 2 ? (x, z) => rock(x, z, 0x9aa4ac, 0.6 + rnd() * 0.7) : palm);
     scatter(140, M + 1, D + 4, 0.6, (x, z, k) => bush(x, z, k % 2 ? 0xb9a86a : 0xa9985a, 0xc9b87a, 0.3 + rnd() * 0.2));
     scatter(300, M, D + 4, 0.2, (x, z, k) => tuft(x, z, k % 2 ? 0xb9b86a : 0xa9a85a, 0.9));
 
+    tint(-1);
     // À ramasser en marchant : des mottes d'argile et des pièces perdues, plus généreuses loin de la serre.
     scatter(10 + this.reach * 12, 7, this.edge - 2, 0.6, (x, z, k) => {
       const kind = k % 2 ? 'clay' : 'coins', far = Math.hypot(x, z);

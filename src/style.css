@@ -518,3 +518,4 @@ body[data-fp="1"] #nav { display: none; }
 .tankbar { height: 26px; min-height: 26px; flex: none; border-radius: 11px; border: 2.5px solid var(--ink); background: #fff; overflow: hidden; position: relative; }
 .tankbar i { display: block; height: 100%; background: linear-gradient(180deg, #8fd6f2, #5ab4e6); transition: width 0.25s; }
 .tankbar span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; }
+.card.sel { background: #e4f4dc !important; }
