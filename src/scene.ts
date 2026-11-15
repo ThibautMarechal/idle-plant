@@ -600,6 +600,24 @@ export class Scene3D {
     else this.renderer.render(this.scene, this.camera);
   }
 
+  /** Rend une petite scène à part dans une texture, avec le même trait que la serre, et en lit les pixels. */
+  snap(scene: THREE.Scene, cam: THREE.Camera, rt: THREE.WebGLRenderTarget, out: Uint8Array): void {
+    const r = this.renderer;
+    const prev = r.getRenderTarget();
+    const color = r.getClearColor(new THREE.Color());
+    const alpha = r.getClearAlpha();
+    try {
+      r.setRenderTarget(rt);
+      r.setClearColor(0x000000, 0);
+      r.clear();
+      if (this.outline) this.outline.render(scene, cam); else r.render(scene, cam);
+      r.readRenderTargetPixels(rt, 0, 0, rt.width, rt.height, out);
+    } finally {
+      r.setRenderTarget(prev);
+      r.setClearColor(color, alpha);
+    }
+  }
+
   private screen(p: THREE.Vector3): { x: number; y: number } {
     // Derrière soi : hors écran.
     if (this.theme.fp && this.cam(p).z > -0.3) return { x: -9999, y: -9999 };

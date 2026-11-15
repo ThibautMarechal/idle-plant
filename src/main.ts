@@ -4,6 +4,17 @@ import * as sim from './sim';
 import { UI } from './ui';
 import { installIcons } from './icons';
 
+// Si le jeu plante, on le dit à l'écran plutôt que de rester muet : c'est le seul moyen de le savoir sur un téléphone.
+const report = (what: unknown) => {
+  const el = document.createElement('div');
+  el.style.cssText = 'position:fixed;left:8px;right:8px;bottom:8px;z-index:99999;background:#fff;border:2px solid #c0392b;border-radius:10px;padding:8px 10px;font:12px/1.35 monospace;color:#7a1f14;max-height:40vh;overflow:auto';
+  el.textContent = 'Erreur : ' + (what instanceof Error ? `${what.message}\n${what.stack ?? ''}` : String(what));
+  el.onclick = () => el.remove();
+  document.body.append(el);
+};
+window.addEventListener('error', (e) => report(e.error ?? e.message));
+window.addEventListener('unhandledrejection', (e) => report(e.reason));
+
 const params = new URLSearchParams(location.search);
 const speed = Math.max(1, Number(params.get('vitesse')) || 1);
 const t0 = Date.now();
@@ -18,7 +29,6 @@ if (!state.hints?.bd) { state.style = 'bd'; (state.hints ??= {}).bd = true; }
 // Essai en cours : la vue à la première personne. Elle devient le décor par défaut, une fois.
 if (!state.hints?.fp) { state.theme = 'pavillon'; (state.hints ??= {}).fp = true; }
 const scene = new Scene3D(document.getElementById('gl') as HTMLCanvasElement, state.theme, state.style);
-installIcons();
 const ui = new UI(state, scene, () => {
   sim.wipe();
   const { theme, style } = state;
@@ -69,3 +79,6 @@ requestAnimationFrame(frame);
 
 // Accès console pour le débogage et les tests.
 (window as unknown as Record<string, unknown>).grainier = { get state() { return state; }, sim, scene, ui };
+
+// Les icônes arrivent après le démarrage : elles ne doivent jamais pouvoir l'empêcher.
+installIcons((sc, cam, rt, out) => scene.snap(sc, cam, rt, out));

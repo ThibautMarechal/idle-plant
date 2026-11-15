@@ -4,10 +4,9 @@
  * Les espèces ont chacune leur portrait, rendu une fois à partir de leur modèle 3D.
  */
 import * as THREE from 'three';
-import { OutlineEffect } from 'three/examples/jsm/effects/OutlineEffect.js';
-import { SPECIES } from './data';
+import { FAMILIES, SPECIES } from './data';
 import { buildPlant, buildPot, POT_TOP } from './plants3d';
-import { artStyle, finish } from './styles';
+import { finish } from './styles';
 
 const INK = '#3b2a20';
 const svg = (inner: string) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="${INK}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round">${inner}</svg>`;
@@ -112,9 +111,10 @@ const OF: Record<string, string> = {
 const PUA = 0xe000;
 export const SPECIES_MARK: Record<string, string> = Object.fromEntries(SPECIES.map((sp, i) => [sp.id, String.fromCharCode(PUA + i)]));
 
-const uri = new Map<string, string>();
 const images = new Map<string, HTMLImageElement>();
-const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/** Portraits prêts : `p12` en pot (interface), `q12` à nu (mini-jeux). */
+const shots = new Map<string, HTMLCanvasElement>();
+const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, (ch) => '\\' + ch);
 const RX = new RegExp(`(?:[\\uE000-\\uE0FF]|${Object.keys(OF).sort((a, b) => b.length - a.length).map(esc).join('|')})\\uFE0F?`, 'gu');
 
 function keyOf(token: string): string | null {
@@ -122,53 +122,25 @@ function keyOf(token: string): string | null {
   if (c >= PUA && c < PUA + SPECIES.length) return 'p' + (c - PUA);
   return OF[token.replace('️', '')] ?? null;
 }
+const isShot = (key: string) => /^[pq]\d+$/.test(key);
+/** En attendant son portrait, une espèce porte le dessin de sa famille. */
+const standIn = (key: string) => OF[FAMILIES[SPECIES[Number(key.slice(1))].family].icon.replace('️', '')] ?? 'sprout';
 
-/** Portraits des espèces : chaque plante adulte dans son pot, rendue une fois hors écran. */
-function portraits(): void {
-  const size = 128;
-  const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = size;
-  let renderer: THREE.WebGLRenderer;
-  try { renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: true }); } catch { return; }
-  renderer.setPixelRatio(1);
-  renderer.setSize(size, size, false);
-  const st = artStyle();
-  const fx = st.outline ? new OutlineEffect(renderer, { defaultThickness: st.outline * 1.6, defaultColor: [0.03, 0.02, 0.05], defaultAlpha: 1 }) : null;
-  const scene = new THREE.Scene();
-  scene.add(new THREE.HemisphereLight(0xffffff, 0xd8c7a8, 1.3));
-  const sun = new THREE.DirectionalLight(0xfff1d0, 1.5);
-  sun.position.set(2, 4, 3);
-  scene.add(sun);
-  const cam = new THREE.PerspectiveCamera(30, 1, 0.05, 50);
-  const box = new THREE.Box3();
-  const mid = new THREE.Vector3();
-  const dim = new THREE.Vector3();
-  SPECIES.forEach((sp, i) => {
-    // Deux portraits : en pot pour l'interface, à nu pour les mini-jeux de cueillette.
-    for (const bare of [false, true]) {
-      const g = new THREE.Group();
-      if (!bare) g.add(buildPot());
-      const plant = buildPlant(sp, 4, 1, 0);
-      plant.position.y = bare ? 0 : POT_TOP;
-      g.add(plant);
-      finish(g);
-      scene.add(g);
-      box.setFromObject(g);
-      box.getCenter(mid);
-      box.getSize(dim);
-      const r = Math.max(dim.x, dim.y, dim.z) * 0.5 * 1.12;
-      const d = r / Math.tan((cam.fov * Math.PI) / 360);
-      cam.position.set(mid.x + d * 0.35, mid.y + d * 0.32, mid.z + d * 0.88);
-      cam.lookAt(mid);
-      renderer.setClearColor(0x000000, 0);
-      renderer.clear();
-      if (fx) fx.render(scene, cam); else renderer.render(scene, cam);
-      uri.set((bare ? 'q' : 'p') + i, canvas.toDataURL('image/png'));
-      scene.remove(g);
-    }
-  });
-  renderer.dispose();
-  renderer.forceContextLoss();
+/** Remplit une pastille : le portrait s'il est prêt, sinon le dessin au trait. */
+function fill(el: HTMLElement, key: string): void {
+  const text = el.dataset.t ?? '';
+  const shot = shots.get(key);
+  if (shot) {
+    const c = document.createElement('canvas');
+    c.width = shot.width;
+    c.height = shot.height;
+    c.getContext('2d')?.drawImage(shot, 0, 0);
+    el.replaceChildren(c, text);
+    el.dataset.ok = '1';
+  } else {
+    el.innerHTML = svg(ICONS[isShot(key) ? standIn(key) : key]);
+    el.append(text);
+  }
 }
 
 function swap(node: Text): void {
@@ -182,11 +154,13 @@ function swap(node: Text): void {
   RX.lastIndex = 0;
   for (let m = RX.exec(text); m; m = RX.exec(text)) {
     const key = keyOf(m[0]);
-    if (!key || !uri.has(key)) continue;
+    if (!key) continue;
     if (m.index > last) frag.append(text.slice(last, m.index));
     const el = document.createElement('span');
-    el.className = `ic ic-${key}${/^p\d+$/.test(key) ? ' pl' : ''}`;
-    el.textContent = m[0];
+    el.className = isShot(key) ? 'ic pl' : 'ic';
+    el.dataset.k = key;
+    el.dataset.t = m[0];
+    fill(el, key);
     frag.append(el);
     last = m.index + m[0].length;
   }
@@ -204,36 +178,126 @@ function sweep(root: Node): void {
   found.forEach(swap);
 }
 
-/** À appeler une fois, après le choix du style : prépare les dessins et surveille tout ce que l'interface écrit. */
-export function installIcons(): void {
-  for (const [k, v] of Object.entries(ICONS)) uri.set(k, 'data:image/svg+xml,' + encodeURIComponent(svg(v)));
-  portraits();
-  const css = [...uri].filter(([k]) => !/^q\d/.test(k)).map(([k, u]) => `.ic-${k}{background-image:url("${u}")}`).join('\n');
-  const style = document.createElement('style');
-  style.textContent = css;
-  document.head.append(style);
-  sweep(document.body);
-  new MutationObserver((records) => {
-    for (const r of records) {
-      if (r.type === 'characterData') sweep(r.target);
-      else r.addedNodes.forEach(sweep);
+/** Rend une petite scène à part et écrit ses pixels (RGBA linéaire prémultiplié, de bas en haut) dans `out`. */
+export type Snap = (scene: THREE.Scene, cam: THREE.Camera, rt: THREE.WebGLRenderTarget, out: Uint8Array) => void;
+
+const SIZE = 144;
+const toSrgb = new Uint8Array(256);
+for (let i = 0; i < 256; i++) { const c = i / 255; toSrgb[i] = Math.round(255 * (c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055)); }
+
+/**
+ * Portraits des espèces, rendus après le démarrage avec le moteur de la serre, quelques-uns à la fois.
+ * Rien ici ne doit pouvoir bloquer le jeu : au moindre souci on s'arrête et les dessins de famille restent.
+ */
+function portraits(snap: Snap): void {
+  const rt = new THREE.WebGLRenderTarget(SIZE, SIZE, { samples: 4 });
+  const px = new Uint8Array(SIZE * SIZE * 4);
+  const scene = new THREE.Scene();
+  scene.add(new THREE.HemisphereLight(0xffffff, 0xd8c7a8, 1.3));
+  const sun = new THREE.DirectionalLight(0xfff1d0, 1.5);
+  sun.position.set(2, 4, 3);
+  scene.add(sun);
+  const cam = new THREE.PerspectiveCamera(30, 1, 0.05, 50);
+  const box = new THREE.Box3();
+  const mid = new THREE.Vector3();
+  const dim = new THREE.Vector3();
+  const one = (i: number, bare: boolean) => {
+    const g = new THREE.Group();
+    if (!bare) g.add(buildPot());
+    const plant = buildPlant(SPECIES[i], 4, 1, 0);
+    plant.position.y = bare ? 0 : POT_TOP;
+    g.add(plant);
+    finish(g);
+    scene.add(g);
+    box.setFromObject(g);
+    box.getCenter(mid);
+    box.getSize(dim);
+    const r = Math.max(dim.x, dim.y, dim.z) * 0.5 * 1.12;
+    const d = r / Math.tan((cam.fov * Math.PI) / 360);
+    cam.position.set(mid.x + d * 0.35, mid.y + d * 0.32, mid.z + d * 0.88);
+    cam.lookAt(mid);
+    snap(scene, cam, rt, px);
+    scene.remove(g);
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = SIZE;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('2d');
+    const img = ctx.createImageData(SIZE, SIZE);
+    for (let y = 0; y < SIZE; y++) {
+      for (let x = 0; x < SIZE; x++) {
+        const src = ((SIZE - 1 - y) * SIZE + x) * 4;
+        const dst = (y * SIZE + x) * 4;
+        const a = px[src + 3];
+        const k = a ? 255 / a : 0;
+        img.data[dst] = toSrgb[Math.min(255, Math.round(px[src] * k))];
+        img.data[dst + 1] = toSrgb[Math.min(255, Math.round(px[src + 1] * k))];
+        img.data[dst + 2] = toSrgb[Math.min(255, Math.round(px[src + 2] * k))];
+        img.data[dst + 3] = a;
+      }
     }
-  }).observe(document.body, { childList: true, subtree: true, characterData: true });
+    ctx.putImageData(img, 0, 0);
+    shots.set((bare ? 'q' : 'p') + i, canvas);
+  };
+  let i = 0;
+  const step = () => {
+    try {
+      const until = performance.now() + 8;
+      while (i < SPECIES.length && performance.now() < until) {
+        one(i, false);
+        one(i, true);
+        document.querySelectorAll<HTMLElement>(`.ic[data-k="p${i}"]:not([data-ok])`).forEach((el) => fill(el, 'p' + i));
+        i++;
+      }
+    } catch (e) {
+      console.warn('portraits', e);
+      rt.dispose();
+      return;
+    }
+    if (i < SPECIES.length) setTimeout(step, 60); else rt.dispose();
+  };
+  setTimeout(step, 400);
 }
 
-/** Le même dessin, pour les mini-jeux peints sur un canevas. */
-export function iconImage(token: string, bare = false): HTMLImageElement | null {
-  let key = keyOf(token);
-  if (bare && key && /^p\d+$/.test(key)) key = 'q' + key.slice(1);
-  const u = key && uri.get(key);
-  if (!u) return null;
-  let img = images.get(key!);
-  if (!img) { img = new Image(); img.src = u; images.set(key!, img); }
-  return img;
+/** À appeler une fois au démarrage : surveille tout ce que l'interface écrit et y remplace les émojis par des dessins. */
+export function installIcons(snap: Snap): void {
+  try {
+    sweep(document.body);
+    // Garde-fou : si quelque chose défait nos remplacements en boucle, on arrête de surveiller plutôt que de figer le jeu.
+    let since = performance.now();
+    let work = 0;
+    const watcher = new MutationObserver((records) => {
+      try {
+        const now = performance.now();
+        if (now - since > 1000) { since = now; work = 0; }
+        work += records.length;
+        if (work > 4000) { watcher.disconnect(); console.warn('icons: trop de changements, arrêt'); return; }
+        for (const r of records) {
+          if (r.type === 'characterData') sweep(r.target);
+          else r.addedNodes.forEach(sweep);
+        }
+      } catch (e) { console.warn('icons', e); }
+    });
+    watcher.observe(document.body, { childList: true, subtree: true, characterData: true });
+    portraits(snap);
+  } catch (e) { console.warn('icons', e); }
 }
 
-/** Dessine une icône centrée en (x, y), dans un carré de côté `size`. */
+/** Dessine une icône centrée en (x, y), dans un carré de côté `size` : pour les mini-jeux peints sur un canevas. */
 export function drawIcon(c: CanvasRenderingContext2D, token: string, x: number, y: number, size: number, bare = false): void {
-  const img = iconImage(token, bare);
-  if (img && img.complete && img.naturalWidth) c.drawImage(img, x - size / 2, y - size / 2, size, size);
+  const key = keyOf(token);
+  if (!key) return;
+  const shot = isShot(key) ? shots.get((bare ? 'q' : 'p') + key.slice(1)) : undefined;
+  if (shot) { c.drawImage(shot, x - size / 2, y - size / 2, size, size); return; }
+  const name = isShot(key) ? standIn(key) : key;
+  let img = images.get(name);
+  if (!img) { img = new Image(); img.src = 'data:image/svg+xml,' + encodeURIComponent(svg(ICONS[name])); images.set(name, img); }
+  if (img.complete && img.naturalWidth) { c.drawImage(img, x - size / 2, y - size / 2, size, size); return; }
+  // Dernier recours si l'image n'a pas pu se charger : une pastille de couleur.
+  c.beginPath();
+  c.arc(x, y, size * 0.32, 0, Math.PI * 2);
+  c.fillStyle = '#8cc44e';
+  c.fill();
+  c.lineWidth = 2.5;
+  c.strokeStyle = INK;
+  c.stroke();
 }
