@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { BASE_SLOTS, GARDEN_FIRST, GARDEN_INDEX, POT_SIZES, SLOT_COUNT, SLOTS_PER_ZONE, SPECIES_BY_ID, ZONES } from './data';
 import { buildPlant, buildPot, mat, POT_TOP } from './plants3d';
-import { fitOf, slotOpen, stageOf, zoneClimate, zoneOfSlot } from './sim';
+import { fitOf, slotOpen, zoneIndexOfSlot, stageOf, zoneClimate, zoneOfSlot } from './sim';
 import type { State } from './sim';
 import { OutlineEffect } from 'three/examples/jsm/effects/OutlineEffect.js';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
@@ -32,6 +32,9 @@ const v3 = (p: V3) => new THREE.Vector3(p[0], p[1], p[2]);
 const STEP = Math.PI / 4;
 /** Demi-champ horizontal, vue calée : un pan de mur et ses trois pots tiennent dans la largeur. */
 const HALF_FOV = 0.48;
+const NIGHT_SUN = new THREE.Color(0x8fa8ff);
+const DUSK_SUN = new THREE.Color(0xff9a52);
+const NIGHT_SKY = new THREE.Color(0x5a6fc0);
 
 export class Scene3D {
   private renderer: THREE.WebGLRenderer;
@@ -46,6 +49,8 @@ export class Scene3D {
   /** Où l'on se tient : 0 dans la serre, 1 au jardin. */
   spot = 0;
   private doors: THREE.Object3D[] = [];
+  private lights: { hemi: THREE.HemisphereLight; sun: THREE.DirectionalLight; hemiBase: number; sunBase: number; sky: THREE.Color; sunColor: THREE.Color } | null = null;
+  private light = -1;
   /** Parcelles du jardin : jardinières achetées et carrés de terre encore à vendre. */
   private beds: THREE.Object3D[] = [];
   private flutters: THREE.Object3D[] = [];
@@ -118,8 +123,11 @@ export class Scene3D {
     this.lifted = -1;
     const add = (...o: THREE.Object3D[]) => { this.world.add(...o); };
 
-    add(new THREE.HemisphereLight(t.hemi[0], t.hemi[1], t.hemi[2] * st.hemi));
+    const hemi = new THREE.HemisphereLight(t.hemi[0], t.hemi[1], t.hemi[2] * st.hemi);
+    add(hemi);
     const sun = new THREE.DirectionalLight(t.sun[0], t.sun[1] * st.sun);
+    this.lights = { hemi, sun, hemiBase: hemi.intensity, sunBase: sun.intensity, sky: new THREE.Color(t.hemi[0]), sunColor: new THREE.Color(t.sun[0]) };
+    this.light = -1;
     sun.position.copy(v3(t.sun[2]));
     sun.castShadow = true;
     sun.shadow.mapSize.set(1024, 1024);
@@ -477,7 +485,7 @@ export class Scene3D {
       v.crate.visible = !open && i < BASE_SLOTS;
       if (v.hanger) v.hanger.visible = open;
       v.marker.visible = !slot.pot && open;
-      v.drip.visible = slot.pot && s.upgrades.water;
+      v.drip.visible = slot.pot && s.upgrades.water && !s.dry?.[zoneIndexOfSlot(i)];
       // Le pot : taille, émail et motif viennent de l'atelier ; sans dessin, c'est le pot du décor.
       const pd = slot.pd;
       const scale = slot.pot ? POT_SIZES[(pd?.size ?? 1) - 1].scale : 1;
@@ -602,6 +610,18 @@ export class Scene3D {
     if (this.composer) this.composer.render(dt);
     else if (this.outline) this.outline.render(this.scene, this.camera);
     else this.renderer.render(this.scene, this.camera);
+  }
+
+  /** Règle l'éclairage sur l'heure : 1 en plein jour, 0 en pleine nuit, avec une lumière dorée entre les deux. */
+  setDaylight(k: number): void {
+    const l = this.lights;
+    if (!l || Math.abs(k - this.light) < 0.004) return;
+    this.light = k;
+    const dusk = 1 - Math.abs(k * 2 - 1);
+    l.sun.intensity = l.sunBase * (0.12 + 0.88 * k);
+    l.hemi.intensity = l.hemiBase * (0.5 + 0.5 * k);
+    l.sun.color.copy(l.sunColor).lerp(NIGHT_SUN, 1 - k).lerp(DUSK_SUN, dusk * 0.6);
+    l.hemi.color.copy(l.sky).lerp(NIGHT_SKY, (1 - k) * 0.85);
   }
 
   /** Rend une petite scène à part dans une texture, avec le même trait que la serre, et en lit les pixels. */

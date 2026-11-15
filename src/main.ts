@@ -15,6 +15,9 @@ const report = (what: unknown) => {
 window.addEventListener('error', (e) => report(e.error ?? e.message));
 window.addEventListener('unhandledrejection', (e) => report(e.reason));
 
+const night = document.getElementById('night')!;
+let shown = -1;
+
 const params = new URLSearchParams(location.search);
 const speed = Math.max(1, Number(params.get('vitesse')) || 1);
 const t0 = Date.now();
@@ -26,8 +29,9 @@ const away = sim.advance(state, clock());
 
 // Direction artistique retenue : la bande dessinée. Les parties commencées dans un autre style y passent une fois.
 if (!state.hints?.bd) { state.style = 'bd'; (state.hints ??= {}).bd = true; }
-// Essai en cours : la vue à la première personne. Elle devient le décor par défaut, une fois.
-if (!state.hints?.fp) { state.theme = 'pavillon'; (state.hints ??= {}).fp = true; }
+// Un seul décor : la verrière vue de l'intérieur. Les anciens décors vus de haut ne sont plus proposés.
+state.theme = 'pavillon';
+(state.hints ??= {}).fp = true;
 const scene = new Scene3D(document.getElementById('gl') as HTMLCanvasElement, state.theme, state.style);
 const ui = new UI(state, scene, () => {
   sim.wipe();
@@ -67,6 +71,9 @@ function frame(nowMs: number): void {
   last = nowMs;
   sim.advance(state, clock());
   scene.sync(state);
+  const light = sim.daylight(state);
+  scene.setDaylight(light);
+  if (light !== shown) { shown = light; night.style.opacity = String(1 - light); }
   scene.render(nowMs / 1000, dt);
   ui.layout();
   uiAcc += dt;

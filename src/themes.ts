@@ -311,6 +311,7 @@ const pavillon: Theme = {
       { act: 'market', label: '📈 Marché', at: at(225, 1.05, 1.5, 4.5), spot: 0, r: 0.7 },
       { act: 'packets', label: '🎁 Sachets', at: at(135, 1.5, 1.35, 4.7), spot: 0, r: 0.5 },
       { act: 'trek', label: '🥾 Expédition', at: at(135, -1.3, 1.15, 4.6), spot: 0, r: 0.6 },
+      { act: 'water', label: '💧 Arrosage', at: at(90, 0, 0.18, 3.2), spot: 0, r: 0.6 },
       { act: 'door', label: '🚪', at: at(135, 0, 1.7, 5.0), spot: -1, r: 0.9 },
       { act: 'gext1', label: '🔒 Potager', at: fromGarden(45, 0, 1.1, P.pots), spot: 1, r: 0.9 },
       { act: 'gext2', label: '🔒 Rocaille', at: fromGarden(225, 0, 1.1, P.pots), spot: 1, r: 0.9 },

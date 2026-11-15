@@ -1,7 +1,6 @@
 /** Le contenu de chaque panneau, un par fonction. `ui` donne l'état et le panneau ouvert. */
-import { BASKETS, GARDEN_EXT, TREK_GEAR, BIOMES, GARDEN, GARDEN_FIRST, GARDEN_INDEX, SEASONS, FAMILIES, FAMILY_IDS, GLAZES, LEVEL_WORDS, POT_SIZES, RARITIES, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, STAGES, ZONES } from './data';
+import { BASKETS, DAY_LENGTH, GARDEN_EXT, TANKS, TREK_GEAR, BIOMES, GARDEN, GARDEN_FIRST, GARDEN_INDEX, SEASONS, FAMILIES, FAMILY_IDS, GLAZES, LEVEL_WORDS, POT_SIZES, RARITIES, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, STAGES, ZONES } from './data';
 import type { Species } from './data';
-import { THEMES } from './themes';
 import * as sim from './sim';
 
 
@@ -26,6 +25,7 @@ export function sheetHtml(ui: UI): string {
     case 'fiche': return ficheHtml(ui, SPECIES_BY_ID[ui.argId]);
     case 'zone': return zoneHtml(ui);
     case 'gext': return gardenExtHtml(ui);
+    case 'water': return waterHtml(ui);
     case 'vitrine': return vitrineHtml(ui);
     case 'atelier': return atelierHtml(ui);
     case 'trophies': return trophiesHtml(ui);
@@ -59,6 +59,36 @@ export function vitrineHtml(ui: UI): string {
     <button class="btn gold wide" data-act="tips" ${tips > 0 ? '' : 'disabled'}>Ramasser les pourboires · ${fmt(tips)} 🪙</button>
     ${rows}
     ${free ? `<p class="sub center">${free} socle${free > 1 ? 's' : ''} libre${free > 1 ? 's' : ''} : touche une plante en fleur, puis « Exposer ».</p>` : ''}</div>`;
+}
+
+/** Arrosage automatique : la cuve, la pompe, une vanne par zone. */
+export function waterHtml(ui: UI): string {
+  const s = ui.s;
+  if (!s.upgrades.water) {
+    const can = s.coins >= sim.PRICES.water;
+    return head(ui, '💧 Arrosage automatique') + `<div class="sh-body">
+      <p class="sub">Un goutte-à-goutte arrose chaque pot dès qu'il a soif, en puisant dans une cuve d'eau de pluie. La pluie de la nuit la remplit à chaque lever du jour, et tu peux pomper à la main entre-temps.</p>
+      <button class="btn primary wide" data-act="upgrade" data-arg="water" ${can ? '' : 'disabled'}>Installer · ${fmt(sim.PRICES.water)} 🪙</button>
+      ${can ? '' : `<p class="sub center">Il te manque ${fmt(sim.PRICES.water - s.coins)} 🪙.</p>`}</div>`;
+  }
+  const left = sim.tankOf(s), cap = sim.tankCap(s), size = s.tankSize ?? 0;
+  const plants = s.slots.filter((sl, i) => sl.plant && !s.dry?.[sim.zoneIndexOfSlot(i)]).length;
+  // Un pot boit environ une fois toutes les WATER_DURATION secondes le jour, deux fois moins la nuit.
+  const perDay = Math.round(plants * (DAY_LENGTH / sim.WATER_DURATION) * 0.8);
+  const next = TANKS[size + 1];
+  const zones = [...ZONES.map((_, z) => z), ...(s.zonesOpen[GARDEN_INDEX] ? [GARDEN_INDEX] : [])].filter((z) => s.zonesOpen[z]).map((z) => {
+    const n = s.slots.filter((sl, i) => sl.plant && sim.zoneIndexOfSlot(i) === z).length;
+    const on = !s.dry?.[z];
+    return `<div class="card"><div class="ico">${(ZONES[z] ?? GARDEN).icon}</div><div class="mid"><div class="nm">${ui.zname(z)}</div><div class="ds">${n} plante${n > 1 ? 's' : ''}${on ? '' : ' · à arroser à la main'}</div></div><button class="btn small ${on ? 'primary' : ''}" data-act="valve" data-arg="${z}">${on ? 'Ouverte' : 'Fermée'}</button></div>`;
+  }).join('');
+  return head(ui, '💧 Arrosage automatique') + `<div class="sh-body">
+    <h3>${TANKS[size].name}</h3>
+    <div class="tankbar"><i style="width:${Math.round(100 * left / cap)}%"></i><span>${Math.floor(left)} / ${cap} arrosages</span></div>
+    <p class="sub">${plants ? `Tes ${plants} plantes arrosées boivent environ ${perDay} arrosages par jour. ${perDay > cap ? 'La cuve ne tient pas la journée : ferme une vanne, pompe ou agrandis-la.' : 'La cuve tient la journée.'}` : 'Aucune plante à arroser pour l\'instant.'} La pluie de la nuit la remplit au lever du jour, dans ${clock(sim.untilDawn(s))}.</p>
+    <button class="btn gold wide" data-act="pump" ${left >= cap ? 'disabled' : ''}>Pomper · +${sim.PUMP} arrosages</button>
+    <h3>Vannes</h3>
+    ${zones}
+    ${next ? `<h3>Agrandir</h3><div class="card"><div class="ico">💧</div><div class="mid"><div class="nm">${next.name}</div><div class="ds">${next.cap} arrosages au lieu de ${cap}.</div></div><button class="btn ${s.coins >= next.price ? 'primary' : ''} small" data-act="buytank" ${s.coins >= next.price ? '' : 'disabled'}>${fmt(next.price)} 🪙</button></div>` : ''}</div>`;
 }
 
 /** Agrandir le jardin : la parcelle suivante, son prix, ce qu'elle apporte. */
@@ -163,9 +193,9 @@ export function plantHtml(ui: UI): string {
   return head(ui, `${EMOJI[sp.id]} ${esc(vname(sp, vr))}`) + `<div class="sh-body">
     <div class="kv"><span>${STAGES[sim.stageOf(p.prog)]}</span><b>${p.prog >= 1 ? 'Prête' : 'encore ' + eta}</b></div>
     <div class="prog"><i style="width:${Math.round(p.prog * 100)}%"></i></div>
-    <div class="facts"><span class="chip">⭐ ${sim.qualityWord(p.q)}</span><span class="chip ${p.water > 0 ? '' : 'ko'}">💧 ${s.upgrades.water ? 'auto' : p.water > 0 ? Math.round(p.water * 100) + ' %' : 'à sec'}</span>${p.pests > 0 ? '<span class="chip ko">🐛 chenilles</span>' : ''}${sim.harmony(slot) ? '<span class="chip ok">💚 pot accordé</span>' : ''}${sim.inSeason(s, sp) ? '<span class="chip ok">de saison</span>' : ''}</div>
+    <div class="facts"><span class="chip">⭐ ${sim.qualityWord(p.q)}</span><span class="chip ${p.water > 0 ? '' : 'ko'}">💧 ${sim.dripOn(s, ui.arg) ? 'auto' : p.water > 0 ? Math.round(p.water * 100) + ' %' : 'à sec'}</span>${p.pests > 0 ? '<span class="chip ko">🐛 chenilles</span>' : ''}${sim.harmony(slot) ? '<span class="chip ok">💚 pot accordé</span>' : ''}${sim.inSeason(s, sp) ? '<span class="chip ok">de saison</span>' : ''}</div>
     ${conditions(sp, c)}
-    <div class="tiles">${s.upgrades.water ? '' : tile('water', '💧', 'Arroser', { off: p.water > 0.95, hot: p.water < 0.5 })}${tile('fert', '🧪', 'Engrais', { off: !(s.fert > 0 && p.prog < 1), note: '×' + s.fert })}${p.cut === 1 && p.prog < 1 ? tile('prune', '✂️', 'Tailler', { hot: true }) : ''}${tile('paintslot', '🎨', 'Peindre')}${tile('admire', '🔍', 'Admirer')}${tile('fiche', '📖', 'Fiche', { arg: sp.id })}</div></div>`;
+    <div class="tiles">${sim.dripOn(s, ui.arg) ? '' : tile('water', '💧', 'Arroser', { off: p.water > 0.95, hot: p.water < 0.5 })}${tile('fert', '🧪', 'Engrais', { off: !(s.fert > 0 && p.prog < 1), note: '×' + s.fert })}${p.cut === 1 && p.prog < 1 ? tile('prune', '✂️', 'Tailler', { hot: true }) : ''}${tile('paintslot', '🎨', 'Peindre')}${tile('admire', '🔍', 'Admirer')}${tile('fiche', '📖', 'Fiche', { arg: sp.id })}</div></div>`;
 }
 
 export function marketHint(ui: UI, p: number): string {
@@ -242,7 +272,7 @@ export function shopHtml(ui: UI): string {
     <p class="sub">Sachet d'une seule famille, trois graines · ${sim.PRICES.familyPacket} 🪙</p>
     <div class="tiles four">${FAMILY_IDS.map((f) => tile('buypacket', FAMILIES[f].icon, FAMILIES[f].name, { arg: f, off: s.coins < sim.PRICES.familyPacket })).join('')}</div>
     <h3>Équipement</h3>
-    ${item('🚿', 'Arrosage automatique', 'Plus jamais de pot à sec, même en ton absence.', sim.PRICES.water, 'upgrade', 'water', s.upgrades.water)}
+    ${item('🚿', 'Arrosage automatique', 'Un goutte-à-goutte et sa cuve d\'eau de pluie, à régler près du bassin.', sim.PRICES.water, 'upgrade', 'water', s.upgrades.water)}
     ${item('🐞', 'Lâcher de coccinelles', 'Elles mangent les pucerons à ta place.', sim.PRICES.bugs, 'upgrade', 'bugs', s.upgrades.bugs)}
     <h3>Climat</h3>
     ${gear('🌫️', 'Brumisateur', 'Zone d\'ombre : l\'air devient humide. Pour les fougères.', 'mist')}
@@ -255,8 +285,6 @@ export function shopHtml(ui: UI): string {
     <h3>Atelier</h3>
     ${item('🔥', 'Four à double foyer', 'Les pots cuisent deux fois plus vite.', sim.PRICES.fastKiln, 'upgrade', 'fastKiln', !!s.upgrades.fastKiln)}
     ${item('🧱', 'Grand bac d\'argile', 'Le bac contient deux fois plus d\'argile.', sim.PRICES.bigClay, 'upgrade', 'bigClay', !!s.upgrades.bigClay)}
-    <h3>Décor</h3>
-    <div class="themes">${THEMES.map((t) => `<button class="theme ${t.id === ui.scene.themeId ? 'on' : ''}" data-act="theme" data-arg="${t.id}"><span class="sw" style="background:${t.bg}"></span><b>${esc(t.name)}</b><small>${esc(t.desc)}</small></button>`).join('')}</div>
     </div>`;
 }
 
@@ -275,7 +303,7 @@ export function trekHtml(ui: UI): string {
     ? '<span class="chip ok">Dans le sac</span>' : `<button class="btn ${s.coins >= TREK_GEAR[k].price ? 'primary' : ''} small" data-act="trek-gear" data-arg="${n}" ${s.coins >= TREK_GEAR[k].price ? '' : 'disabled'}>${fmt(TREK_GEAR[k].price)} 🪙</button>`}</div>`;
   return head(ui, '🥾 Expédition') + `<div class="sh-body">
     <p class="sub">La serre est posée sur une petite planète. Pars à pied cueillir graines et boutures sauvages : plus tu t'éloignes, plus elles sont rares. Sois rentré avant la nuit, ou tu perdras la moitié du panier.</p>
-    ${t.rest > 0 ? `<div class="card"><div class="ico">😴</div><div class="mid"><div class="nm">Repos</div><div class="ds">Tu repars dans ${clock(t.rest)}.</div></div></div>` : '<button class="btn gold big" data-act="trek-go">🌍 Partir en expédition</button>'}
+    ${t.rest > 0 ? `<div class="card"><div class="ico">😴</div><div class="mid"><div class="nm">Une expédition par jour</div><div class="ds">Tu repars au lever du jour, dans ${clock(t.rest)}.</div></div></div>` : '<button class="btn gold big" data-act="trek-go">🌍 Partir en expédition</button>'}
     <h3>Régions</h3>
     ${rows}
     <div class="card"><div class="ico">🧺</div><div class="mid"><div class="nm">Panier : ${sim.basketCap(s)} plantes</div><div class="ds">${next ? `Un plus grand panier en porte ${next.cap}.` : 'C\'est le plus grand panier.'}</div></div>${next
@@ -299,6 +327,8 @@ export function seasonHtml(ui: UI): string {
   const fams = season.fams.map((f) => `${FAMILIES[f].icon} ${FAMILIES[f].name}`).join(' et ');
   return head(ui, `${season.icon} ${season.name}`) + `<div class="sh-body">
     <p class="sub">${season.text}</p>
+    <div class="kv"><span>Heure</span><b>${sim.isNight(s) ? '🌑' : '☀️'} ${Math.floor(sim.hourOf(s))} h · ${sim.isNight(s) ? 'nuit' : 'jour'} ${sim.dayOf(s) + 1}</b></div>
+    <p class="sub">Une journée dure une heure. La nuit, de 21 h à 5 h, les plantes poussent deux fois moins vite et boivent deux fois moins, sauf les plantes nocturnes qui en profitent. Au lever du jour, la pluie a rempli la cuve et tu peux repartir en expédition.</p>
     <div class="kv"><span>Familles de saison</span><b>${fams}</b></div>
     <div class="kv"><span>Bonus</span><b>Croissance +${Math.round((sim.SEASON_SPEED - 1) * 100)} %</b></div>
     <div class="kv"><span>Saison suivante</span><b>${next.icon} ${next.name} dans ${clock(se.left)}</b></div>
@@ -350,25 +380,44 @@ export function almanacHtml(ui: UI): string {
 }
 
 export function ficheHtml(ui: UI, sp: Species): string {
-  const d = ui.s.disc[sp.id];
+  const s = ui.s;
+  const d = s.disc[sp.id];
   const bloomed = !!d?.bloomed;
-  const mins = Math.round(sp.grow / 60 * 10) / 10;
+  // Durée de culture, comptée en journées de jeu quand elle dépasse l'heure.
+  const mins = Math.round(sp.grow / 60);
+  const grow = sp.grow >= DAY_LENGTH ? `${String(Math.round(sp.grow / DAY_LENGTH * 10) / 10).replace('.', ',')} jour${sp.grow >= 2 * DAY_LENGTH ? 's' : ''}` : `${mins} min`;
+  const zones = [...ZONES, ...(s.zonesOpen[GARDEN_INDEX] ? [GARDEN] : [])].filter((z) => sim.fitOf(sp, sim.zoneClimate(s, z)) >= 1).map((z) => ui.zname(ZONES.indexOf(z)));
+  const wild = BIOMES.filter((b) => b.fams.includes(sp.family)).map((b) => `${b.icon} ${b.name}`);
+  const season = SEASONS.filter((x) => x.fams.includes(sp.family)).map((x) => `${x.icon} ${x.name}`);
+  const growing = s.slots.filter((sl) => sl.plant?.sp === sp.id).length;
+  const kv = (k: string, v: string) => `<div class="kv"><span>${k}</span><b>${v}</b></div>`;
   return head(ui, `${EMOJI[sp.id]} ${esc(sp.name)}`) + `<div class="sh-body">
     <p class="sub"><i>${esc(sp.latin)}</i> · ${FAMILIES[sp.family].name} · ${esc(sp.origin)}</p>
-    <div>${rarTag(sp)} <span class="st">${stars(sim.starsOf(d))}</span></div>
+    <div>${rarTag(sp)} <span class="st">${stars(sim.starsOf(d))}</span>${sp.night ? ' <span class="chip">🌑 Nocturne</span>' : ''}</div>
     <h3>Ce qu'elle aime</h3>${needsChips(sp)}
-    <p class="sub">Idéal : ${[...ZONES, ...(ui.s.zonesOpen[GARDEN_INDEX] ? [GARDEN] : [])].filter((z) => sim.fitOf(sp, sim.zoneClimate(ui.s, z)) >= 1).map((z) => ui.zname(ZONES.indexOf(z))).join(', ') || 'aucun coin parfait pour l\'instant, cherche le moins mauvais ou équipe la serre'}.</p>
-    <div class="kv"><span>Taille adulte</span><b>${esc(sp.height)}</b></div>
-    <div class="kv"><span>Pot nécessaire</span><b>${POT_SIZES[sim.sizeOf(sp) - 1].name}${sim.sizeOf(sp) > 1 ? ' ou plus grand' : ''}</b></div>
-    <div class="kv"><span>Émail préféré</span><b>${GLAZES[FAMILIES[sp.family].glaze].name}</b></div>
-    ${sp.pets ? `<div class="kv"><span>Chats et chiens</span><b>${sp.pets === 'ok' ? 'Sans danger' : 'Toxique si mâchouillée'}</b></div>` : ''}
+    <p class="sub">Idéal : ${zones.join(', ') || 'aucun coin parfait pour l\'instant, cherche le moins mauvais ou équipe la serre'}.</p>
+    ${kv('Saison favorite', season.join(' et ') || 'Aucune')}
+    ${kv('Rythme', sp.night ? 'Pousse surtout la nuit' : 'Pousse surtout le jour')}
+    ${kv('Pot nécessaire', POT_SIZES[sim.sizeOf(sp) - 1].name + (sim.sizeOf(sp) > 1 ? ' ou plus grand' : ''))}
+    ${kv('Émail préféré', GLAZES[FAMILIES[sp.family].glaze].name)}
+    <h3>Où la trouver</h3>
+    ${kv('En expédition', wild.join(', ') || 'Introuvable à l\'état sauvage')}
+    ${kv('En sachet', sp.rarity === 'legendaire' ? 'Rarissime' : `Sachet ${FAMILIES[sp.family].name.toLowerCase()} ou mystère`)}
+    ${kv('Par croisement', sp.rarity === 'commun' ? 'Non' : 'Deux plantes de sa famille, un cran moins rares')}
+    <h3>Culture</h3>
+    ${kv('Du semis à la fleur', `${grow} dans un coin idéal`)}
+    ${kv('Valeur de base', `${fmt(sp.value)} 🪙`)}
+    ${kv('Cours du jour', `${mult(s.market[sp.family].p)}, soit ${fmt(sp.value * s.market[sp.family].p)} 🪙`)}
+    ${kv('Panachée ou dorée', `${fmt(sp.value * sim.VARIANT_MULT[1])} 🪙 ou ${fmt(sp.value * sim.VARIANT_MULT[2])} 🪙`)}
     <h3>Dans ta collection</h3>
-    <div class="kv"><span>Variantes obtenues</span><b>${d?.bloomed ? 'Normale' : 'Aucune'}${d?.vars[1] ? ' · Panachée 🤍' : ''}${d?.vars[2] ? ' · Dorée 💛' : ''}</b></div>
-    <div class="kv"><span>Spécimens vendus</span><b>${fmt(d?.sold ?? 0)}</b></div>
-    <h3>Dans le jeu</h3>
-    <div class="kv"><span>Valeur de base</span><b>${fmt(sp.value)} 🪙</b></div>
-    <div class="kv"><span>Croissance idéale</span><b>${String(mins).replace('.', ',')} min</b></div>
-    <h3>Le savais-tu ?</h3>
+    ${kv('Variantes obtenues', `${d?.bloomed ? 'Normale' : 'Aucune'}${d?.vars[1] ? ' · Panachée 🤍' : ''}${d?.vars[2] ? ' · Dorée 💛' : ''}`)}
+    ${kv('Meilleure qualité', bloomed ? `${Math.round(d!.bestQ)} % · ${sim.qualityWord(d!.bestQ)}` : 'Pas encore fleurie')}
+    ${kv('Graines en réserve', String(s.seeds[sp.id] ?? 0))}
+    ${kv('En culture', String(growing))}
+    ${kv('Spécimens vendus', fmt(d?.sold ?? 0))}
+    <h3>Dans la nature</h3>
+    ${kv('Taille adulte', esc(sp.height))}
+    ${sp.pets ? kv('Chats et chiens', sp.pets === 'ok' ? 'Sans danger' : 'Toxique si mâchouillée') : ''}
     <div class="fact ${bloomed ? '' : 'lock'}">${bloomed ? esc(sp.fact) : '🔒 Fais-la fleurir une première fois pour découvrir son anecdote.'}</div>
     <h3>Chez toi</h3>
     <div class="fact ${bloomed ? '' : 'lock'}">${bloomed ? esc(sp.tip) : '🔒 Un vrai conseil de culture t\'attend à la première floraison.'}</div></div>`;

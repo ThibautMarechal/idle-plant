@@ -11,7 +11,7 @@ import { SPECIES_MARK } from './icons';
 export const EMOJI: Record<string, string> = SPECIES_MARK;
 export const ZONE_SHORT = ['Ombre', 'Bassin', 'Porte', 'Plein sud'];
 
-export type SheetKind = 'trek' | 'season' | 'trophies' | 'atelier' | 'paint' | 'vitrine' | 'none' | 'seed' | 'buypot' | 'plant' | 'harvest' | 'packets' | 'market' | 'shop' | 'almanac' | 'fiche' | 'zone' | 'gext';
+export type SheetKind = 'trek' | 'season' | 'trophies' | 'atelier' | 'paint' | 'vitrine' | 'none' | 'seed' | 'buypot' | 'plant' | 'harvest' | 'packets' | 'market' | 'shop' | 'almanac' | 'fiche' | 'zone' | 'gext' | 'water';
 
 export const $ = (id: string) => document.getElementById(id)!;
 export const fmt = (n: number) => Math.round(n).toLocaleString('fr-FR');

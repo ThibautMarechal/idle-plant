@@ -445,7 +445,7 @@ export class UI {
       return;
     }
     if (p.prog >= 1) return this.open('harvest', i);
-    if (p.water < 0.5 && !s.upgrades.water) {
+    if (p.water < 0.5 && !sim.dripOn(s, i)) {
       sim.water(s, i);
       this.scene.pop(i);
       this.float(i, '💧');
@@ -484,6 +484,9 @@ export class UI {
         if (sim.fertilize(s, this.arg)) { this.scene.pop(this.arg); this.float(this.arg, '🧪'); this.buzz(15); }
         break;
       case 'gear': sim.toggleGear(s, arg as sim.ClimateGear); break;
+      case 'pump': if (sim.pumpTank(s)) { play('water'); this.buzz(12); } break;
+      case 'valve': sim.toggleValve(s, Number(arg)); play('tap'); break;
+      case 'buytank': if (sim.buyTank(s)) { this.toast('Cuve agrandie et remplie !'); this.buzz(25); play('coin'); } break;
       case 'flip': this.flipNext(); break;
       case 'flipall': this.flipAll(); break;
       case 'buygext': if (sim.buyGardenExt(s)) { this.toast(`${GARDEN_EXT[(s.gardenExt ?? 1) - 1].name} : parcelle aménagée, trois emplacements de plus !`); this.buzz(30); play('coin'); this.close(); this.scene.walk(1, (s.gardenExt ?? 1) === 1 ? 45 : 225); } break;
@@ -1047,7 +1050,7 @@ export class UI {
     const s = this.s;
     this.layout();
     // Outils à promener : visibles seulement quand ils servent.
-    const thirsty = !s.upgrades.water && s.slots.some((sl) => sl.plant && sl.plant.water < 0.5);
+    const thirsty = s.slots.some((sl, i) => sl.plant && sl.plant.water < 0.5 && !sim.dripOn(s, i));
     const bugs = s.slots.some((sl) => sl.plant && sl.plant.pests > 0);
     const ripe = s.slots.filter((sl) => sl.plant && sl.plant.prog >= 1).length;
     const tools = $('tools').children;
@@ -1110,7 +1113,7 @@ export class UI {
       else if (p.pests > 0) { cls += ' alert'; txt = '🐛'.repeat(p.pests); }
       else if (p.cut === 1 && p.prog < 1) { cls += ' alert'; txt = '✂️'; }
       else if (p.prog >= 1) { cls += ' ready'; txt = '🌸'; }
-      else if (p.water < 0.5 && !s.upgrades.water) { cls += ' alert'; txt = '💧'; }
+      else if (p.water < 0.5 && !sim.dripOn(s, i)) { cls += ' alert'; txt = '💧'; }
       else cls += ' hidden';
       cls += slot.pot ? '' : ' low';
       if (badge.className !== cls) badge.className = cls;
@@ -1139,7 +1142,12 @@ export class UI {
       }
       else if (h.act === 'packets') { alert = s.packets > 0; txt = alert ? `🎁 ${s.packets} à ouvrir` : `🎁 ${clock(pwait)}`; }
       else if (h.act === 'atelier') { alert = kilnDone; txt = kilnDone ? '🏺 Pot cuit !' : kilnOn ? `🔥 ${clock(s.kiln!.left)}` : h.label; }
-      else if (h.act === 'trek') { alert = rest <= 0; txt = rest > 0 ? `🥾 ${clock(rest)}` : '🥾 Partir'; }
+      else if (h.act === 'trek') { alert = rest <= 0; txt = rest > 0 ? `🥾 Demain · ${clock(rest)}` : '🥾 Partir'; }
+      else if (h.act === 'water') {
+        const left = sim.tankOf(s), cap = sim.tankCap(s);
+        alert = s.upgrades.water && left < 1;
+        txt = !s.upgrades.water ? '💧 Arrosage' : left < 1 ? '💧 Cuve vide !' : `💧 ${Math.floor(left)} / ${cap}`;
+      }
       else if (h.act === 'market') { alert = marketHot; txt = marketHot ? '📈 Ça grimpe !' : s.stock.length ? `💐 Étal · ${s.stock.length}` : h.label; }
       const sp = el.firstElementChild!;
       if (sp.textContent !== txt) sp.textContent = txt;
@@ -1169,7 +1177,7 @@ export class UI {
     const ct = sim.contestOf(s);
     const prize = !!sim.CONTEST[ct.claimed] && ct.blooms >= sim.CONTEST[ct.claimed].need;
     const ready = sim.TROPHIES.filter((x) => sim.trophyReady(s, x)).length;
-    const hud = `<div class="hudrow"><div class="pill coins">🪙 ${fmt(s.coins)}</div><button class="pill season" data-act="nav" data-arg="season">${SEASONS[se.index].icon}<small>${SEASONS[se.index].name}</small>${prize ? '<i class="dot">!</i>' : ''}</button><button class="pill lvl" data-act="nav" data-arg="trophies"><span>🎓 <small>Niv.</small> ${lv.level}</span><i class="xp"><i style="width:${Math.round(100 * lv.into / lv.span)}%"></i></i>${ready ? `<i class="dot">${ready}</i>` : ''}</button><button class="pill" data-act="nav" data-arg="almanac">📖 ${col.bloomed}<small>/${SPECIES.length}</small></button></div>${info}`;
+    const hud = `<div class="hudrow"><div class="pill coins">🪙 ${fmt(s.coins)}</div><button class="pill season" data-act="nav" data-arg="season">${sim.isNight(s) ? '🌑' : SEASONS[se.index].icon}<small>${Math.floor(sim.hourOf(s))} h</small>${prize ? '<i class="dot">!</i>' : ''}</button><button class="pill lvl" data-act="nav" data-arg="trophies"><span>🎓 <small>Niv.</small> ${lv.level}</span><i class="xp"><i style="width:${Math.round(100 * lv.into / lv.span)}%"></i></i>${ready ? `<i class="dot">${ready}</i>` : ''}</button><button class="pill" data-act="nav" data-arg="almanac">📖 ${col.bloomed}<small>/${SPECIES.length}</small></button></div>${info}`;
     if (hud !== this.lastHud && (force || !this.pointerDown)) { $('hud').innerHTML = hud; this.lastHud = hud; }
 
     // Nouvelles fiches à fêter

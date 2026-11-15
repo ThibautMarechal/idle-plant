@@ -27,6 +27,8 @@ export interface Species {
   pets?: 'ok' | 'toxique';
   /** Taille de pot minimale : 1 petit (par défaut), 2 moyen, 3 grand. */
   size?: number;
+  /** Plante nocturne : elle pousse plus vite la nuit que le jour. */
+  night?: boolean;
 }
 
 export const FAMILIES: Record<Family, { name: string; icon: string; color: string; glaze: number }> = {
@@ -354,6 +356,12 @@ export const BIOMES: Biome[] = [
   { id: 'dunes', name: 'Les dunes', icon: '🏜️', fams: ['succulentes', 'aromatiques'], price: 900, text: 'Sable chaud et vent sec : succulentes et aromatiques.', sky: ['#a9d8f2', '#fbe9c6'], ground: 0xe9d3a0, fog: 0xf6e7c8 },
 ];
 /** Durée d'une sortie (s), repos entre deux sorties (s), tailles et prix du panier. */
+/** Une journée de jeu dure une heure : le jour se lève à 6 h, la nuit tombe vers 21 h. */
+export const DAY_LENGTH = 3600;
+/** Cuves de l'arrosage automatique : contenance en arrosages, prix de l'agrandissement. */
+export const TANKS: { cap: number; price: number; name: string }[] = [
+  { cap: 200, price: 0, name: 'Tonneau' }, { cap: 500, price: 800, name: 'Citerne' }, { cap: 1200, price: 2500, name: 'Grande citerne' },
+];
 export const TREK_TIME = 150;
 /** Marge de la coupe parfaite sur la jauge, selon la rareté (fraction de la jauge). */
 export const CUT_ZONE: Record<Rarity, number> = { commun: 0.3, rare: 0.22, exotique: 0.16, legendaire: 0.11 };

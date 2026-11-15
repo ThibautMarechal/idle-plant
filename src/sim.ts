@@ -1,4 +1,4 @@
-import { BASKETS, BIOMES, GARDEN_BASE, GARDEN_EXT, TREK_GEAR, TREK_REST, TREK_TIME, GARDEN, GARDEN_CLIMATE, GARDEN_FIRST, GARDEN_INDEX, PROF_MAX, PROF_MIN, BASE_SLOTS, SEASONS, SEASON_LENGTH, CLIENTS, FAMILIES, FAMILY_IDS, GLAZES, NEWS, POT_SIZES, RARITIES, SLOT_COUNT, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, ZONES } from './data';
+import { BASKETS, BIOMES, DAY_LENGTH, TANKS, GARDEN_BASE, GARDEN_EXT, TREK_GEAR, TREK_TIME, GARDEN, GARDEN_CLIMATE, GARDEN_FIRST, GARDEN_INDEX, PROF_MAX, PROF_MIN, BASE_SLOTS, SEASONS, SEASON_LENGTH, CLIENTS, FAMILIES, FAMILY_IDS, GLAZES, NEWS, POT_SIZES, RARITIES, SLOT_COUNT, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, ZONES } from './data';
 import type { Family, Rarity, Species, Zone } from './data';
 
 /** `vr` : variante, 0 normale, 1 panachée, 2 dorée. */
@@ -85,7 +85,13 @@ export interface State {
   /** Astuces déjà montrées une fois. */
   hints?: Record<string, boolean>;
   /** Expéditions : repos restant (s), taille du panier, milieux ouverts, sorties faites. */
-  trek?: { rest: number; basket: number; open: boolean[]; done: number; boots?: boolean; lantern?: boolean };
+  trek?: { rest: number; basket: number; open: boolean[]; done: number; boots?: boolean; lantern?: boolean; day?: number };
+  /** Horloge du jeu, en secondes : elle fait tourner le jour et la nuit. */
+  clock?: number;
+  /** Arrosage automatique : arrosages restants dans la cuve, taille de la cuve, zones dont la vanne est fermée. */
+  tank?: number;
+  tankSize?: number;
+  dry?: boolean[];
   stats: { sold: number; earned: number; bestMult: number; planted: number; opened: number; crafted: number; painted: number; orders: number; cuttings: number; crossed?: number; contests?: number };
   lastTick: number;
 }
@@ -236,21 +242,80 @@ function clamp(x: number, a: number, b: number): number {
   return Math.max(a, Math.min(b, x));
 }
 
+/** Jour de jeu en cours, compté depuis le début de la partie. */
+export function dayOf(s: State): number {
+  return Math.floor((s.clock ?? 0) / DAY_LENGTH);
+}
+/** Heure qu'il est dans la serre, de 0 à 24 : la journée commence à 6 h. */
+export function hourOf(s: State): number {
+  return ((((s.clock ?? 0) % DAY_LENGTH) / DAY_LENGTH) * 24 + 6) % 24;
+}
+/** Lumière du jour, de 0 (nuit noire) à 1 (plein jour), avec une heure d'aube et une heure de crépuscule. */
+export function daylight(s: State): number {
+  const h = hourOf(s);
+  if (h >= 6 && h < 20) return 1;
+  if (h >= 20 && h < 21) return 21 - h;
+  if (h >= 5 && h < 6) return h - 5;
+  return 0;
+}
+export function isNight(s: State): boolean {
+  return daylight(s) < 0.5;
+}
+/** Secondes avant le prochain lever du jour. */
+export function untilDawn(s: State): number {
+  return DAY_LENGTH - ((s.clock ?? 0) % DAY_LENGTH);
+}
+export const NIGHT_SPEED = 0.5;
+export const NIGHT_BLOOM = 1.5;
+export const PUMP = 10;
+
+export function tankCap(s: State): number {
+  return TANKS[Math.min(TANKS.length - 1, s.tankSize ?? 0)].cap;
+}
+/** Arrosages restants dans la cuve. Une installation toute neuve, ou d'avant les cuves, est pleine. */
+export function tankOf(s: State): number {
+  return s.tank ?? tankCap(s);
+}
+/** Le goutte-à-goutte arrose-t-il cet emplacement en ce moment ? */
+export function dripOn(s: State, i: number): boolean {
+  return s.upgrades.water && !s.dry?.[zoneIndexOfSlot(i)] && tankOf(s) >= 1;
+}
+/** Un coup de pompe : quelques arrosages de plus dans la cuve. */
+export function pumpTank(s: State): boolean {
+  if (!s.upgrades.water || tankOf(s) >= tankCap(s)) return false;
+  s.tank = Math.min(tankCap(s), tankOf(s) + PUMP);
+  return true;
+}
+export function buyTank(s: State): boolean {
+  const n = (s.tankSize ?? 0) + 1;
+  if (!s.upgrades.water || n >= TANKS.length || s.coins < TANKS[n].price) return false;
+  s.coins -= TANKS[n].price;
+  s.tankSize = n;
+  s.tank = tankCap(s);
+  return true;
+}
+/** Ouvre ou ferme la vanne d'une zone. */
+export function toggleValve(s: State, z: number): void {
+  (s.dry ??= [])[z] = !s.dry[z];
+}
+
 function stepPlants(s: State, dt: number, rng: Rng, offline: boolean): void {
   s.bugAcc += dt;
   const bugKill = s.upgrades.bugs && s.bugAcc >= 8;
   if (s.bugAcc >= 8) s.bugAcc = 0;
+  const night = isNight(s);
   s.slots.forEach((slot, i) => {
     const p = slot.plant;
     if (!p) return;
     const sp = SPECIES_BY_ID[p.sp];
     const fit = fitOf(sp, zoneClimate(s, zoneOfSlot(i)));
-    if (s.upgrades.water) p.water = 1;
-    else p.water = Math.max(0, p.water - dt / WATER_DURATION);
+    // La nuit, la terre sèche deux fois moins vite. Le goutte-à-goutte puise dans la cuve dès qu'un pot a soif.
+    p.water = Math.max(0, p.water - (dt / WATER_DURATION) * (night ? 0.5 : 1));
+    if (p.water < 0.2 && dripOn(s, i)) { p.water = 1; s.tank = tankOf(s) - 1; }
     const wet = p.water > 0;
     if (p.prog < 1) {
       // Jamais de plante morte : sans eau ou infestée, elle tourne au ralenti.
-      const speed = fit * (wet ? 1 : 0.25) * (p.pests > 0 ? 0.5 : 1) * (harmony(slot) ? HARMONY_SPEED : 1) * (inSeason(s, sp) ? SEASON_SPEED : 1) * (p.cut === 2 ? PRUNE_SPEED : 1);
+      const speed = fit * (wet ? 1 : 0.25) * (p.pests > 0 ? 0.5 : 1) * (harmony(slot) ? HARMONY_SPEED : 1) * (inSeason(s, sp) ? SEASON_SPEED : 1) * (p.cut === 2 ? PRUNE_SPEED : 1) * (night ? (sp.night ? NIGHT_BLOOM : NIGHT_SPEED) : 1);
       p.prog = Math.min(1, p.prog + (dt / sp.grow) * speed);
       // À mi-croissance, la plante fait des pousses folles : une taille la relance.
       if (!p.cut && p.prog >= 0.45 && p.prog < 1) p.cut = 1;
@@ -318,6 +383,10 @@ export function advance(s: State, now: number, rng: Rng = Math.random): number {
   while (dt > 0) {
     const h = Math.min(step, dt);
     dt -= h;
+    const day = dayOf(s);
+    s.clock = (s.clock ?? 0) + h;
+    // Au lever du jour, la pluie de la nuit a rempli la cuve.
+    if (dayOf(s) !== day && s.upgrades.water) s.tank = tankCap(s);
     stepPlants(s, h, rng, offline);
     s.marketAcc += h;
     while (s.marketAcc >= MARKET_TICK) {
@@ -337,7 +406,8 @@ export function advance(s: State, now: number, rng: Rng = Math.random): number {
     s.visitors += (total / 20) * s.showcase.filter(Boolean).length * (0.5 + rng());
   }
   s.seasonT = (s.seasonT ?? 0) + Math.min(total, SEASON_LENGTH);
-  if (s.trek) s.trek.rest = Math.max(0, s.trek.rest - total);
+  // Une expédition par journée : on repart au prochain lever du jour.
+  if (s.trek) s.trek.rest = s.trek.day === dayOf(s) ? untilDawn(s) : 0;
   // Atelier : l'argile se dépose toute seule, le four cuit, les commandes passent.
   if (s.clay < clayCap(s)) {
     s.clayAcc += total;
@@ -753,7 +823,8 @@ export function trekEnd(s: State, ids: string[], bonus: string[] = [], loot: { c
   // Ce qu'on a ramassé en chemin : de l'argile pour l'atelier, quelques pièces.
   s.clay = Math.max(s.clay, Math.min(clayCap(s), s.clay + loot.clay));
   s.coins += loot.coins;
-  t.rest = TREK_REST;
+  t.day = dayOf(s);
+  t.rest = untilDawn(s);
   t.done++;
   const kept = ids.slice(0, basketCap(s));
   gainXp(s, kept.length * 2);

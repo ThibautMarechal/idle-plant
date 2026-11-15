@@ -295,7 +295,10 @@ describe('simulation', () => {
     expect(got.length).toBe(sim.basketCap(s) + 1);
     expect(Object.values(s.seeds).reduce((a, b) => a + b, 0)).toBe(5);
     expect(sim.trekFinds(s, 0, rng).length).toBe(0);
+    // Une seule sortie par journée de jeu : on repart au lever du jour suivant, une heure plus tard.
     sim.advance(s, 241 * 1000);
+    expect(sim.trekFinds(s, 0, rng).length).toBe(0);
+    sim.advance(s, 3601 * 1000);
     expect(sim.trekFinds(s, 0, rng).length).toBe(18);
     s.coins = 2000;
     expect(sim.openBiome(s, 1)).toBe(true);
@@ -304,7 +307,7 @@ describe('simulation', () => {
     expect(sim.buyTrekGear(s, 'lantern')).toBe(true);
     expect(sim.trekSetup(s).time).toBe(195);
     const coins = s.coins;
-    sim.advance(s, 600 * 1000);
+    sim.advance(s, 4000 * 1000);
     sim.trekEnd(s, [], [], { clay: 2, coins: 40 });
     expect(s.coins).toBe(coins + 40);
   });
@@ -354,5 +357,42 @@ describe('extensions du jardin', () => {
     expect(sim.buyGardenExt(s)).toBe(true);
     expect(sim.slotOpen(s, 24)).toBe(true);
     expect(sim.buyGardenExt(s)).toBe(false);
+  });
+});
+
+describe('jour, nuit et arrosage automatique', () => {
+  it('fait tourner une journée d\'une heure, de 6 h à 6 h', () => {
+    const s = sim.newState(0);
+    expect(sim.hourOf(s)).toBe(6);
+    expect(sim.isNight(s)).toBe(false);
+    sim.advance(s, 2400 * 1000);
+    expect(Math.round(sim.hourOf(s))).toBe(22);
+    expect(sim.isNight(s)).toBe(true);
+    expect(sim.dayOf(s)).toBe(0);
+    sim.advance(s, 3700 * 1000);
+    expect(sim.dayOf(s)).toBe(1);
+    expect(sim.isNight(s)).toBe(false);
+  });
+  it('puise dans la cuve, s\'arrête quand elle est vide ou la vanne fermée, et se remplit à l\'aube', () => {
+    const s = sim.newState(0);
+    s.slots[7].plant = { sp: 'calathea', prog: 0.1, water: 0.1, pests: 0, q: 50, vr: 0 };
+    s.upgrades.water = true;
+    sim.advance(s, 2000, () => 0.99);
+    expect(s.slots[7].plant!.water).toBeGreaterThan(0.9);
+    expect(sim.tankOf(s)).toBe(sim.tankCap(s) - 1);
+    s.tank = 0;
+    s.slots[7].plant!.water = 0.1;
+    sim.advance(s, 4000, () => 0.99);
+    expect(s.slots[7].plant!.water).toBeLessThan(0.2);
+    expect(sim.pumpTank(s)).toBe(true);
+    expect(sim.tankOf(s)).toBe(sim.PUMP);
+    sim.toggleValve(s, sim.zoneIndexOfSlot(7));
+    sim.advance(s, 6000, () => 0.99);
+    expect(s.slots[7].plant!.water).toBeLessThan(0.2);
+    sim.advance(s, 3601 * 1000, () => 0.99);
+    expect(sim.tankOf(s)).toBe(sim.tankCap(s));
+    s.coins = 1000;
+    expect(sim.buyTank(s)).toBe(true);
+    expect(sim.tankCap(s)).toBe(500);
   });
 });
