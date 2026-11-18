@@ -583,6 +583,31 @@ export function crossBlock(s: State, i: number, j: number): string {
   if (s.coins < CROSS_FEE[x.rarity]) return `Il faut ${CROSS_FEE[x.rarity]} pièces pour ce croisement.`;
   return '';
 }
+/**
+ * Pollinisation à la main : le prix est payé et les deux fleurs sont utilisées (les plantes repartent d'un peu plus bas),
+ * que la pollinisation réussisse ou non. Rend l'espèce de la mère, ou '' si le croisement est impossible.
+ */
+export function pollinate(s: State, i: number, j: number): string {
+  if (crossBlock(s, i, j)) return '';
+  const a = s.slots[i].plant!, b = s.slots[j].plant!;
+  s.coins -= CROSS_FEE[SPECIES_BY_ID[a.sp].rarity];
+  a.prog = 0.7;
+  b.prog = 0.7;
+  return a.sp;
+}
+/** La graine née d'une pollinisation réussie : rareté supérieure, même famille si possible. */
+export function crossSeed(s: State, from: string, rng: Rng = Math.random): { id: string; isNew: boolean } {
+  const x = SPECIES_BY_ID[from];
+  const rar = NEXT_RARITY[x.rarity];
+  let pool = SPECIES.filter((sp) => !sp.home && sp.rarity === rar && sp.family === x.family);
+  if (pool.length === 0) pool = SPECIES.filter((sp) => !sp.home && sp.rarity === rar);
+  const fresh = pool.filter((sp) => !s.disc[sp.id]?.bloomed);
+  if (fresh.length) pool = fresh;
+  const pick = pool[Math.floor(rng() * pool.length)];
+  s.stats.crossed = (s.stats.crossed ?? 0) + 1;
+  gainXp(s, 20);
+  return grant(s, [pick.id])[0];
+}
 /** Croise deux plantes : elles partent, une graine de la rareté supérieure arrive (même famille si possible). */
 export function cross(s: State, i: number, j: number, rng: Rng = Math.random): { id: string; isNew: boolean } | null {
   if (crossBlock(s, i, j)) return null;

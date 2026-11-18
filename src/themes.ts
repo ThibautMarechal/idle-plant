@@ -390,10 +390,20 @@ const pavillon: Theme = {
     add(pool);
     // Chaleur humide : la vitre est couverte de buée et de grandes feuilles retombent.
     wall(90, glass(side - 0.2, 3.1, 0.03, 0, 2.15, -A + 0.06, 0xffffff, 0.5),
+      // Une plante grimpante tropicale accrochée à la charpente : des feuilles en cœur qui pendent au bout de leur tige.
       ...[-1.9, 1.9].flatMap((x) => [0, 1, 2].map((k) => {
-        const leaf = box(0.5, 0.04, 1.3, k % 2 ? 0x3f8552 : 0x4f9a5c, x, 3.3 - k * 0.45, -4.4);
-        leaf.rotation.set(0.5 + k * 0.25, (x > 0 ? -1 : 1) * (0.5 + k * 0.3), 0);
-        return leaf;
+        const g = new THREE.Group();
+        const y = 3.75 - k * 0.42, len = 0.35 + k * 0.12;
+        const stem = box(0.03, len, 0.03, 0x3f6a3a, 0, -len / 2, 0, false);
+        const leaf = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 8), mat(k % 2 ? 0x3f8552 : 0x4f9a5c));
+        leaf.scale.set(0.22, 0.34, 0.025);
+        leaf.position.set(0, -len - 0.3, 0);
+        leaf.castShadow = true;
+        const rib = box(0.015, 0.6, 0.03, 0x2f6a3e, 0, -len - 0.3, 0.02, false);
+        g.add(stem, leaf, rib);
+        g.position.set(x + (x > 0 ? -1 : 1) * k * 0.25, y, -4.55 + k * 0.08);
+        g.rotation.set(0.15, (x > 0 ? -1 : 1) * (0.3 + k * 0.25), (x > 0 ? 1 : -1) * 0.12);
+        return g;
       })));
     // Près de la porte : établi clair, et la porte sur le pan voisin.
     bench(180, 0xd9b98a, 0xb99667);

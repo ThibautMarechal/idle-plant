@@ -9,6 +9,7 @@ import { Pick, PICK_OF, PICK_TEXT } from './pick';
 import { Stall } from './stall';
 import { Cellar } from './cellar';
 import { Cutting } from './cutting';
+import { Pollen } from './pollen';
 import { finish, STYLES } from './styles';
 import { themeOf } from './themes';
 import * as sim from './sim';
@@ -66,7 +67,7 @@ export class UI {
   private caveTip = '';
   private caveTipAt = 0;
   private cavePick = -1;
-  private cutGame: Cutting | null = null;
+  private cutGame: Cutting | Pollen | null = null;
   private stallHtml = '';
   /** Outil tenu au doigt : arrosoir ou gant, promené au-dessus des plantes. */
   private tool = '';
@@ -457,8 +458,7 @@ export class UI {
       const why = sim.crossBlock(s, from, i);
       if (why) { this.toast(why); return; }
       this.crossing = -1;
-      const got = sim.cross(s, from, i);
-      if (got) { this.scene.pop(i); this.scene.pop(from); this.buzz(30); this.showPacket([got]); }
+      this.showPollen(from, i);
       this.refresh(true);
       return;
     }
@@ -1129,6 +1129,35 @@ export class UI {
       m.classList.remove('on');
       if (n) { play('plant'); this.buzz(25); this.float(i, `✂️ +${n} graine${n > 1 ? 's' : ''}`); this.toast(n > 1 ? `Coupe parfaite : deux boutures de ${sp.name} prennent racine.` : `La bouture de ${sp.name} prend racine.`); }
       else { play('tap'); this.buzz(60); this.toast('Bouture ratée : elle ne prendra pas. La plante mère, elle, repousse.'); }
+      this.refresh(true);
+    });
+    game.onNote((t) => { $('ct-hint').textContent = t; });
+    this.cutGame = game;
+    requestAnimationFrame(() => game.start());
+  }
+
+  /** Le croisement au pinceau : le prix est payé et les fleurs utilisées, que la pollinisation réussisse ou non. */
+  private showPollen(i: number, j: number): void {
+    const s = this.s, a = s.slots[i]?.plant, b = s.slots[j]?.plant;
+    if (!a || !b) return;
+    const spa = SPECIES_BY_ID[a.sp], spb = SPECIES_BY_ID[b.sp];
+    const fee = sim.CROSS_FEE[spa.rarity];
+    const from = sim.pollinate(s, i, j);
+    if (!from) return;
+    this.close();
+    this.scene.pop(i); this.scene.pop(j);
+    const m = $('modal');
+    m.innerHTML = `<div class="pk-card cut-card"><b>🧬 ${esc(spa.name)} × ${esc(spb.name)}</b><canvas id="ctc"></canvas><p class="sub" id="ct-hint"></p></div>`;
+    m.classList.add('on');
+    const level = Math.max(0, ['commun', 'rare', 'exotique', 'legendaire'].indexOf(spa.rarity));
+    const game = new Pollen($('ctc') as HTMLCanvasElement, spa, spb, level, (score) => {
+      this.cutGame = null;
+      m.classList.remove('on');
+      if (!score) { play('tap'); this.buzz(60); this.toast(`Pollinisation ratée : les ${fmt(fee)} pièces sont perdues, les deux plantes refleuriront.`); this.refresh(true); return; }
+      const got = sim.crossSeed(this.s, from);
+      if (score > 1) { this.s.seeds[from] = (this.s.seeds[from] ?? 0) + 1; this.toast(`Pollinisation parfaite : une graine de ${spa.name} en prime.`); }
+      this.buzz(30);
+      this.showPacket([got]);
       this.refresh(true);
     });
     game.onNote((t) => { $('ct-hint').textContent = t; });

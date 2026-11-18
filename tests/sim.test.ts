@@ -209,10 +209,13 @@ describe('simulation', () => {
     s.slots[9].plant = { sp: 'menthe', prog: 1, water: 1, pests: 0, q: 90, vr: 0 };
     s.slots[10].plant = { sp: 'aloe', prog: 1, water: 1, pests: 0, q: 90, vr: 0 };
     expect(sim.crossBlock(s, 7, 10)).not.toBe('');
-    const got = sim.cross(s, 7, 9, () => 0);
-    expect(got?.id).toBe('lavande');
+    const from = sim.pollinate(s, 7, 9);
+    expect(from).toBe('basilic');
     expect(s.coins).toBe(100 - sim.CROSS_FEE.commun);
-    expect(s.slots[7].plant).toBeNull();
+    expect(s.slots[7].plant?.prog).toBe(0.7);
+    expect(sim.pollinate(s, 7, 9)).toBe('');
+    const got = sim.crossSeed(s, from, () => 0);
+    expect(got.id).toBe('lavande');
     expect(s.seeds.lavande).toBe(1);
   });
 
