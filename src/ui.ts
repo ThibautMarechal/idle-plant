@@ -1,4 +1,4 @@
-import { SOILS, GEAR, GEAR_IDS, BIOMES, LAND_BIOMES, LANDS, GARDEN_EXT, GARDEN_INDEX, SEASONS, FAMILIES, FAMILY_IDS, GLAZES, PAINTS, POT_SIZES, RARITIES, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, STAGES, ZONES } from './data';
+import { MUSHROOMS, MUSH_BY_ID, CAVE_PRICE, SOILS, GEAR, GEAR_IDS, BIOMES, LAND_BIOMES, LANDS, GARDEN_EXT, GARDEN_INDEX, SEASONS, FAMILIES, FAMILY_IDS, GLAZES, PAINTS, POT_SIZES, RARITIES, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, STAGES, ZONES } from './data';
 import type { Family } from './data';
 import type { Scene3D } from './scene';
 import { buildPlant } from './plants3d';
@@ -7,13 +7,14 @@ import { Planet, buildHero } from './planet';
 import { photo } from './icons';
 import { Pick, PICK_OF, PICK_TEXT } from './pick';
 import { Stall } from './stall';
+import { Cellar } from './cellar';
 import { finish, STYLES } from './styles';
 import { themeOf } from './themes';
 import * as sim from './sim';
 import { play, setMuted, unlock } from './sound';
 import type { State } from './sim';
 
-import type { SoilId } from './data';
+import type { SoilId, MushId } from './data';
 import { EMOJI, SheetKind, $, fmt, stars, vname, hex, clock, potLabel, esc, rarTag } from './uikit';
 import { sheetHtml, paintTarget } from './sheets';
 
@@ -59,6 +60,11 @@ export class UI {
   private trek!: Planet;
   private pick!: Pick;
   private stall!: Stall;
+  private cellar!: Cellar;
+  private caveHtml = '';
+  private caveTip = '';
+  private caveTipAt = 0;
+  private cavePick = -1;
   private stallHtml = '';
   /** Outil tenu au doigt : arrosoir ou gant, promené au-dessus des plantes. */
   private tool = '';
@@ -155,6 +161,20 @@ export class UI {
       else if (kind === 'leave') { play('tap'); this.toast('Un client repart les mains vides : la série est perdue.'); }
     };
     this.stall.onEnd = () => this.stallEnd();
+    $('cave').innerHTML = '<canvas id="cvgl"></canvas><div class="tr-top"><div class="tr-row"><span class="pill" id="cv-coins"></span><span class="pill" id="cv-time"></span><button class="btn small" data-act="cave-close">Remonter</button></div></div><div id="cv-labels"></div><p id="cv-hint" class="on"></p><div id="cv-pick"></div>';
+    this.cellar = new Cellar($('cvgl') as HTMLCanvasElement);
+    this.cellar.state = () => this.s;
+    this.cellar.onChange = () => this.caveHud();
+    this.cellar.onAsk = (i) => { this.cavePick = i; this.cavePanel(); };
+    this.cellar.onPick = (i) => {
+      const gain = sim.pickBed(this.s, i);
+      if (gain) { play('coin'); this.buzz(25); this.caveSay(`Cueilli : +${fmt(gain)} 🪙${sim.isNight(this.s) ? ' (prime de nuit)' : ''}`); this.bumpCoins(); }
+    };
+    this.cellar.onClear = (i) => { if (sim.clearBed(this.s, i)) { play('tap'); this.buzz(15); this.caveSay('Bac vidé : tu peux le réensemencer.'); } };
+    this.cellar.onHint = (i, k) => {
+      if (k === 'buy') { const p = sim.caveBedPrice(this.s); this.caveSay(p === null ? 'La cave est pleine.' : `Un bac de plus : ${fmt(p)} 🪙. Touche « Bac en plus » en bas.`); return; }
+      this.caveSay(k === 'cut' ? 'Mûr ! Balaie le bac d\'un coup de doigt pour cueillir.' : 'Garde le doigt sur le bac pour le brumiser.');
+    };
     $('tools').innerHTML = '<button class="tool" data-tool="shears">✂️</button><button class="tool" data-tool="basket">🧺</button><button class="tool" data-tool="can">🚿</button><button class="tool" data-tool="glove">🧤</button>';
     const grab = (tool: string, label: string, el: HTMLElement, e: PointerEvent) => {
       this.tool = tool;
@@ -401,6 +421,7 @@ export class UI {
       b.onclick = () => {
         if (Date.now() - this.swipedAt < 350) return;
         if (h.act.startsWith('gext')) return this.open('gext', Number(h.act.slice(4)) - 1);
+        if (h.act === 'cave') return this.act('cave-go', '');
         if (h.act !== 'door') return this.act('nav', h.act);
         if (!this.s.zonesOpen[GARDEN_INDEX]) return this.open('zone', GARDEN_INDEX);
         this.scene.walk(this.scene.spot ? 0 : 1, this.scene.spot ? 315 : 135);
@@ -628,6 +649,35 @@ export class UI {
         $('stall').className = 'on';
         this.stall.open([...s.stock]);
         this.stallHud();
+        break;
+      case 'cave-go':
+        if (!s.cave) { this.open('cave'); break; }
+        this.close();
+        $('cave').className = 'on';
+        this.cavePick = -1;
+        this.caveHtml = '';
+        this.cellar.open();
+        this.cavePanel();
+        break;
+      case 'cave-buy':
+        if (sim.buyCave(s)) { play('level'); this.buzz(30); this.act('cave-go', ''); }
+        else this.toast('Pas assez de pièces.');
+        break;
+      case 'cave-close':
+        this.cellar.close();
+        $('cave').className = '';
+        break;
+      case 'cave-bed':
+        if (sim.buyCaveBed(s)) { play('craft'); this.buzz(20); this.caveSay('Nouveau bac installé sur l\'étagère.'); this.cavePanel(); }
+        else this.toast('Pas assez de pièces.');
+        break;
+      case 'cave-seed':
+        if (sim.seedBed(s, this.cavePick, arg as MushId)) { play('plant'); this.buzz(15); this.caveSay(`${MUSH_BY_ID[arg as MushId].name} : ensemencé. Garde le bac humide.`); this.cavePick = -1; this.cavePanel(); }
+        else this.toast('Pas assez de pièces.');
+        break;
+      case 'cave-cancel':
+        this.cavePick = -1;
+        this.cavePanel();
         break;
       case 'stall-close':
         this.stall.shut();
@@ -862,6 +912,65 @@ export class UI {
     if (html !== this.trekLabel) { this.trekLabel = html; lab.innerHTML = html; lab.className = html ? 'on' : ''; }
     const hintEl = $('tr-hint');
     if (hintEl.textContent !== hint) { hintEl.textContent = hint; hintEl.className = hint ? 'on' : ''; }
+  }
+
+  /** Une phrase en bas de la cave, qui s'efface d'elle-même. */
+  private caveSay(text: string): void {
+    this.caveTip = text;
+    this.caveTipAt = Date.now();
+  }
+
+  /** Le bas de la cave : choisir un champignon pour un bac vide, ou acheter un bac de plus. */
+  private cavePanel(): void {
+    const s = this.s, c = s.cave, box = $('cv-pick');
+    if (!c) { box.innerHTML = ''; return; }
+    if (this.cavePick >= 0 && !c.beds[this.cavePick]) {
+      const rows = MUSHROOMS.map((m) => {
+        const open = sim.mushOpen(s, m.id), can = open && s.coins >= m.price;
+        const ds = open ? `${m.glow ? 'Seulement la nuit · ' : ''}${Math.round(m.grow / 60)} min de nuit par volée · ${sim.MUSH_FLUSHES_N} volées de ~${fmt(m.value)} 🪙` : `Après ${m.need} cueillettes (tu en as ${c.total})`;
+        return `<button class="card${open ? '' : ' dim'}" data-act="cave-seed" data-arg="${m.id}" ${can ? '' : 'disabled'}><div class="ico">🍄</div><div class="mid"><div class="nm">${esc(m.name)}</div><div class="ds">${ds}</div></div><div class="end">${open ? `${fmt(m.price)} 🪙` : '🔒'}</div></button>`;
+      }).join('');
+      box.innerHTML = `<div class="cv-panel"><div class="cv-head"><b>Que faire pousser ?</b><button class="btn small" data-act="cave-cancel">Fermer</button></div><div class="cv-list">${rows}</div></div>`;
+      box.className = 'on';
+      return;
+    }
+    const p = sim.caveBedPrice(s);
+    box.innerHTML = p !== null ? `<button class="btn small cv-more" data-act="cave-bed" ${s.coins >= p ? '' : 'disabled'}>Bac en plus · ${fmt(p)} 🪙</button>` : '';
+    box.className = '';
+  }
+
+  /** Bandeau de la cave et une étiquette au-dessus de chaque bac. */
+  private caveHud(): void {
+    const t = this.cellar, s = this.s, c = s.cave;
+    if (!t.active || !c) return;
+    const set = (id: string, txt: string) => { const el = $(id); if (el.textContent !== txt) el.textContent = txt; };
+    set('cv-coins', `🪙 ${fmt(s.coins)}`);
+    set('cv-time', sim.isNight(s) ? `🌑 Nuit · ça pousse` : `☀️ Jour · lent · nuit dans ${clock(Math.max(0, sim.untilNight(s)))}`);
+    const labels = c.beds.map((b, i) => {
+      if (!b) return `<div class="cvl empty" data-i="${i}"><small>Bac vide</small><small>Touche pour semer</small></div>`;
+      const m = MUSH_BY_ID[b.m];
+      if (sim.mushRotten(b)) return `<div class="cvl rot" data-i="${i}"><small>${esc(m.name)}</small><small>Pourri · touche pour vider</small></div>`;
+      const ripe = b.prog >= 1;
+      return `<div class="cvl${ripe ? ' ripe' : ''}${b.wet < 0.2 ? ' dry' : ''}" data-i="${i}"><small>${esc(m.name)} · ${b.flush + 1}/${sim.MUSH_FLUSHES_N}</small>${ripe ? `<small>Mûr · ${fmt(sim.mushValue(s, b))} 🪙</small>` : '<i class="pg"><u></u></i>'}<i class="wt"><u></u></i></div>`;
+    }).join('');
+    const box = $('cv-labels');
+    if (labels !== this.caveHtml) { this.caveHtml = labels; box.innerHTML = labels; }
+    c.beds.forEach((b, i) => {
+      const el = box.children[i] as HTMLElement | undefined;
+      if (!el) return;
+      const r = t.bedScreen(i);
+      el.style.left = r.x + 'px';
+      el.style.top = r.y + 'px';
+      if (!b) return;
+      const pg = el.querySelector('.pg u') as HTMLElement | null, wt = el.querySelector('.wt u') as HTMLElement | null;
+      if (pg) pg.style.width = Math.round(b.prog * 100) + '%';
+      if (wt) wt.style.width = Math.round(b.wet * 100) + '%';
+    });
+    const ripe = c.beds.some((b) => b && b.prog >= 1 && !sim.mushRotten(b)), dry = c.beds.some((b) => b && b.wet < 0.2 && b.prog < 1);
+    const fresh = Date.now() - this.caveTipAt < 2600;
+    const hint = fresh ? this.caveTip : t.mode === 'mist' ? '💦 Brumisation…' : ripe ? 'Balaie un bac mûr du doigt pour cueillir.' : dry ? 'Un bac a soif : garde le doigt dessus pour le brumiser.' : c.beds.every((b) => !b) ? 'Touche un bac vide pour y semer du blanc de champignon.' : sim.isNight(s) ? 'La nuit, les champignons poussent trois fois plus vite.' : '';
+    set('cv-hint', hint);
+    $('cv-hint').className = hint ? 'on' : '';
   }
 
   /** Bandeau de l'étal : recette, série, clients à venir, et une bulle par client qui attend. */
@@ -1223,6 +1332,7 @@ export class UI {
       tip('shears', shaggy, '✂️ Une plante fait des pousses folles : passe le sécateur dessus, elle poussera plus vite et plus belle.');
       tip('basket', ripe >= 2, '🧺 Plusieurs plantes en fleur : le panier les range en réserve d\'un seul geste.');
       tip('door', this.scene.fp && s.zonesOpen[GARDEN_INDEX] && s.slots.some((sl) => sl.pot), '🚪 Pour sortir un pot au jardin, fais-le glisser sur la porte et tiens-le là un instant.');
+      tip('cavenight', sim.isNight(s) && !!s.cave, '🍄 C\'est la nuit : descends à la cave par la trappe, tes champignons poussent trois fois plus vite et se vendent mieux.');
       tip('night', sim.isNight(s), '🌑 La nuit tombe : les plantes boivent moins et poussent moins vite, sauf les nocturnes qui s\'épanouissent dans le noir.');
       tip('drip', s.slots.filter((sl) => sl.plant).length >= 5, '💧 Trop de plantes à arroser ? Le tonneau d\'arrosage de la serre arrose tout seul les pots dont la vanne est ouverte.');
       tip('land', !sim.landOpen(s, 1) && sim.collection(s).bloomed >= 20, '🌴 Un autre continent t\'attend au-delà de l\'océan : fais fleurir 25 espèces, puis débloque-le depuis le sac à dos de l\'expédition.');
@@ -1285,6 +1395,11 @@ export class UI {
       }
       else if (h.act === 'packets') { alert = s.packets > 0; txt = alert ? `🎁 ${s.packets} à ouvrir` : `🎁 ${clock(pwait)}`; }
       else if (h.act === 'atelier') { alert = kilnDone; txt = kilnDone ? '🏺 Pot cuit !' : kilnOn ? `🔥 ${clock(s.kiln!.left)}` : h.label; }
+      else if (h.act === 'cave') {
+        const ripe = s.cave ? s.cave.beds.filter((b) => b && b.prog >= 1 && !sim.mushRotten(b)).length : 0;
+        alert = ripe > 0 || (!s.cave && s.coins >= CAVE_PRICE);
+        txt = !s.cave ? `🔒 Cave · ${fmt(CAVE_PRICE)} 🪙` : ripe ? `🍄 ${ripe} à cueillir` : sim.isNight(s) ? '🍄 Cave · ça pousse' : '🍄 Cave';
+      }
       else if (h.act === 'trek') { alert = rest <= 0; txt = rest > 0 ? `🥾 Demain · ${clock(rest)}` : '🥾 Partir'; }
       else if (h.act === 'water') {
         const left = sim.tankOf(s), cap = sim.tankCap(s);

@@ -1,5 +1,5 @@
 /** Le contenu de chaque panneau, un par fonction. `ui` donne l'état et le panneau ouvert. */
-import { SOILS, SOIL_IDS, BASKETS, LANDS, LAND_BIOMES, DAY_LENGTH, GARDEN_EXT, TANKS, GEAR, GEAR_IDS, BIOMES, GARDEN, GARDEN_FIRST, GARDEN_INDEX, SEASONS, FAMILIES, FAMILY_IDS, GLAZES, LEVEL_WORDS, POT_SIZES, RARITIES, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, STAGES, ZONES } from './data';
+import { MUSHROOMS, CAVE_PRICE, SOILS, SOIL_IDS, BASKETS, LANDS, LAND_BIOMES, DAY_LENGTH, GARDEN_EXT, TANKS, GEAR, GEAR_IDS, BIOMES, GARDEN, GARDEN_FIRST, GARDEN_INDEX, SEASONS, FAMILIES, FAMILY_IDS, GLAZES, LEVEL_WORDS, POT_SIZES, RARITIES, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, STAGES, ZONES } from './data';
 import type { Species } from './data';
 import * as sim from './sim';
 
@@ -27,6 +27,7 @@ export function sheetHtml(ui: UI): string {
     case 'gext': return gardenExtHtml(ui);
     case 'water': return waterHtml(ui);
     case 'soil': return soilHtml(ui);
+    case 'cave': return caveHtml(ui);
     case 'vitrine': return vitrineHtml(ui);
     case 'atelier': return atelierHtml(ui);
     case 'trophies': return trophiesHtml(ui);
@@ -195,6 +196,16 @@ export function seedHtml(ui: UI): string {
     ? '<button class="btn gold wide" data-act="free">🎁 Ouvrir un sachet gratuit</button>'
     : `<button class="btn primary wide" data-act="buypacket" ${s.coins >= sim.PRICES.packet ? '' : 'disabled'}>Sachet mystère · ${sim.PRICES.packet} 🪙</button>`}`;
   return head(ui, 'Que semer ici ?') + `<div class="sh-body">${zoneLine(ui, ui.arg)}${ids.length ? filters + (shown.length ? list : '<p class="sub">Aucune graine de ce genre en réserve.</p>') : empty}<div class="kv"><span>Ce pot</span><b>${potLabel(s.slots[ui.arg].pd)}</b></div><div class="kv"><span>Sa terre</span><b>${SOILS[potSoil].name}</b></div><div class="tiles">${tile('soil', '🟫', 'Terre')}${tile('paintslot', '🎨', 'Peindre')}${tile('admire', '🔍', 'Admirer')}${tile('stow', '📥', 'Ranger')}</div></div>`;
+}
+
+/** La cave à champignons, avant de l'acheter. */
+export function caveHtml(ui: UI): string {
+  const s = ui.s, can = s.coins >= CAVE_PRICE;
+  const list = MUSHROOMS.map((m) => `<div class="card"><div class="ico">🍄</div><div class="mid"><div class="nm">${esc(m.name)} <i class="lat">${m.latin}</i></div><div class="ds">${esc(m.text)}</div></div></div>`).join('');
+  return head(ui, '🍄 La cave à champignons') + `<div class="sh-body">
+    <p class="sub">Sous la trappe, une vieille cave voûtée. Les champignons y poussent dans le noir, surtout la nuit : c'est là qu'on s'occupe quand la serre dort. Garde le doigt sur un bac pour le brumiser, balaie-le pour cueillir. Chaque bac donne trois volées, plus chères cueillies de nuit.</p>
+    <button class="btn gold wide" data-act="cave-buy" ${can ? '' : 'disabled'}>Ouvrir la cave · ${fmt(CAVE_PRICE)} 🪙</button>
+    <h3>Ce qui pourra y pousser</h3>${list}</div>`;
 }
 
 const THIRST = ['', '💧 boit peu', '💧 boit normalement', '💧 boit beaucoup'];

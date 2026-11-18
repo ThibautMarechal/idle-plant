@@ -35,6 +35,7 @@ const HALF_FOV = 0.48;
 const NIGHT_SUN = new THREE.Color(0x8fa8ff);
 const DUSK_SUN = new THREE.Color(0xff9a52);
 const NIGHT_SKY = new THREE.Color(0x5a6fc0);
+const BULB_ON = new THREE.Color(0xffd27a);
 
 export class Scene3D {
   private renderer: THREE.WebGLRenderer;
@@ -57,6 +58,9 @@ export class Scene3D {
   private sunrays: THREE.Mesh[] = [];
   private sky: THREE.Group | null = null;
   private skyMats: THREE.Material[] = [];
+  private bulbs: THREE.MeshBasicMaterial | null = null;
+  private nightLamp: THREE.PointLight | null = null;
+  private flies: THREE.Mesh[] = [];
   private now = 0;
   private theme!: Theme;
   private slots: SlotView[] = [];
@@ -606,6 +610,13 @@ export class Scene3D {
       (m.material as THREE.MeshBasicMaterial).opacity = 0.34 * Math.sin(ph * Math.PI);
     });
     this.waters.forEach((w) => { w.scale.y = 1 + Math.sin(t * 1.5) * 0.25; });
+    this.flies.forEach((f) => {
+      if (!f.visible) return;
+      const n = f.userData.fly as number, a = n * 0.71 + t * 0.12 * (n % 2 ? 1 : -1);
+      const r = 2.6 + (n % 5) * 0.35 + Math.sin(t * 0.7 + n) * 0.3;
+      f.position.set(Math.sin(a) * r, 1.0 + (n % 4) * 0.35 + Math.sin(t * 1.3 + n * 2) * 0.2, Math.cos(a) * r);
+      (f.material as THREE.MeshBasicMaterial).opacity = 0.5 + 0.5 * Math.sin(t * 3 + n);
+    });
     this.flutters.forEach((f) => { f.rotation.x = 0.45 + Math.sin(t * 6 + (f.userData.flutter as number) * 1.3) * 0.35; f.rotation.z = Math.sin(t * 4.3 + (f.userData.flutter as number)) * 0.2; });
     this.bugs.forEach((b) => {
       const n = b.userData.k as number;
@@ -637,6 +648,10 @@ export class Scene3D {
       r.visible = m.transparent ? k > 0.02 : k > 0.5;
     }
     // Étoiles et lune sont accrochées au ciel 3D : elles tournent avec le regard.
+    // Guirlande et lucioles s'allument avec la nuit.
+    if (this.bulbs) this.bulbs.color.setHex(0x6a5a3a).lerp(BULB_ON, 1 - k);
+    if (this.nightLamp) this.nightLamp.intensity = (1 - k) * 14;
+    for (const f of this.flies) f.visible = k < 0.5;
     if (this.sky) {
       this.sky.visible = k < 0.98;
       const o = Math.min(1, (1 - k) * 1.3);
@@ -646,7 +661,37 @@ export class Scene3D {
 
   /** Un ciel de nuit en vrai décor : étoiles et lune loin autour de la serre, invisibles de jour. */
   private buildSky(): void {
+    this.bulbs = null;
+    this.nightLamp = null;
+    this.flies = [];
     if (!this.theme.fp) { this.sky = null; return; }
+    // Une guirlande d'ampoules court sous la charpente, tout autour de la serre.
+    const bm = new THREE.MeshBasicMaterial({ color: 0x6a5a3a });
+    bm.userData.outlineParameters = { visible: false };
+    this.bulbs = bm;
+    const bgeo = new THREE.SphereGeometry(0.07, 8, 6);
+    for (let k = 0; k < 48; k++) {
+      const a = (k / 48) * Math.PI * 2, r = 4.35;
+      const b = new THREE.Mesh(bgeo, bm);
+      b.position.set(Math.sin(a) * r, 3.55 - Math.abs(Math.sin(k * Math.PI / 6)) * 0.25, Math.cos(a) * r);
+      b.userData.raw = true;
+      this.world.add(b);
+    }
+    const lamp = new THREE.PointLight(0xffc878, 0, 9, 1.2);
+    lamp.position.set(0, 3.2, 0);
+    this.nightLamp = lamp;
+    this.world.add(lamp);
+    // Des lucioles flottent près des plantes.
+    const fm = new THREE.MeshBasicMaterial({ color: 0xd8ff7a, transparent: true, opacity: 0.9, depthWrite: false });
+    fm.userData.outlineParameters = { visible: false };
+    for (let k = 0; k < 18; k++) {
+      const f = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 4), fm.clone());
+      f.userData.raw = true;
+      f.userData.fly = k;
+      f.visible = false;
+      this.flies.push(f);
+      this.world.add(f);
+    }
     const g = new THREE.Group();
     const n = 260, pos = new Float32Array(n * 3);
     let seed = 7;

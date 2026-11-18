@@ -312,6 +312,7 @@ const pavillon: Theme = {
       { act: 'packets', label: '🎁 Sachets', at: at(135, 1.5, 1.35, 4.7), spot: 0, r: 0.5 },
       { act: 'trek', label: '🥾 Expédition', at: at(135, -1.3, 1.15, 4.6), spot: 0, r: 0.6 },
       { act: 'water', label: '💧 Arrosage', at: at(90, 0, 0.18, 3.2), spot: 0, r: 0.6 },
+      { act: 'cave', label: '🍄 Cave', at: at(270, 0, 0.1, 3.0), spot: 0, r: 0.6 },
       { act: 'door', label: '🚪', at: at(135, 0, 1.7, 5.0), spot: -1, r: 0.9 },
       { act: 'gext1', label: '🔒 Potager', at: fromGarden(45, 0, 1.1, P.pots), spot: 1, r: 0.9 },
       { act: 'gext2', label: '🔒 Rocaille', at: fromGarden(225, 0, 1.1, P.pots), spot: 1, r: 0.9 },
@@ -459,6 +460,9 @@ const pavillon: Theme = {
       ray.userData.sunray = true;
       wall(270, ray);
     }
+    // La trappe de la cave, dans le dallage devant la table.
+    wall(270, box(1.3, 0.04, 0.95, 0x7a5236, 0, 0.02, -3.0), box(1.3, 0.05, 0.08, 0x5a3c28, 0, 0.03, -2.7, false), box(1.3, 0.05, 0.08, 0x5a3c28, 0, 0.03, -3.3, false),
+      box(0.2, 0.05, 0.05, 0xc9a24a, 0, 0.06, -2.62, false));
     const patch = box(3.7, 0.02, 1.0, 0xfff1a8, 0, P.bench + 0.005, -P.pots - 0.05, false);
     patch.userData.sunray = true;
     wall(270, patch);

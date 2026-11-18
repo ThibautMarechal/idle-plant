@@ -5,7 +5,8 @@ const assets = readdirSync('dist/assets');
 const js = readFileSync('dist/assets/' + assets.find((f) => f.endsWith('.js')), 'utf8').replace(/<\/script/gi, '<\\/script');
 const css = readFileSync('dist/assets/' + assets.find((f) => f.endsWith('.css')), 'utf8');
 const body = readFileSync('index.html', 'utf8').match(/<div id="app">[\s\S]*?<\/div>\s*(?=<script)/)[0];
-const out = `<title>Le Grainier</title>
+const out = `<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Le Grainier</title>
 <style>html,body{height:100%}${css}:root{--safe-b:0px;--safe-t:0px}</style>
 ${body}
 <script type="module">${js}</script>

@@ -549,3 +549,44 @@ export const GEAR: Record<GearId, { icon: string; names: string[]; price: number
 };
 export const GEAR_IDS = Object.keys(GEAR) as GearId[];
 export const BASKETS: { cap: number; price: number }[] = [{ cap: 4, price: 0 }, { cap: 6, price: 350 }, { cap: 9, price: 900 }];
+
+// ---------- La cave à champignons ----------
+
+export type MushId = 'paris' | 'pleurote' | 'piedbleu' | 'shiitake' | 'hericium' | 'mycene' | 'morille';
+/** Support de culture : chaque champignon a le sien, qui se voit dans la cave. */
+export type MushBed = 'fumier' | 'paille' | 'buche' | 'terre';
+export interface Mushroom {
+  id: MushId;
+  name: string;
+  latin: string;
+  bed: MushBed;
+  /** Secondes de nuit pour une volée (le jour, ça pousse trois fois moins vite). */
+  grow: number;
+  /** Prix du blanc (semence) pour ensemencer un bac, en pièces : jamais de hasard. */
+  price: number;
+  /** Ce que rapporte une volée bien cueillie. */
+  value: number;
+  /** Cueillettes à faire avant de pouvoir le cultiver. */
+  need: number;
+  cap: number;
+  stem: number;
+  shape: 'dome' | 'shelf' | 'pompom' | 'bell' | 'morel';
+  /** Ne pousse que la nuit, et luit dans le noir. */
+  glow?: boolean;
+  text: string;
+}
+export const MUSHROOMS: Mushroom[] = [
+  { id: 'paris', name: 'Champignon de Paris', latin: 'Agaricus bisporus', bed: 'fumier', grow: 540, price: 8, value: 20, need: 0, cap: 0xf4eee2, stem: 0xece4d4, shape: 'dome', text: 'Le plus docile : il pousse sur du fumier, dans le noir des carrières de Paris.' },
+  { id: 'pleurote', name: 'Pleurote', latin: 'Pleurotus ostreatus', bed: 'paille', grow: 780, price: 15, value: 36, need: 3, cap: 0x9aa6b2, stem: 0xe6e0d2, shape: 'shelf', text: 'En éventail sur une botte de paille humide.' },
+  { id: 'piedbleu', name: 'Pied-bleu', latin: 'Lepista nuda', bed: 'fumier', grow: 1020, price: 30, value: 70, need: 8, cap: 0x9a86c8, stem: 0x8a76c0, shape: 'dome', text: 'Violet de la tête au pied, il aime le frais de l\'automne.' },
+  { id: 'shiitake', name: 'Shiitake', latin: 'Lentinula edodes', bed: 'buche', grow: 1320, price: 50, value: 120, need: 15, cap: 0x8a5a3a, stem: 0xe9dcc4, shape: 'dome', text: 'Il sort des bûches de chêne percées et bouchées de cire.' },
+  { id: 'hericium', name: 'Hydne hérisson', latin: 'Hericium erinaceus', bed: 'buche', grow: 1620, price: 90, value: 220, need: 25, cap: 0xf6f1e4, stem: 0xf6f1e4, shape: 'pompom', text: 'Une boule de pompons blancs qui pend du bois.' },
+  { id: 'mycene', name: 'Mycène lumineuse', latin: 'Mycena chlorophos', bed: 'buche', grow: 1200, price: 150, value: 380, need: 35, cap: 0xb8f08a, stem: 0xd8f6c0, shape: 'bell', glow: true, text: 'Minuscule et verte, elle luit dans le noir. Elle ne pousse que la nuit.' },
+  { id: 'morille', name: 'Morille', latin: 'Morchella esculenta', bed: 'terre', grow: 2400, price: 300, value: 900, need: 50, cap: 0xa8844f, stem: 0xefe2c8, shape: 'morel', text: 'La reine du printemps, alvéolée comme une éponge. Capricieuse.' },
+];
+export const MUSH_BY_ID = Object.fromEntries(MUSHROOMS.map((m) => [m.id, m])) as Record<MushId, Mushroom>;
+/** La cave elle-même, puis chaque bac en plus (elle en a trois au départ). */
+export const CAVE_PRICE = 1500;
+export const CAVE_BEDS = [800, 2500, 6000];
+/** Une bûche ou une botte donne trois volées avant d'être épuisée. */
+export const MUSH_FLUSHES = 3;

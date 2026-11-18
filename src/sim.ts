@@ -1,5 +1,5 @@
-import { SOILS, BASKETS, BIOMES, LANDS, LAND_BIOMES, DAY_LENGTH, TANKS, GARDEN_BASE, GARDEN_EXT, GEAR, TREK_TIME, GARDEN, GARDEN_CLIMATE, GARDEN_FIRST, GARDEN_INDEX, PROF_MAX, PROF_MIN, BASE_SLOTS, SEASONS, SEASON_LENGTH, CLIENTS, FAMILIES, FAMILY_IDS, GLAZES, NEWS, POT_SIZES, RARITIES, SLOT_COUNT, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, ZONES } from './data';
-import type { Family, GearId, Rarity, SoilId, Species, Zone } from './data';
+import { MUSHROOMS, MUSH_BY_ID, CAVE_PRICE, CAVE_BEDS, MUSH_FLUSHES, SOILS, BASKETS, BIOMES, LANDS, LAND_BIOMES, DAY_LENGTH, TANKS, GARDEN_BASE, GARDEN_EXT, GEAR, TREK_TIME, GARDEN, GARDEN_CLIMATE, GARDEN_FIRST, GARDEN_INDEX, PROF_MAX, PROF_MIN, BASE_SLOTS, SEASONS, SEASON_LENGTH, CLIENTS, FAMILIES, FAMILY_IDS, GLAZES, NEWS, POT_SIZES, RARITIES, SLOT_COUNT, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, ZONES } from './data';
+import type { MushId, Family, GearId, Rarity, SoilId, Species, Zone } from './data';
 
 /** `vr` : variante, 0 normale, 1 panachée, 2 dorée. */
 /** `cut` : 1 = la plante demande une taille, 2 = taillée (elle pousse plus vite). */
@@ -91,6 +91,8 @@ export interface State {
   trek?: { rest: number; basket: number; open: boolean[]; done: number; boots?: boolean; lantern?: boolean; day?: number; land?: number; gear?: Partial<Record<GearId, number>> };
   /** Horloge du jeu, en secondes : elle fait tourner le jour et la nuit. */
   clock?: number;
+  /** La cave à champignons, une fois achetée : ses bacs et les cueillettes faites. */
+  cave?: Cave;
   /** Arrosage automatique : arrosages restants dans la cuve, taille de la cuve, zones dont la vanne est fermée. */
   tank?: number;
   tankSize?: number;
@@ -147,6 +149,19 @@ export const PRICES = {
 export const CROSS_FEE: Record<string, number> = { commun: 60, rare: 250, exotique: 900 };
 
 export type Rng = () => number;
+
+export interface MushBedState {
+  m: MushId;
+  /** Avancée de la volée en cours, 0..1. */
+  prog: number;
+  /** Humidité du support, 0..1 : on la remonte en brumisant. */
+  wet: number;
+  q: number;
+  /** Secondes passées depuis que la volée est mûre : trop attendre la gâte. */
+  over: number;
+  flush: number;
+}
+export interface Cave { beds: (MushBedState | null)[]; got: Partial<Record<MushId, number>>; total: number }
 
 export function newState(now: number): State {
   const slots: Slot[] = [];
@@ -290,6 +305,12 @@ export function daylight(s: State): number {
 export function isNight(s: State): boolean {
   return daylight(s) < 0.5;
 }
+/** Secondes avant la tombée de la nuit (21 h), 0 s'il fait déjà nuit. */
+export function untilNight(s: State): number {
+  const h = hourOf(s);
+  if (isNight(s)) return 0;
+  return ((20.5 - h + 24) % 24) / 24 * DAY_LENGTH;
+}
 /** Secondes avant le prochain lever du jour. */
 export function untilDawn(s: State): number {
   return DAY_LENGTH - ((s.clock ?? 0) % DAY_LENGTH);
@@ -424,6 +445,7 @@ export function advance(s: State, now: number, rng: Rng = Math.random): number {
     // Au lever du jour, la pluie de la nuit a rempli la cuve.
     if (dayOf(s) !== day && s.upgrades.water) s.tank = tankCap(s);
     stepPlants(s, h, rng, offline);
+    stepCave(s, h);
     s.marketAcc += h;
     while (s.marketAcc >= MARKET_TICK) {
       s.marketAcc -= MARKET_TICK;
@@ -848,6 +870,102 @@ export function trekSetup(s: State): TrekSetup {
 export function trekDarkBlocked(s: State): boolean {
   return isNight(s) && gearLv(s, 'lantern') === 0;
 }
+// ---------- cave à champignons ----------
+
+/** Le support sèche en un quart d'heure environ. */
+export const CAVE_DRY = 900;
+/** Mûr, un champignon se garde un moment, puis s'abîme et pourrit. */
+export const MUSH_KEEP = 480;
+export const MUSH_ROT = 1500;
+/** Cueillis de nuit, ils sont plus frais et se vendent mieux. */
+export const NIGHT_PICK = 1.25;
+export function buyCave(s: State): boolean {
+  if (s.cave || s.coins < CAVE_PRICE) return false;
+  s.coins -= CAVE_PRICE;
+  s.cave = { beds: [null, null, null], got: {}, total: 0 };
+  return true;
+}
+export function caveBedPrice(s: State): number | null {
+  const k = (s.cave?.beds.length ?? 3) - 3;
+  return CAVE_BEDS[k] ?? null;
+}
+export function buyCaveBed(s: State): boolean {
+  const p = caveBedPrice(s);
+  if (!s.cave || p === null || s.coins < p) return false;
+  s.coins -= p;
+  s.cave.beds.push(null);
+  return true;
+}
+export function mushOpen(s: State, m: MushId): boolean {
+  return (s.cave?.total ?? 0) >= MUSH_BY_ID[m].need;
+}
+export function mushRate(s: State, b: MushBedState): number {
+  const m = MUSH_BY_ID[b.m];
+  const night = isNight(s);
+  return (night ? 1 : m.glow ? 0 : 0.33) * (b.wet > 0.2 ? 1 : 0.1) / m.grow;
+}
+export function mushRotten(b: MushBedState): boolean {
+  return b.over >= MUSH_ROT;
+}
+export function seedBed(s: State, i: number, m: MushId): boolean {
+  const c = s.cave, d = MUSH_BY_ID[m];
+  if (!c || i < 0 || i >= c.beds.length || c.beds[i] || !mushOpen(s, m) || s.coins < d.price) return false;
+  s.coins -= d.price;
+  c.beds[i] = { m, prog: 0, wet: 0.7, q: 70, over: 0, flush: 0 };
+  return true;
+}
+/** Brumiser un bac du doigt : `amount` d'humidité en plus. */
+export function mistBed(s: State, i: number, amount: number): void {
+  const b = s.cave?.beds[i];
+  if (b) b.wet = Math.min(1, b.wet + amount);
+}
+/** Ce que rapporterait la volée si on la cueillait maintenant. */
+export function mushValue(s: State, b: MushBedState): number {
+  if (b.prog < 1 || mushRotten(b)) return 0;
+  const m = MUSH_BY_ID[b.m];
+  const age = b.over <= MUSH_KEEP ? 1 : Math.max(0.3, 1 - (b.over - MUSH_KEEP) / (MUSH_ROT - MUSH_KEEP));
+  return Math.max(1, Math.round(m.value * (0.4 + 0.6 * b.q / 100) * age * (isNight(s) ? NIGHT_PICK : 1)));
+}
+/** Cueillir la volée mûre d'un bac : rend les pièces gagnées (0 si rien à cueillir). */
+export function pickBed(s: State, i: number): number {
+  const c = s.cave, b = c?.beds[i];
+  if (!c || !b || b.prog < 1) return 0;
+  const gain = mushValue(s, b);
+  if (mushRotten(b)) { c.beds[i] = null; return 0; }
+  s.coins += gain;
+  c.got[b.m] = (c.got[b.m] ?? 0) + 1;
+  c.total++;
+  gainXp(s, 2);
+  b.flush++;
+  if (b.flush >= MUSH_FLUSHES) c.beds[i] = null;
+  else { b.prog = 0.3; b.over = 0; }
+  return gain;
+}
+/** Vider un bac (épuisé ou pourri). */
+export function clearBed(s: State, i: number): boolean {
+  const c = s.cave;
+  if (!c?.beds[i]) return false;
+  c.beds[i] = null;
+  return true;
+}
+function stepCave(s: State, dt: number): void {
+  const c = s.cave;
+  if (!c) return;
+  for (const b of c.beds) {
+    if (!b) continue;
+    b.wet = Math.max(0, b.wet - dt / CAVE_DRY);
+    if (b.prog < 1) {
+      b.prog = Math.min(1, b.prog + dt * mushRate(s, b));
+      // Au sec, la volée s'abîme ; bien humide, elle se fait belle.
+      b.q = clamp(b.q + (b.wet > 0.2 ? dt / 30 : -dt / 15), 10, 100);
+    } else b.over += dt;
+  }
+}
+export const MUSH_FLUSHES_N = MUSH_FLUSHES;
+export function mushCount(): number {
+  return MUSHROOMS.length;
+}
+
 export function buyBasket(s: State): boolean {
   const t = trekOf(s), next = BASKETS[t.basket + 1];
   if (!next || s.coins < next.price) return false;

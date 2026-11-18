@@ -539,3 +539,26 @@ body[data-fp="1"] #nav { display: none; }
 .fchip { flex: none; border: 2.5px solid var(--ink); background: #fff; border-radius: 14px; padding: 5px 10px; font-weight: 800; font-size: 12px; color: var(--ink); white-space: nowrap; }
 .fchip small { opacity: 0.6; margin-left: 2px; }
 .fchip.on { background: #ffd84d; }
+
+/* La cave à champignons */
+#cave { position: absolute; inset: 0; z-index: 4; display: none; background: #1a1410; }
+#cave.on { display: block; }
+#cvgl { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; display: block; }
+#cv-labels { position: absolute; inset: 0; pointer-events: none; }
+.cvl { position: absolute; transform: translate(-50%, -100%); background: #fffaf0; border: 2.5px solid var(--ink); box-shadow: 0 3px 0 var(--ink); border-radius: 12px; padding: 3px 7px 5px; display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 76px; max-width: 112px; }
+.cvl small { font-size: 9.5px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; color: var(--ink); }
+.cvl i { display: block; width: 100%; height: 5px; border-radius: 3px; background: #e8e2d6; overflow: hidden; }
+.cvl u { display: block; height: 100%; background: var(--green); }
+.cvl .wt u { background: #4aa8d8; }
+.cvl.dry .wt { outline: 2px solid #e2604f; }
+.cvl.ripe { background: #ffe9a6; box-shadow: 0 3px 0 var(--ink), 0 0 14px #ffd84d; }
+.cvl.rot { background: #d9cdb8; }
+.cvl.empty { background: rgba(255, 250, 240, 0.8); }
+#cv-hint { position: absolute; left: 16px; right: 16px; bottom: calc(64px + var(--safe-b)); margin: 0; text-align: center; font-weight: 800; font-size: 13px; background: rgba(255, 255, 255, 0.92); border: 2.5px solid var(--ink); border-radius: 14px; padding: 8px 12px; pointer-events: none; display: none; }
+#cv-hint.on { display: block; }
+#cv-pick { position: absolute; left: 0; right: 0; bottom: 0; padding: 0 12px calc(14px + var(--safe-b)); display: flex; justify-content: center; }
+.cv-more { pointer-events: auto; }
+#cv-pick.on { top: 30%; }
+.cv-panel { background: var(--paper, #fffaf0); border: 3px solid var(--ink); border-radius: 18px 18px 14px 14px; width: 100%; max-width: 460px; display: flex; flex-direction: column; max-height: 100%; overflow: hidden; }
+.cv-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; font-size: 15px; }
+.cv-list { overflow-y: auto; padding: 0 10px 10px; display: flex; flex-direction: column; gap: 8px; }

@@ -461,3 +461,46 @@ describe('jour, nuit et arrosage automatique', () => {
     expect(sim.waterLast(aloe)).toBeGreaterThan(sim.waterLast(SPECIES_BY_ID['menthe']));
   });
 });
+
+describe('cave à champignons', () => {
+  it('pousse surtout la nuit, se cueille en trois volées et pourrit si on attend', () => {
+    const s = sim.newState(0);
+    s.coins = 5000;
+    expect(sim.buyCave(s)).toBe(true);
+    expect(s.cave!.beds.length).toBe(3);
+    expect(sim.seedBed(s, 0, 'pleurote')).toBe(false); // il faut d'abord des cueillettes
+    expect(sim.seedBed(s, 0, 'paris')).toBe(true);
+    const b = s.cave!.beds[0]!;
+    s.clock = 0; // 6 h du matin : le jour
+    const day = sim.mushRate(s, b);
+    s.clock = 2700; // nuit
+    expect(sim.mushRate(s, b)).toBeGreaterThan(day * 2.5);
+    b.prog = 1;
+    const coins = s.coins;
+    const gain = sim.pickBed(s, 0);
+    expect(gain).toBeGreaterThan(0);
+    expect(s.coins).toBe(coins + gain);
+    expect(s.cave!.beds[0]!.flush).toBe(1);
+    s.cave!.beds[0]!.prog = 1; sim.pickBed(s, 0);
+    s.cave!.beds[0]!.prog = 1; sim.pickBed(s, 0);
+    expect(s.cave!.beds[0]).toBeNull();
+    expect(s.cave!.total).toBe(3);
+    expect(sim.mushOpen(s, 'pleurote')).toBe(true);
+    sim.seedBed(s, 1, 'paris');
+    const r = s.cave!.beds[1]!;
+    r.prog = 1; r.over = sim.MUSH_ROT;
+    expect(sim.mushRotten(r)).toBe(true);
+    expect(sim.pickBed(s, 1)).toBe(0);
+  });
+  it('le support sèche et brumiser le remouille', () => {
+    const s = sim.newState(0);
+    s.coins = 5000;
+    sim.buyCave(s);
+    sim.seedBed(s, 0, 'paris');
+    const b = s.cave!.beds[0]!;
+    sim.advance(s, 600 * 1000, () => 0.5);
+    expect(b.wet).toBeLessThan(0.2);
+    sim.mistBed(s, 0, 1);
+    expect(b.wet).toBe(1);
+  });
+});
