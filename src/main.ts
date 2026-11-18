@@ -1,0 +1,82 @@
+import { SPECIES } from './data';
+import './style.css';
+import { Scene3D } from './scene';
+import * as sim from './sim';
+import { UI } from './ui';
+import { installIcons } from './icons';
+
+// Si le jeu plante, on le dit à l'écran plutôt que de rester muet : c'est le seul moyen de le savoir sur un téléphone.
+const report = (what: unknown) => {
+  const el = document.createElement('div');
+  el.style.cssText = 'position:fixed;left:8px;right:8px;bottom:8px;z-index:99999;background:#fff;border:2px solid #c0392b;border-radius:10px;padding:8px 10px;font:12px/1.35 monospace;color:#7a1f14;max-height:40vh;overflow:auto';
+  el.textContent = 'Erreur : ' + (what instanceof Error ? `${what.message}\n${what.stack ?? ''}` : String(what));
+  el.onclick = () => el.remove();
+  document.body.append(el);
+};
+window.addEventListener('error', (e) => report(e.error ?? e.message));
+window.addEventListener('unhandledrejection', (e) => report(e.reason));
+
+const night = document.getElementById('night')!;
+let shown = -1;
+
+const params = new URLSearchParams(location.search);
+const speed = Math.max(1, Number(params.get('vitesse')) || 1);
+const t0 = Date.now();
+/** Horloge du jeu. `?vitesse=20` accélère le temps pour tester l'équilibrage. */
+const clock = () => t0 + (Date.now() - t0) * speed;
+
+let state = sim.load(clock());
+const away = sim.advance(state, clock());
+
+const scene = new Scene3D(document.getElementById('gl') as HTMLCanvasElement);
+const ui = new UI(state, scene, () => {
+  sim.wipe();
+  state = sim.newState(clock());
+  ui.setState(state);
+});
+
+const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+function daily(): void {
+  const now = new Date();
+  const gift = sim.claimDaily(state, ymd(now), ymd(new Date(now.getTime() - 86400000)));
+  if (gift) setTimeout(() => ui.toast(`🎁 Cadeau du jour ${gift.streak} : +${gift.coins} 🪙, +${gift.clay} argile, un sachet${gift.fert ? ' et une dose d\'engrais' : ''}. Reviens demain pour plus !`), 2600);
+}
+daily();
+document.addEventListener('visibilitychange', () => { if (!document.hidden) daily(); });
+
+if (away > 90) {
+  const mins = Math.round(away / 60);
+  const txt = mins >= 60 ? `${Math.floor(mins / 60)} h ${String(mins % 60).padStart(2, '0')}` : `${mins} min`;
+  setTimeout(() => ui.toast(`Bon retour ! Tes plantes ont poussé pendant ${txt}.`), 600);
+}
+
+window.addEventListener('resize', () => { scene.resize(); ui.refresh(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) sim.save(state); });
+window.addEventListener('pagehide', () => sim.save(state));
+
+let last = performance.now();
+let uiAcc = 1;
+let saveAcc = 0;
+function frame(nowMs: number): void {
+  const dt = Math.min(0.1, (nowMs - last) / 1000);
+  last = nowMs;
+  sim.advance(state, clock());
+  scene.sync(state);
+  const light = sim.daylight(state);
+  scene.setDaylight(light);
+  if (light !== shown) { shown = light; night.style.opacity = String(1 - light); }
+  scene.render(nowMs / 1000, dt);
+  ui.layout();
+  uiAcc += dt;
+  if (uiAcc > 0.25) { uiAcc = 0; ui.refresh(); }
+  saveAcc += dt;
+  if (saveAcc > 4) { saveAcc = 0; sim.save(state); }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// Accès console pour le débogage et les tests.
+(window as unknown as Record<string, unknown>).grainier = { get state() { return state; }, sim, scene, ui, ids: SPECIES.map((sp) => sp.id) };
+
+// Les icônes arrivent après le démarrage : elles ne doivent jamais pouvoir l'empêcher.
+installIcons((sc, cam, rt, out) => scene.snap(sc, cam, rt, out));

@@ -1,0 +1,622 @@
+import * as THREE from 'three';
+import { TIER_FIRST, SOILS, BASE_SLOTS, GARDEN_FIRST, GARDEN_INDEX, POT_SIZES, SLOT_COUNT, SLOTS_PER_ZONE, SPECIES_BY_ID } from './data';
+import { buildPlant, buildPot, mat, POT_TOP } from './plants3d';
+import { fitOf, slotOpen, zoneIndexOfSlot, stageOf, zoneClimate, zoneOfSlot } from './sim';
+import type { State } from './sim';
+import { OutlineEffect } from 'three/examples/jsm/effects/OutlineEffect.js';
+import { potModel } from './pots';
+import { artStyle, finish } from './styles';
+import { box, THEME } from './themes';
+import type { V3 } from './themes';
+
+interface SlotView {
+  root: THREE.Group;
+  pot: THREE.Group | null;
+  potKey: string;
+  marker: THREE.Mesh;
+  crate: THREE.Object3D;
+  /** Planche et cordes d'une suspension (emplacements 12 et plus). */
+  hanger: THREE.Object3D | null;
+  drip: THREE.Object3D;
+  plant: THREE.Group | null;
+  key: string;
+  pop: number;
+  base: THREE.Vector3;
+}
+
+const v3 = (p: V3) => new THREE.Vector3(p[0], p[1], p[2]);
+/** En première personne, la vue se cale tous les huitièmes de tour. */
+const STEP = Math.PI / 4;
+/** Demi-champ horizontal, vue calée : un pan de mur et ses trois pots tiennent dans la largeur. */
+const HALF_FOV = 0.48;
+const NIGHT_SUN = new THREE.Color(0x8fa8ff);
+const DUSK_SUN = new THREE.Color(0xff9a52);
+const NIGHT_SKY = new THREE.Color(0x5a6fc0);
+const BULB_ON = new THREE.Color(0xffd27a);
+
+export class Scene3D {
+  private renderer: THREE.WebGLRenderer;
+  private scene = new THREE.Scene();
+  private world = new THREE.Group();
+  private camera = new THREE.PerspectiveCamera(70, 1, 0.1, 200);
+  /** Première personne : cap (0 = face au premier coin, sens horaire), inclinaison, grossissement. */
+  private look = { yaw: 0, pitch: 0, zoom: 1 };
+  private aim = { yaw: 0, pitch: 0, zoom: 1 };
+  private pannedAt = 0;
+  private panStart = 0;
+  /** Où l'on se tient : 0 dans la serre, 1 au jardin. */
+  spot = 0;
+  private doors: THREE.Object3D[] = [];
+  private lights: { hemi: THREE.HemisphereLight; sun: THREE.DirectionalLight; hemiBase: number; sunBase: number; sky: THREE.Color; sunColor: THREE.Color } | null = null;
+  private light = -1;
+  /** Parcelles du jardin : jardinières achetées et carrés de terre encore à vendre. */
+  private beds: THREE.Object3D[] = [];
+  private flutters: THREE.Object3D[] = [];
+  private sunrays: THREE.Mesh[] = [];
+  private sky: THREE.Group | null = null;
+  private skyMats: THREE.Material[] = [];
+  private bulbs: THREE.MeshBasicMaterial | null = null;
+  private nightLamp: THREE.PointLight | null = null;
+  private flies: THREE.Mesh[] = [];
+  private now = 0;
+  private readonly theme = THEME;
+  private slots: SlotView[] = [];
+  private mist: THREE.Mesh[] = [];
+  private waters: THREE.Object3D[] = [];
+  private w = 1;
+  private h = 1;
+  private shows: { root: THREE.Group; plant: THREE.Group | null; key: string }[] = [];
+  private gear: Record<string, THREE.Object3D> = {};
+  private bugs: THREE.Mesh[] = [];
+  private fanBlades: THREE.Group | null = null;
+  private lifted = -1;
+  private outline: OutlineEffect;
+
+  constructor(private canvas: HTMLCanvasElement) {
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.outline = new OutlineEffect(this.renderer, { defaultThickness: artStyle().outline, defaultColor: [0.03, 0.02, 0.05], defaultAlpha: 1 });
+    this.build();
+  }
+
+  /** Construit le décor, une fois pour toutes. Les plantes sont placées au premier `sync`. */
+  private build(): void {
+    const t = this.theme, st = artStyle();
+    this.scene.add(this.world);
+    const add = (...o: THREE.Object3D[]) => { this.world.add(...o); };
+
+    const hemi = new THREE.HemisphereLight(t.hemi[0], t.hemi[1], t.hemi[2] * st.hemi);
+    add(hemi);
+    const sun = new THREE.DirectionalLight(t.sun[0], t.sun[1] * st.sun);
+    this.lights = { hemi, sun, hemiBase: hemi.intensity, sunBase: sun.intensity, sky: new THREE.Color(t.hemi[0]), sunColor: new THREE.Color(t.sun[0]) };
+    this.light = -1;
+    sun.position.copy(v3(t.sun[2]));
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    const sc = sun.shadow.camera, far = 24;
+    sc.left = -far; sc.right = far; sc.top = far; sc.bottom = -far; sc.near = 1; sc.far = 34 + far;
+    sun.shadow.bias = -0.002;
+    sun.shadow.radius = st.shadowRadius;
+    add(sun);
+
+    t.build(add);
+    this.world.traverse((o) => { if (o.userData.water) this.waters.push(o); if (o.userData.door) this.doors.push(o); if (o.userData.ext || o.userData.plot) this.beds.push(o); if (o.userData.flutter !== undefined) this.flutters.push(o); if (o.userData.sunray) this.sunrays.push(o as THREE.Mesh); });
+    this.buildSky();
+
+    const mistMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35, depthWrite: false });
+    for (let k = 0; k < 6; k++) {
+      const m = new THREE.Mesh(new THREE.IcosahedronGeometry(0.16, 1), mistMat.clone());
+      m.userData.phase = k / 6;
+      this.mist.push(m);
+      add(m);
+    }
+    t.shows.forEach((p) => {
+      const root = new THREE.Group();
+      root.position.copy(v3(p));
+      root.scale.setScalar(0.72);
+      root.add(buildPot(t.showPot[0], t.showPot[1]));
+      add(root);
+      this.shows.push({ root, plant: null, key: '' });
+    });
+    for (let i = 0; i < SLOT_COUNT; i++) this.slots.push(this.buildSlot(i));
+    this.buildGear();
+    finish(this.world);
+
+    this.camera.rotation.order = 'YXZ';
+    this.camera.position.set(0, t.fp.eye, 0);
+    this.aim = { yaw: 0, pitch: t.fp.pitch, zoom: 1 };
+    this.look = { ...this.aim };
+    this.camera.updateMatrixWorld(true);
+    this.resize();
+  }
+
+  /** Équipements : invisibles tant qu'ils ne sont pas achetés. */
+  private buildGear(): void {
+    const g = this.theme.gear;
+    const add = (name: string, ...parts: THREE.Object3D[]) => {
+      const grp = new THREE.Group();
+      if (parts.length) grp.add(...parts);
+      grp.visible = false;
+      this.gear[name] = grp;
+      this.world.add(grp);
+      return grp;
+    };
+    // Coccinelles.
+    const bugGroup = add('bugs');
+    for (let k = 0; k < 6; k++) {
+      const b = new THREE.Mesh(new THREE.IcosahedronGeometry(0.07, 0), mat(0xe2382f));
+      b.scale.y = 0.6;
+      b.userData.k = k;
+      this.bugs.push(b);
+      bugGroup.add(b);
+    }
+    // Chaque équipement fait face au centre de la serre.
+    const place = (grp: THREE.Group, p: V3) => { grp.position.set(p[0], p[1], p[2]); grp.rotation.y = -Math.atan2(p[0], -p[2]); };
+    // Brumisateur.
+    place(add('mist', box(0.5, 0.16, 0.22, 0xe8eef0, 0, 0, 0), box(0.1, 0.1, 0.1, 0x6fc7e0, 0, -0.12, 0.05)), g.mist);
+    // Lampe horticole sur pied.
+    const ly = g.lamp[1];
+    const glow = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.04, 0.26), new THREE.MeshBasicMaterial({ color: 0xff9ad8 }));
+    glow.position.set(0, -0.07, 0);
+    place(add('lamp', box(0.6, 0.1, 0.34, 0x4a4a52, 0, 0, 0), glow, box(0.05, ly, 0.05, 0x4a4a52, -0.3, -ly / 2, -0.12)), g.lamp);
+    // Radiateur.
+    const fins: THREE.Object3D[] = [];
+    for (let k = 0; k < 5; k++) fins.push(box(0.1, 0.5, 0.2, 0xf2efe6, k * 0.13 - 0.26, 0.3, 0));
+    fins.push(box(0.06, 0.06, 0.06, 0xe2604f, -0.36, 0.6, 0));
+    place(add('heat', ...fins), g.heat);
+    // Ventilateur.
+    const blades = new THREE.Group();
+    for (let k = 0; k < 3; k++) {
+      const arm = new THREE.Group();
+      arm.rotation.z = (k / 3) * Math.PI * 2;
+      arm.add(box(0.3, 0.07, 0.02, 0xdfe6e8, 0.15, 0, 0, false));
+      blades.add(arm);
+    }
+    blades.position.set(0, 0.5, 0.06);
+    this.fanBlades = blades;
+    place(add('fan', box(0.08, 0.5, 0.08, 0x7a8288, 0, 0.25, 0), box(0.3, 0.05, 0.3, 0x7a8288, 0, 0.03, 0), blades), g.fan);
+  }
+
+  private buildSlot(i: number): SlotView {
+    const base = v3(this.theme.slots[i]);
+    const root = new THREE.Group();
+    root.position.copy(base);
+    // Chaque pot fait face au jardinier.
+    root.rotation.y = -Math.atan2(base.x, -base.z);
+    const marker = new THREE.Mesh(
+      new THREE.RingGeometry(0.3, 0.38, 20),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.75, side: THREE.DoubleSide }),
+    );
+    marker.rotation.x = -Math.PI / 2;
+    marker.position.y = 0.03;
+    root.add(marker);
+    // Une zone pas encore aménagée est encombrée de caisses.
+    const sz = 0.55 + (i % 3) * 0.1;
+    const crate = new THREE.Group();
+    if (i < BASE_SLOTS) crate.add(box(sz, sz * 0.8, sz, i % 2 ? 0xb98a5a : 0xa9794f, 0, sz * 0.4, 0), box(sz * 1.04, 0.05, sz * 0.2, 0x8a5f3c, 0, sz * 0.8, 0));
+    crate.position.copy(base);
+    crate.rotation.y = i * 0.5;
+    crate.visible = false;
+    // Goutteur de l'arrosage automatique, accroché au bord du pot.
+    const drip = new THREE.Group();
+    drip.add(box(0.04, 0.5, 0.04, 0xc98a4a, -0.47, 0.3, 0), box(0.16, 0.04, 0.04, 0xc98a4a, -0.41, 0.56, 0), box(0.05, 0.07, 0.05, 0x5a9fd4, -0.33, 0.53, 0));
+    drip.visible = false;
+    root.add(drip);
+    let hanger: THREE.Group | null = null;
+    if (i >= TIER_FIRST) {
+      // Un gradin : un tabouret de bois sous le pot, posé sur le dallage.
+      hanger = new THREE.Group();
+      const h = Math.max(0.05, base.y);
+      hanger.add(box(0.8, h, 0.7, 0x9a6a44, 0, -h / 2, 0), box(0.86, 0.05, 0.76, 0x7a5236, 0, -0.025, 0, false));
+      hanger.visible = false;
+      root.add(hanger);
+    } else if (i >= BASE_SLOTS && i < GARDEN_FIRST) {
+      hanger = new THREE.Group();
+      hanger.add(box(0.95, 0.06, 0.6, 0xb98a5a, 0, -0.03, 0));
+      for (const sx of [-0.42, 0.42]) hanger.add(box(0.025, 1.9, 0.025, 0xe8dcc0, sx, 0.95, 0, false));
+      hanger.visible = false;
+      root.add(hanger);
+    }
+    this.world.add(root, crate);
+    return { root, hanger, pot: null, potKey: '', marker, crate, drip, plant: null, key: '', pop: 0, base };
+  }
+
+  private cam(p: THREE.Vector3): THREE.Vector3 {
+    return p.clone().applyMatrix4(this.camera.matrixWorldInverse);
+  }
+
+  resize(): void {
+    const rect = this.canvas.getBoundingClientRect();
+    this.w = Math.max(1, rect.width);
+    this.h = Math.max(1, rect.height);
+    this.renderer.setSize(this.w, this.h, false);
+    this.setView(-1);
+    this.look = { ...this.aim };
+    this.applyView();
+  }
+
+  /** Revient face à un coin : celui d'une zone (0..3), ou le plus proche (-1). La caméra y tourne en douceur. */
+  setView(zone: number): void {
+    this.aim.zoom = 1;
+    this.aim.pitch = this.theme.fp.pitch;
+    this.aim.yaw = zone >= 0 ? this.near(zone * 2 * STEP) : Math.round(this.aim.yaw / STEP) * STEP;
+  }
+
+  /** Déplace la vue du doigt : le décor suit exactement, un écran de large vaut le champ de vision. */
+  panBy(dx: number, dy: number, edge = false): void {
+    const k = ((2 * HALF_FOV) / this.aim.zoom / this.w) * 1.35;
+    // Début d'un geste : on retient le coin d'où l'on part.
+    if (this.now - this.pannedAt > 0.25) this.panStart = Math.round(this.aim.yaw / STEP) * STEP;
+    this.aim.yaw -= dx * k * (edge ? 1.6 : 1);
+    if (!edge) this.aim.pitch = Math.max(-0.3, Math.min(0.5, this.aim.pitch + dy * k));
+    this.look = { ...this.aim };
+    this.pannedAt = this.now;
+    this.applyView();
+  }
+
+  /** Zoome d'un facteur k. `smooth` : la caméra y glisse. */
+  zoomBy(k: number, smooth = false): void {
+    this.aim.zoom = Math.max(1, Math.min(2.6, this.aim.zoom * k));
+    this.pannedAt = this.now;
+    if (!smooth) { this.look.zoom = this.aim.zoom; this.applyView(); }
+  }
+
+  /** Double-touche : on se tourne vers l'endroit touché et on s'en approche, ou on revient en arrière. */
+  toggleZoom(sx: number, sy: number): void {
+    if (this.zoomed) { this.setView(-1); return; }
+    const t = Math.tan(HALF_FOV) / this.aim.zoom;
+    this.aim.yaw += Math.atan(((sx / this.w) * 2 - 1) * t);
+    this.aim.pitch = Math.max(-0.3, Math.min(0.5, this.aim.pitch + Math.atan((1 - (sy / this.h) * 2) * t * (this.h / this.w)) * 0.7));
+    this.aim.zoom = 1.9;
+    this.pannedAt = this.now;
+  }
+
+  /** Cap équivalent à `yaw` le plus proche du cap actuel : on tourne par le plus court. */
+  private near(yaw: number): number {
+    const d = yaw - this.aim.yaw;
+    return this.aim.yaw + d - Math.round(d / (2 * Math.PI)) * 2 * Math.PI;
+  }
+
+  /** Doigt levé après un balayage : un petit geste suffit pour passer au coin voisin, dans le sens du geste. */
+  release(): void {
+    if (this.zoomed) return;
+    const d = this.aim.yaw - this.panStart;
+    this.aim.yaw = Math.abs(d) < 0.07 ? this.panStart : this.panStart + Math.sign(d) * Math.max(1, Math.round(Math.abs(d) / STEP)) * STEP;
+    this.pannedAt = -1;
+  }
+
+  /** Passe la porte : on marche jusqu'à l'autre endroit, tourné vers `deg`. */
+  walk(spot: number, deg: number): void {
+    this.spot = spot;
+    this.aim.zoom = 1;
+    this.aim.pitch = this.theme.fp.pitch;
+    this.aim.yaw = this.near((deg * Math.PI) / 180);
+    this.pannedAt = this.now;
+  }
+
+  /** Vrai si l'emplacement est là où l'on se tient. */
+  private here(i: number): boolean {
+    return (i >= GARDEN_FIRST && i < TIER_FIRST ? 1 : 0) === this.spot;
+  }
+
+  /** Position écran d'un objet cliquable du décor, et taille d'une unité à cet endroit. */
+  hotRect(k: number): { x: number; y: number; unit: number } {
+    const h = this.theme.fp.hot[k];
+    if (!h || (h.spot >= 0 && h.spot !== this.spot)) return { x: -9999, y: -9999, unit: 0 };
+    const a = this.screen(v3(h.at)), b = this.screen(v3(h.at).setY(h.at[1] + 1));
+    return { x: a.x, y: a.y, unit: Math.abs(a.y - b.y) };
+  }
+
+  get zoomed(): boolean {
+    return this.aim.zoom > 1.15;
+  }
+
+  private applyView(): void {
+    const c = this.camera, l = this.look;
+    c.aspect = this.w / this.h;
+    c.fov = Math.min(100, (2 * Math.atan(Math.tan(HALF_FOV) / c.aspect) * 180) / Math.PI);
+    c.zoom = l.zoom;
+    c.rotation.set(l.pitch, -l.yaw, 0);
+    c.updateProjectionMatrix();
+    c.updateMatrixWorld(true);
+  }
+
+  /** Aligne le décor sur l'état du jeu. Ne reconstruit un modèle que si son aspect change. */
+  sync(s: State): void {
+    for (const d of this.doors) d.visible = !s.zonesOpen[GARDEN_INDEX];
+    for (const b of this.beds) b.visible = b.userData.ext ? (s.gardenExt ?? 0) >= b.userData.ext : (s.gardenExt ?? 0) < b.userData.plot;
+    for (const k of Object.keys(this.gear)) this.gear[k].visible = !!s.upgrades[k as keyof State['upgrades']];
+    s.showcase.forEach((h, k) => {
+      const v = this.shows[k];
+      const key = h ? `${h.sp}|${h.vr}` : '';
+      if (key === v.key) return;
+      if (v.plant) v.root.remove(v.plant);
+      v.plant = h ? finish(buildPlant(SPECIES_BY_ID[h.sp], 4, 1, h.vr)) : null;
+      if (v.plant) {
+        v.plant.position.y = POT_TOP;
+        v.root.add(v.plant);
+      }
+      v.key = key;
+    });
+    s.slots.forEach((slot, i) => {
+      const v = this.slots[i];
+      const open = slotOpen(s, i);
+      v.crate.visible = !open && i < BASE_SLOTS;
+      if (v.hanger) v.hanger.visible = open;
+      v.marker.visible = !slot.pot && open;
+      v.drip.visible = slot.pot && s.upgrades.water && !s.dry?.[zoneIndexOfSlot(i)];
+      // Le pot : taille, émail et motif viennent de l'atelier ; sans dessin, c'est le pot du décor.
+      const pd = slot.pd;
+      const scale = slot.pot ? POT_SIZES[(pd?.size ?? 1) - 1].scale : 1;
+      const potKey = slot.pot ? `${pd?.size ?? 1}|${pd?.glaze ?? -1}|${pd?.pat ?? 0}|${pd?.pv ?? 0}|${pd?.prof?.join(',') ?? ''}|${slot.soil ?? ''}` : '';
+      if (potKey !== v.potKey) {
+        if (v.pot) v.root.remove(v.pot);
+        v.pot = null;
+        if (slot.pot) {
+          v.pot = finish(potModel(pd, this.theme.pot));
+          // La terre du pot se voit : sable clair, écorce rousse, terreau noir…
+          const soilMat = mat(SOILS[slot.soil ?? 'universel'].color);
+          v.pot.traverse((o) => { if (o.userData.soil) (o as THREE.Mesh).material = soilMat; });
+          v.pot.scale.setScalar(scale);
+          v.root.add(v.pot);
+          if (v.key !== '') v.pop = 1;
+        }
+        v.potKey = potKey;
+      }
+      const p = slot.plant;
+      let key = slot.pot ? 'pot' : 'none';
+      if (p) {
+        const sp = SPECIES_BY_ID[p.sp];
+        const fit = fitOf(sp, zoneClimate(s, zoneOfSlot(i)));
+        const health = Math.min(fit, p.water > 0 ? 1 : 0.75) * (p.pests > 0 ? 0.8 : 1);
+        const st = stageOf(p.prog);
+        key = `${p.sp}|${st}|${Math.round(health * 5)}|${st >= 2 ? p.vr : 0}`;
+        if (key !== v.key) {
+          if (v.plant) v.root.remove(v.plant);
+          v.plant = finish(buildPlant(sp, st, health, st >= 2 ? p.vr : 0));
+          v.root.add(v.plant);
+          if (v.key.split('|')[1] !== key.split('|')[1]) v.pop = 1;
+        }
+        const frac = st >= 4 ? 1 : p.prog * 4 - st;
+        v.plant!.position.y = POT_TOP * scale;
+        v.plant!.userData.grow = (0.82 + 0.18 * frac) * [1, 1.1, 1.2][(sp.size ?? 1) - 1];
+      } else if (v.plant) {
+        v.root.remove(v.plant);
+        v.plant = null;
+      }
+      v.key = key;
+    });
+  }
+
+  /** Soulève un pot pendant qu'on le déplace (-1 pour tout reposer). */
+  lift(i: number): void {
+    if (this.lifted >= 0 && this.lifted !== i) this.slots[this.lifted].root.position.copy(this.slots[this.lifted].base);
+    this.lifted = i;
+  }
+
+  /** Amène le pot soulevé sous le doigt, à bout de bras, à la distance des étagères. */
+  dragTo(sx: number, sy: number): void {
+    if (this.lifted < 0) return;
+    const v = this.slots[this.lifted];
+    const d = new THREE.Vector3((sx / this.w) * 2 - 1, -(sy / this.h) * 2 + 1, 0.5).unproject(this.camera).sub(this.camera.position).normalize();
+    const t = 3.9 / Math.max(0.2, Math.hypot(d.x, d.z));
+    v.root.position.copy(this.camera.position).addScaledVector(d, t);
+    v.root.position.y -= 0.3;
+  }
+
+  pop(i: number): void {
+    this.slots[i].pop = 1;
+  }
+
+  render(t: number, dt: number): void {
+    const k = Math.min(1, dt * 7);
+    this.now = t;
+    const l = this.look, a = this.aim;
+    // Doigt levé, la vue se cale en douceur face au coin le plus proche.
+    if (t - this.pannedAt > 0.3 && !this.zoomed && this.lifted < 0) a.yaw = Math.round(a.yaw / STEP) * STEP;
+    // On marche en douceur jusqu'à l'endroit choisi (serre ou jardin).
+    const [px, , pz] = this.theme.fp.spots[this.spot];
+    const cp = this.camera.position, far = Math.abs(cp.x - px) + Math.abs(cp.z - pz) > 0.002;
+    if (far) { cp.x += (px - cp.x) * Math.min(1, dt * 3.2); cp.z += (pz - cp.z) * Math.min(1, dt * 3.2); }
+    if (far || Math.abs(l.yaw - a.yaw) + Math.abs(l.pitch - a.pitch) + Math.abs(l.zoom - a.zoom) > 0.0005) {
+      l.yaw += (a.yaw - l.yaw) * k; l.pitch += (a.pitch - l.pitch) * k; l.zoom += (a.zoom - l.zoom) * k;
+      this.applyView();
+    }
+    this.slots.forEach((sv, i) => {
+      sv.pop = Math.max(0, sv.pop - dt * 2.6);
+      const bounce = 1 + Math.sin(sv.pop * Math.PI) * 0.22;
+      sv.root.scale.set(bounce, 1 + Math.sin(sv.pop * Math.PI) * 0.3, bounce);
+      if (this.lifted !== i) sv.root.position.lerp(sv.base, Math.min(1, dt * 14));
+      if (sv.plant) {
+        const grow = (sv.plant.userData.grow as number) ?? 1;
+        sv.plant.scale.setScalar(1.25 * grow);
+        sv.plant.rotation.z = Math.sin(t * 1.3 + i * 1.7) * 0.035;
+        sv.plant.rotation.x = Math.cos(t * 1.1 + i * 0.9) * 0.025;
+      }
+      if (sv.marker.visible) sv.marker.scale.setScalar(1 + Math.sin(t * 2.2 + i) * 0.06);
+    });
+    const [mx, my, mz] = this.theme.mist, [dx, dy, dz] = this.theme.mistDir;
+    this.mist.forEach((m) => {
+      const ph = (t * 0.12 + m.userData.phase) % 1;
+      m.position.set(mx + dx * ph + Math.sin(ph * 9 + m.userData.phase * 20) * 0.15, my + dy * ph, mz + dz * ph + Math.sin(m.userData.phase * 30) * 0.3);
+      m.scale.setScalar(0.6 + ph * 1.6);
+      (m.material as THREE.MeshBasicMaterial).opacity = 0.34 * Math.sin(ph * Math.PI);
+    });
+    this.waters.forEach((w) => { w.scale.y = 1 + Math.sin(t * 1.5) * 0.25; });
+    this.flies.forEach((f) => {
+      if (!f.visible) return;
+      const n = f.userData.fly as number, a = n * 0.71 + t * 0.12 * (n % 2 ? 1 : -1);
+      const r = 2.6 + (n % 5) * 0.35 + Math.sin(t * 0.7 + n) * 0.3;
+      f.position.set(Math.sin(a) * r, 1.0 + (n % 4) * 0.35 + Math.sin(t * 1.3 + n * 2) * 0.2, Math.cos(a) * r);
+      (f.material as THREE.MeshBasicMaterial).opacity = 0.5 + 0.5 * Math.sin(t * 3 + n);
+    });
+    this.flutters.forEach((f) => { f.rotation.x = 0.45 + Math.sin(t * 6 + (f.userData.flutter as number) * 1.3) * 0.35; f.rotation.z = Math.sin(t * 4.3 + (f.userData.flutter as number)) * 0.2; });
+    this.bugs.forEach((b) => {
+      const n = b.userData.k as number;
+      const a = t * 0.35 + n * 1.9;
+      const home = this.slots[(n * 5 + 1) % BASE_SLOTS].base;
+      b.position.set(home.x + Math.cos(a) * 0.45, home.y + 0.05, home.z + Math.sin(a) * 0.45);
+    });
+    if (this.fanBlades) this.fanBlades.rotation.z = t * 9;
+    this.shows.forEach((sv, n) => { if (sv.plant) sv.plant.rotation.z = Math.sin(t * 1.1 + n) * 0.03; });
+    this.outline.render(this.scene, this.camera);
+  }
+
+  /** Règle l'éclairage sur l'heure : 1 en plein jour, 0 en pleine nuit, avec une lumière dorée entre les deux. */
+  setDaylight(k: number): void {
+    const l = this.lights;
+    if (!l || Math.abs(k - this.light) < 0.004) return;
+    this.light = k;
+    const dusk = 1 - Math.abs(k * 2 - 1);
+    l.sun.intensity = l.sunBase * (0.06 + 0.94 * k);
+    l.hemi.intensity = l.hemiBase * (0.4 + 0.6 * k);
+    l.sun.color.copy(l.sunColor).lerp(NIGHT_SUN, 1 - k).lerp(DUSK_SUN, dusk * 0.6);
+    l.hemi.color.copy(l.sky).lerp(NIGHT_SKY, (1 - k) * 0.85);
+    // La nuit, plus de rayons de soleil : ils s'effacent avec le jour.
+    for (const r of this.sunrays) {
+      const m = r.material as THREE.Material;
+      if (m.transparent) { m.userData.base ??= m.opacity; m.opacity = (m.userData.base as number) * k * k; }
+      r.visible = m.transparent ? k > 0.02 : k > 0.5;
+    }
+    // Étoiles et lune sont accrochées au ciel 3D : elles tournent avec le regard.
+    // Guirlande et lucioles s'allument avec la nuit.
+    if (this.bulbs) this.bulbs.color.setHex(0xf4efe0).lerp(BULB_ON, 1 - k);
+    if (this.nightLamp) this.nightLamp.intensity = (1 - k) * 14;
+    for (const f of this.flies) f.visible = k < 0.5;
+    if (this.sky) {
+      this.sky.visible = k < 0.98;
+      const o = Math.min(1, (1 - k) * 1.3);
+      for (const m of this.skyMats) m.opacity = o * ((m.userData.k as number | undefined) ?? 1);
+    }
+  }
+
+  /** Un ciel de nuit en vrai décor : étoiles et lune loin autour de la serre, invisibles de jour. */
+  private buildSky(): void {
+    // Une guirlande d'ampoules court sous la charpente, tout autour de la serre.
+    const bm = new THREE.MeshBasicMaterial({ color: 0xf4efe0 });
+    bm.userData.outlineParameters = { visible: false };
+    this.bulbs = bm;
+    const bgeo = new THREE.SphereGeometry(0.07, 8, 6), cgeo = new THREE.CylinderGeometry(0.035, 0.035, 0.06, 6);
+    const cap = new THREE.MeshBasicMaterial({ color: 0x2b2118 });
+    cap.userData.outlineParameters = { visible: false };
+    // Le fil retombe en festons entre les points d'accroche ; une ampoule pend sous chaque point du fil.
+    const pts: THREE.Vector3[] = [];
+    for (let k = 0; k <= 192; k++) {
+      const a = (k / 192) * Math.PI * 2, r = 4.35;
+      pts.push(new THREE.Vector3(Math.sin(a) * r, 3.68 - Math.abs(Math.sin((k / 4) * Math.PI / 6)) * 0.25, Math.cos(a) * r));
+    }
+    const wire = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0x2b2118 }));
+    wire.userData.raw = true;
+    this.world.add(wire);
+    for (let k = 0; k < 48; k++) {
+      const w = pts[k * 4];
+      const b = new THREE.Mesh(bgeo, bm);
+      b.position.set(w.x, w.y - 0.12, w.z);
+      b.userData.raw = true;
+      const c = new THREE.Mesh(cgeo, cap);
+      c.position.set(w.x, w.y - 0.05, w.z);
+      c.userData.raw = true;
+      this.world.add(b, c);
+    }
+    const lamp = new THREE.PointLight(0xffc878, 0, 9, 1.2);
+    lamp.position.set(0, 3.2, 0);
+    this.nightLamp = lamp;
+    this.world.add(lamp);
+    // Des lucioles flottent près des plantes.
+    const fm = new THREE.MeshBasicMaterial({ color: 0xd8ff7a, transparent: true, opacity: 0.9, depthWrite: false });
+    fm.userData.outlineParameters = { visible: false };
+    for (let k = 0; k < 18; k++) {
+      const f = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 4), fm.clone());
+      f.userData.raw = true;
+      f.userData.fly = k;
+      f.visible = false;
+      this.flies.push(f);
+      this.world.add(f);
+    }
+    const g = new THREE.Group();
+    const n = 260, pos = new Float32Array(n * 3);
+    let seed = 7;
+    const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    for (let i = 0; i < n; i++) {
+      const a = rnd() * Math.PI * 2, h = 0.08 + rnd() * 0.9, r = 60;
+      const c = Math.sqrt(1 - h * h);
+      pos.set([Math.cos(a) * c * r, h * r, Math.sin(a) * c * r], i * 3);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const pm = new THREE.PointsMaterial({ color: 0xffffff, size: 2.4, sizeAttenuation: false, transparent: true, opacity: 0, depthWrite: false, fog: false });
+    pm.userData.outlineParameters = { visible: false };
+    g.add(new THREE.Points(geo, pm));
+    const mm = new THREE.MeshBasicMaterial({ color: 0xfdf6d8, transparent: true, opacity: 0, depthWrite: false, fog: false });
+    mm.userData.outlineParameters = { visible: false };
+    const moon = new THREE.Mesh(new THREE.CircleGeometry(2.6, 28), mm);
+    moon.position.set(38, 20, -40);
+    moon.lookAt(0, 0, 0);
+    const hm = new THREE.MeshBasicMaterial({ color: 0xfdf6d8, transparent: true, opacity: 0, depthWrite: false, fog: false });
+    hm.userData.outlineParameters = { visible: false };
+    const halo = new THREE.Mesh(new THREE.CircleGeometry(4.2, 28), hm);
+    halo.position.copy(moon.position).multiplyScalar(1.01);
+    halo.lookAt(0, 0, 0);
+    g.add(moon, halo);
+    g.traverse((o) => { o.userData.raw = true; o.renderOrder = -10; o.castShadow = false; o.receiveShadow = false; });
+    this.skyMats = [pm, mm];
+    // Le halo reste plus discret que la lune.
+    this.skyMats.push(hm);
+    hm.userData.k = 0.25;
+    g.visible = false;
+    this.sky = g;
+    this.world.add(g);
+    this.light = -1;
+  }
+
+  /** Rend une petite scène à part dans une texture, avec le même trait que la serre, et en lit les pixels. */
+  snap(scene: THREE.Scene, cam: THREE.Camera, rt: THREE.WebGLRenderTarget, out: Uint8Array): void {
+    const r = this.renderer;
+    const prev = r.getRenderTarget();
+    const color = r.getClearColor(new THREE.Color());
+    const alpha = r.getClearAlpha();
+    try {
+      r.setRenderTarget(rt);
+      r.setClearColor(0x000000, 0);
+      r.clear();
+      this.outline.render(scene, cam);
+      r.readRenderTargetPixels(rt, 0, 0, rt.width, rt.height, out);
+    } finally {
+      r.setRenderTarget(prev);
+      r.setClearColor(color, alpha);
+    }
+  }
+
+  private screen(p: THREE.Vector3): { x: number; y: number } {
+    // Derrière soi : hors écran.
+    if (this.cam(p).z > -0.3) return { x: -9999, y: -9999 };
+    const q = p.clone().project(this.camera);
+    return { x: (q.x * 0.5 + 0.5) * this.w, y: (1 - (q.y * 0.5 + 0.5)) * this.h };
+  }
+
+  /** Position écran (px, relative au canvas) du pied et du sommet d'un emplacement. */
+  slotRect(i: number): { x: number; top: number; bottom: number; unit: number } {
+    const v = this.slots[i];
+    if (!this.here(i)) return { x: -9999, bottom: -9999, top: -9999, unit: 1 };
+    const foot = this.screen(v.base);
+    const head = this.screen(v.base.clone().setY(v.base.y + 1.55));
+    return { x: foot.x, bottom: foot.y, top: head.y, unit: (foot.y - head.y) / 1.55 };
+  }
+
+  /** Position écran d'un socle de la vitrine. */
+  showRect(k: number): { x: number; y: number } {
+    if (this.spot) return { x: -9999, y: -9999 };
+    return this.screen(v3(this.theme.shows[k]).add(new THREE.Vector3(0, 1.35, 0)));
+  }
+
+  /** Position écran du centre d'une zone, pour y accrocher un cadenas. */
+  zoneCenter(r: number): { x: number; y: number } {
+    const c = new THREE.Vector3();
+    if (this.spot) return { x: -9999, y: -9999 };
+    for (let k = 0; k < SLOTS_PER_ZONE; k++) c.add(this.slots[r * SLOTS_PER_ZONE + k].base);
+    return this.screen(c.multiplyScalar(1 / SLOTS_PER_ZONE).add(new THREE.Vector3(0, 1.1, 0)));
+  }
+}
