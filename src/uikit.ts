@@ -9,7 +9,6 @@ import { SPECIES_MARK } from './icons';
 
 /** Le signe d'une espèce dans un texte : un caractère privé, remplacé à l'affichage par son portrait. */
 export const EMOJI: Record<string, string> = SPECIES_MARK;
-export const ZONE_SHORT = ['Ombre', 'Bassin', 'Porte', 'Plein sud'];
 
 export type SheetKind = 'trek' | 'season' | 'trophies' | 'atelier' | 'paint' | 'vitrine' | 'none' | 'seed' | 'buypot' | 'plant' | 'harvest' | 'packets' | 'market' | 'shop' | 'almanac' | 'fiche' | 'zone' | 'gext' | 'water' | 'soil' | 'cave';
 

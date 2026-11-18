@@ -28,20 +28,10 @@ const clock = () => t0 + (Date.now() - t0) * speed;
 let state = sim.load(clock());
 const away = sim.advance(state, clock());
 
-// Direction artistique retenue : la bande dessinée. Les parties commencées dans un autre style y passent une fois.
-if (!state.hints?.bd) { state.style = 'bd'; (state.hints ??= {}).bd = true; }
-// Un seul décor : la verrière vue de l'intérieur. Les anciens décors vus de haut ne sont plus proposés.
-state.theme = 'pavillon';
-(state.hints ??= {}).fp = true;
-const scene = new Scene3D(document.getElementById('gl') as HTMLCanvasElement, state.theme, state.style);
+const scene = new Scene3D(document.getElementById('gl') as HTMLCanvasElement);
 const ui = new UI(state, scene, () => {
   sim.wipe();
-  const { theme, style } = state;
   state = sim.newState(clock());
-  state.theme = theme;
-  state.style = style;
-  (state.hints ??= {}).bd = true;
-  state.hints.fp = true;
   ui.setState(state);
 });
 

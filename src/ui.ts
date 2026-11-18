@@ -10,8 +10,8 @@ import { Stall } from './stall';
 import { Cellar } from './cellar';
 import { Cutting } from './cutting';
 import { Pollen } from './pollen';
-import { finish, STYLES } from './styles';
-import { themeOf } from './themes';
+import { finish } from './styles';
+import { THEME } from './themes';
 import * as sim from './sim';
 import { play, setMuted, unlock } from './sound';
 import type { State } from './sim';
@@ -55,7 +55,6 @@ export class UI {
   private lastSheet = '';
   private lastHud = '';
   private lastQuest = '';
-  private lastNav = '';
   /** Pot en cours de peinture : sur un emplacement ou sur l'étagère. */
   paintAt: { where: 'slot' | 'shelf'; k: number } = { where: 'slot', k: 0 };
   private studio!: Studio;
@@ -174,7 +173,7 @@ export class UI {
       if (gain) { play('coin'); this.buzz(25); this.caveSay(`Cueilli : +${fmt(gain)} 🪙${sim.isNight(this.s) ? ' (prime de nuit)' : ''}`); this.bumpCoins(); }
     };
     this.cellar.onClear = (i) => { if (sim.clearBed(this.s, i)) { play('tap'); this.buzz(15); this.caveSay('Bac vidé : tu peux le réensemencer.'); } };
-    this.cellar.onHint = (i, k) => {
+    this.cellar.onHint = (_i, k) => {
       if (k === 'buy') { const p = sim.caveBedPrice(this.s); this.caveSay(p === null ? 'La cave est pleine.' : `Un bac de plus : ${fmt(p)} 🪙. Touche « Bac en plus » en bas.`); return; }
       this.caveSay(k === 'cut' ? 'Mûr ! Balaie le bac d\'un coup de doigt pour cueillir.' : 'Garde le doigt sur le bac pour le brumiser.');
     };
@@ -227,13 +226,13 @@ export class UI {
         const before = spread();
         f.x = e.clientX; f.y = e.clientY;
         const now = spread();
-        if (pinch > 0 && now.d > 0) this.scene.zoomAt(now.d / before.d, now.x, now.y);
+        if (pinch > 0 && now.d > 0) this.scene.zoomBy(now.d / before.d);
         this.scene.panBy(now.x - before.x, now.y - before.y);
         this.swipedAt = Date.now();
         return;
       }
-      // À la première personne, un geste vif parti d'un pot est un balayage ; pour prendre le pot, on pose le doigt un instant.
-      if (this.drag < 0 && this.holdAt && this.scene.fp && Date.now() - this.holdAt.t < 180 && Math.hypot(e.clientX - this.holdAt.x, e.clientY - this.holdAt.y) >= 10) this.holdAt = null;
+      // Un geste vif parti d'un pot est un balayage ; pour prendre le pot, on pose le doigt un instant.
+      if (this.drag < 0 && this.holdAt && Date.now() - this.holdAt.t < 180 && Math.hypot(e.clientX - this.holdAt.x, e.clientY - this.holdAt.y) >= 10) this.holdAt = null;
       if (this.drag < 0 && !this.holdAt) {
         // Un doigt sur le décor : la vue suit.
         if (!f) return;
@@ -288,8 +287,7 @@ export class UI {
     });
     app.addEventListener('wheel', (e) => {
       if ((e.target as HTMLElement).closest('#sheet, #modal, #studio, #trek, #stall')) return;
-      const at = local(e.clientX, e.clientY);
-      this.scene.zoomAt(Math.exp(-e.deltaY * 0.0016), at.x, at.y);
+      this.scene.zoomBy(Math.exp(-e.deltaY * 0.0016));
     }, { passive: true });
     for (const ev of ['pointercancel', 'pointerleave']) app.addEventListener(ev, (e) => { fingers.delete((e as PointerEvent).pointerId); this.dropTool(); this.pointerDown = false; this.holdAt = null; if (this.drag >= 0) { this.endDrag(); this.refresh(true); } });
     app.addEventListener('click', (e) => {
@@ -319,7 +317,7 @@ export class UI {
     });
     if (best !== this.dragTarget) { this.dragTarget = best; this.refresh(true); }
     // Le pot tenu un instant devant la porte la franchit avec nous : serre et jardin s'échangent leurs pots.
-    const hot = themeOf(this.scene.themeId).fp?.hot ?? [];
+    const hot = THEME.fp.hot;
     const k = hot.findIndex((h) => h.act === 'door');
     const dr = k >= 0 && this.s.zonesOpen[GARDEN_INDEX] ? this.scene.hotRect(k) : null;
     const over = !!dr && Date.now() - this.crossedAt > 1500 && x > 44 && x < rect.width - 44 && Math.hypot(dr.x - x, dr.y - y) < dr.unit * hot[k].r;
@@ -410,14 +408,14 @@ export class UI {
   }
 
   zname(z: number): string {
-    return themeOf(this.scene.themeId).zones[z] ?? 'Le jardin';
+    return THEME.zones[z] ?? 'Le jardin';
   }
 
   private applyTheme(): void {
-    $('app').style.background = themeOf(this.scene.themeId).bg;
+    $('app').style.background = THEME.bg;
     // Objets du décor qui ouvrent un menu : une zone tactile par objet, avec son étiquette.
     this.hotEls.forEach((el) => el.remove());
-    this.hotEls = (themeOf(this.scene.themeId).fp?.hot ?? []).map((h) => {
+    this.hotEls = THEME.fp.hot.map((h) => {
       const b = document.createElement('button');
       b.className = 'hot';
       b.innerHTML = `<span>${h.label}</span>`;
@@ -434,8 +432,7 @@ export class UI {
       $('overlay').appendChild(b);
       return b;
     });
-    document.body.dataset.style = this.scene.styleId;
-    document.body.dataset.fp = this.scene.fp ? '1' : '';
+    document.body.dataset.style = 'bd';
   }
 
   setState(s: State): void {
@@ -744,20 +741,6 @@ export class UI {
         if (sim.buyUpgrade(s, arg as 'water' | 'bugs' | 'mist' | 'stock')) { this.toast('Installé dans la serre !'); this.buzz(25); }
         else this.toast('Pas assez de pièces.');
         break;
-      case 'style':
-        s.style = arg;
-        this.scene.setStyle(arg);
-        this.applyTheme();
-        this.close();
-        this.toast(`Style : ${STYLES.find((x) => x.id === arg)?.name ?? ''}`);
-        break;
-      case 'theme':
-        s.theme = arg;
-        this.scene.setTheme(arg);
-        this.applyTheme();
-        this.close();
-        this.toast(`Décor : ${themeOf(arg).name}`);
-        break;
       case 'quest': {
         const r = sim.claimQuest(s);
         if (r) { play('coin'); this.toast(`Objectif atteint ! +${fmt(r)} 🪙`); this.bumpCoins(); this.buzz(30); }
@@ -832,7 +815,7 @@ export class UI {
         plant = finish(buildPlant(sp, stage, health, stage >= 2 ? p.vr : 0));
         scale = (0.82 + 0.18 * (stage >= 4 ? 1 : p.prog * 4 - stage)) * [1, 1.1, 1.2][(sp.size ?? 1) - 1];
       }
-      st.openView(slot.pd, themeOf(s.theme).pot, plant, scale);
+      st.openView(slot.pd, THEME.pot, plant, scale);
     }
     this.studioTools();
     st.resize();
@@ -1343,7 +1326,7 @@ export class UI {
       el.style.height = r.bottom - r.top + 'px';
     });
     this.hotEls.forEach((el, k) => {
-      const r = this.scene.hotRect(k), h = themeOf(this.scene.themeId).fp!.hot[k];
+      const r = this.scene.hotRect(k), h = THEME.fp.hot[k];
       el.style.left = r.x + 'px';
       el.style.top = r.y + 'px';
       el.style.width = el.style.height = r.unit * h.r * 2 + 'px';
@@ -1394,7 +1377,7 @@ export class UI {
       tip('glove', bugs, '🧤 Des chenilles ! Prends le gant et frotte la plante.');
       tip('shears', shaggy, '✂️ Une plante fait des pousses folles : passe le sécateur dessus, elle poussera plus vite et plus belle.');
       tip('basket', ripe >= 2, '🧺 Plusieurs plantes en fleur : le panier les range en réserve d\'un seul geste.');
-      tip('door', this.scene.fp && s.zonesOpen[GARDEN_INDEX] && s.slots.some((sl) => sl.pot), '🚪 Pour sortir un pot au jardin, fais-le glisser sur la porte et tiens-le là un instant.');
+      tip('door', s.zonesOpen[GARDEN_INDEX] && s.slots.some((sl) => sl.pot), '🚪 Pour sortir un pot au jardin, fais-le glisser sur la porte et tiens-le là un instant.');
       tip('cavenight', sim.isNight(s) && !!s.cave, '🍄 C\'est la nuit : descends à la cave par la trappe, tes champignons poussent trois fois plus vite et se vendent mieux.');
       tip('night', sim.isNight(s), '🌑 La nuit tombe : les plantes boivent moins et poussent moins vite, sauf les nocturnes qui s\'épanouissent dans le noir.');
       tip('drip', s.slots.filter((sl) => sl.plant).length >= 5, '💧 Trop de plantes à arroser ? Le tonneau d\'arrosage de la serre arrose tout seul les pots dont la vanne est ouverte.');
@@ -1424,7 +1407,7 @@ export class UI {
         else if (i === this.dragTarget) { cls += ' ready'; txt = slot.pot ? '⇄' : '⬇'; }
         else if (!slot.pot) { cls += ' ghost'; txt = '+'; }
         else cls += ' hidden';
-      } else if (!slot.pot) { if (this.scene.close) { cls += ' ghost'; txt = '+'; } else cls += ' hidden'; }
+      } else if (!slot.pot) { cls += ' ghost'; txt = '+'; }
       else if (!p) { cls += ' plus'; txt = '🌱'; }
       else if (p.pests > 0) { cls += ' alert'; txt = '🐛'.repeat(p.pests); }
       else if (p.cut === 1 && p.prog < 1) { cls += ' alert'; txt = '✂️'; }
@@ -1447,7 +1430,7 @@ export class UI {
     const rest = sim.trekOf(s).rest;
     const marketHot = FAMILY_IDS.some((f) => s.market[f].p >= 1.25) && s.stock.length > 0;
     this.hotEls.forEach((el, k) => {
-      const h = themeOf(this.scene.themeId).fp!.hot[k];
+      const h = THEME.fp.hot[k];
       let txt = h.label, alert = false;
       if (h.act === 'door' && this.drag >= 0 && s.zonesOpen[GARDEN_INDEX]) { txt = '🚪 Tiens le pot ici'; alert = true; }
       else if (h.act === 'door') txt = !s.zonesOpen[GARDEN_INDEX] ? `🔒 Jardin · ${fmt(sim.ZONE_PRICES[GARDEN_INDEX])} 🪙` : this.scene.spot ? '🚪 Rentrer' : '🌳 Jardin';
@@ -1508,28 +1491,14 @@ export class UI {
     // Objectif
     const q = sim.currentQuest(s);
     const o = s.order;
-    // Sans barre du bas, ce qui est prêt se signale ici d'une pastille, même quand on regarde ailleurs.
-    const al = this.scene.fp ? (s.packets > 0 ? `<button class="chip ord al" data-act="nav" data-arg="packets">🎁 ${s.packets}</button>` : '')
-      + (kilnDone ? '<button class="chip ord al" data-act="nav" data-arg="atelier">🏺 !</button>' : '') : '';
+    // Ce qui est prêt se signale ici d'une pastille, même quand on regarde ailleurs.
+    const al = (s.packets > 0 ? `<button class="chip ord al" data-act="nav" data-arg="packets">🎁 ${s.packets}</button>` : '')
+      + (kilnDone ? '<button class="chip ord al" data-act="nav" data-arg="atelier">🏺 !</button>' : '');
     const oc = al + (o ? `<button class="chip ord" data-act="orderinfo">📦 ${FAMILIES[o.family].icon} ${clock(o.left)}</button>` : '');
     const qh = (q ? `<button class="qt" data-act="questgo">🎯 ${esc(q.text)}</button>${q.done(s)
       ? `<button class="btn gold small" data-act="quest">+${q.reward} 🪙</button>`
       : `<span class="chip">+${q.reward} 🪙</span>`}` : oc ? '<span class="qt"></span>' : '') + oc;
     if (qh !== this.lastQuest && (force || !this.pointerDown)) { $('quest').innerHTML = qh; this.lastQuest = qh; }
-
-    // Navigation
-    const seeds = Object.values(s.seeds).reduce((a, b) => a + b, 0);
-    const wait = Math.max(0, Math.ceil(s.packetIn));
-    const timer = `${Math.floor(wait / 60)}:${String(wait % 60).padStart(2, '0')}`;
-    const hot = FAMILY_IDS.some((f) => s.market[f].p >= 1.25) && s.stock.length > 0;
-    const nav = [
-      ['packets', '🎁', s.packets > 0 ? 'Sachets' : timer, s.packets > 0 ? String(s.packets) : '', s.packets > 0 && seeds === 0],
-      ['almanac', '📖', 'Almanach', '', false],
-      ['atelier', '🏺', s.kiln && s.kiln.left > 0 ? clock(s.kiln.left) : 'Atelier', s.kiln && s.kiln.left <= 0 ? '!' : '', !!s.kiln && s.kiln.left <= 0],
-      ['shop', '🛒', 'Boutique', '', false],
-      ['market', '📈', 'Marché', hot ? '!' : '', false],
-    ].map(([k, e, l, d, pulse]) => `<button class="navb${pulse ? ' pulse' : ''}" data-act="nav" data-arg="${k}"><span>${e}</span>${l}${d ? `<i class="dot">${d}</i>` : ''}</button>`).join('');
-    if (nav !== this.lastNav && (force || !this.pointerDown)) { $('nav').innerHTML = nav; this.lastNav = nav; }
 
     // Panneau
     if (this.kind !== 'none') {

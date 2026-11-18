@@ -175,8 +175,8 @@ describe('simulation', () => {
     expect(sim.placePot(s, 6, 0)).toBe(true);
     expect(sim.potSize(s.slots[6])).toBe(3);
     s.coins = 100;
-    expect(sim.paintPot(s, 'slot', 6, 1, 2)).toBe(true);
-    expect(sim.paintPot(s, 'slot', 6, 8, 0)).toBe(false); // émail verrouillé
+    expect(sim.savePaint(s, 'slot', 6, 1, 'x')).toBe(true);
+    expect(sim.savePaint(s, 'slot', 6, 8, 'x')).toBe(false); // émail verrouillé
     expect(s.coins).toBe(100 - sim.PAINT_PRICE);
   });
 
@@ -191,8 +191,9 @@ describe('simulation', () => {
   it('boutures et commandes', () => {
     const s = sim.newState(0);
     s.slots[7].plant = { sp: 'basilic', prog: 1, water: 1, pests: 0, q: 90, vr: 0 };
-    expect(sim.harvestCutting(s, 7)).toBe(true);
+    expect(sim.takeCutting(s, 7, 2)).toBe(2);
     expect(s.seeds.basilic).toBe(2);
+    expect(s.slots[7].plant!.prog).toBe(0.7); // la plante mère reste et repart de plus bas
     s.slots[7].plant = { sp: 'basilic', prog: 1, water: 1, pests: 0, q: 90, vr: 0 };
     s.order = { who: 'Test', family: 'aromatiques', minQ: 85, coins: 40, clay: 3, left: 100 };
     const coins = s.coins, clay = s.clay;
@@ -388,8 +389,8 @@ describe('jour, nuit et arrosage automatique', () => {
     s.slots[7].plant!.water = 0.1;
     sim.advance(s, 4000, () => 0.99);
     expect(s.slots[7].plant!.water).toBeLessThan(0.2);
-    expect(sim.pumpTank(s)).toBe(true);
-    expect(sim.tankOf(s)).toBe(sim.PUMP);
+    expect(sim.pumpStroke(s)).toBe(true);
+    expect(sim.tankOf(s)).toBe(sim.PUMP_STROKE);
     sim.toggleValve(s, sim.zoneIndexOfSlot(7));
     sim.advance(s, 6000, () => 0.99);
     expect(s.slots[7].plant!.water).toBeLessThan(0.2);

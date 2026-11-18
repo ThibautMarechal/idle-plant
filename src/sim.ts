@@ -1,4 +1,4 @@
-import { TIER_FIRST, TIER_PRICES, MUSHROOMS, MUSH_BY_ID, CAVE_PRICE, CAVE_BEDS, MUSH_FLUSHES, SOILS, BASKETS, BIOMES, LANDS, LAND_BIOMES, DAY_LENGTH, TANKS, GARDEN_BASE, GARDEN_EXT, GEAR, TREK_TIME, GARDEN, GARDEN_CLIMATE, GARDEN_FIRST, GARDEN_INDEX, PROF_MAX, PROF_MIN, BASE_SLOTS, SEASONS, SEASON_LENGTH, CLIENTS, FAMILIES, FAMILY_IDS, GLAZES, NEWS, POT_SIZES, RARITIES, SLOT_COUNT, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, ZONES } from './data';
+import { TIER_FIRST, TIER_PRICES, MUSH_BY_ID, CAVE_PRICE, CAVE_BEDS, MUSH_FLUSHES, SOILS, BASKETS, BIOMES, LANDS, LAND_BIOMES, DAY_LENGTH, TANKS, GARDEN_BASE, GARDEN_EXT, GEAR, TREK_TIME, GARDEN, GARDEN_CLIMATE, GARDEN_FIRST, GARDEN_INDEX, PROF_MAX, PROF_MIN, BASE_SLOTS, SEASONS, SEASON_LENGTH, CLIENTS, FAMILIES, FAMILY_IDS, GLAZES, NEWS, POT_SIZES, RARITIES, SLOT_COUNT, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, ZONES } from './data';
 import type { MushId, Family, GearId, Rarity, SoilId, Species, Zone } from './data';
 
 /** `vr` : variante, 0 normale, 1 panachée, 2 dorée. */
@@ -47,10 +47,6 @@ export interface State {
   composted: number;
   /** Équipements climatiques éteints par le joueur. */
   off: Partial<Record<ClimateGear, boolean>>;
-  /** Décor choisi pour l'espace de culture (purement visuel). */
-  theme?: string;
-  /** Direction artistique choisie (purement visuel). */
-  style?: string;
   /** Atelier de poterie. */
   clay: number;
   clayAcc: number;
@@ -337,7 +333,6 @@ export function untilDawn(s: State): number {
 }
 export const NIGHT_SPEED = 0.5;
 export const NIGHT_BLOOM = 1.5;
-export const PUMP = 10;
 
 export function tankCap(s: State): number {
   return TANKS[Math.min(TANKS.length - 1, s.tankSize ?? 0)].cap;
@@ -355,12 +350,6 @@ export const PUMP_STROKE = 1;
 export function pumpStroke(s: State): boolean {
   if (!s.upgrades.water || tankOf(s) >= tankCap(s)) return false;
   s.tank = Math.min(tankCap(s), tankOf(s) + PUMP_STROKE);
-  return true;
-}
-/** Un coup de pompe : quelques arrosages de plus dans la cuve. */
-export function pumpTank(s: State): boolean {
-  if (!s.upgrades.water || tankOf(s) >= tankCap(s)) return false;
-  s.tank = Math.min(tankCap(s), tankOf(s) + PUMP);
   return true;
 }
 export function buyTank(s: State): boolean {
@@ -629,24 +618,6 @@ export function crossSeed(s: State, from: string, rng: Rng = Math.random): { id:
   gainXp(s, 20);
   return grant(s, [pick.id])[0];
 }
-/** Croise deux plantes : elles partent, une graine de la rareté supérieure arrive (même famille si possible). */
-export function cross(s: State, i: number, j: number, rng: Rng = Math.random): { id: string; isNew: boolean } | null {
-  if (crossBlock(s, i, j)) return null;
-  const x = SPECIES_BY_ID[s.slots[i].plant!.sp];
-  const rar = NEXT_RARITY[x.rarity];
-  let pool = SPECIES.filter((sp) => !sp.home && sp.rarity === rar && sp.family === x.family);
-  if (pool.length === 0) pool = SPECIES.filter((sp) => !sp.home && sp.rarity === rar);
-  // On favorise les espèces encore absentes de l'almanach.
-  const fresh = pool.filter((sp) => !s.disc[sp.id]?.bloomed);
-  if (fresh.length) pool = fresh;
-  const pick = pool[Math.floor(rng() * pool.length)];
-  s.coins -= CROSS_FEE[x.rarity];
-  s.slots[i].plant = null;
-  s.slots[j].plant = null;
-  s.stats.crossed = (s.stats.crossed ?? 0) + 1;
-  gainXp(s, 20);
-  return grant(s, [pick.id])[0];
-}
 
 /** Cadeau du jour : une fois par jour calendaire, plus généreux quand les jours s'enchaînent. */
 export function claimDaily(s: State, today: string, yesterday: string): { streak: number; coins: number; clay: number; fert: number } | null {
@@ -714,19 +685,6 @@ export function stowPot(s: State, i: number): boolean {
   delete slot.soil;
   return true;
 }
-/** Peint un pot posé (`slot`) ou rangé sur l'étagère (`shelf`). */
-export function paintPot(s: State, where: 'slot' | 'shelf', k: number, glaze: number, pat: number): boolean {
-  if (!GLAZES[glaze] || !glazeOpen(s, glaze) || s.coins < PAINT_PRICE) return false;
-  let pd: PotDesign | undefined;
-  if (where === 'shelf') pd = s.shelf[k];
-  else if (s.slots[k]?.pot) pd = s.slots[k].pd ?? (s.slots[k].pd = { size: 1, glaze: 0, pat: 0 });
-  if (!pd || (pd.glaze === glaze && pd.pat === pat)) return false;
-  pd.glaze = glaze;
-  pd.pat = pat;
-  s.coins -= PAINT_PRICE;
-  s.stats.painted++;
-  return true;
-}
 
 /** Enregistre le dessin au pinceau d'un pot, et son émail de fond. */
 export function savePaint(s: State, where: 'slot' | 'shelf', k: number, glaze: number, paint: string): boolean {
@@ -758,15 +716,6 @@ export function takeCutting(s: State, i: number, score: number): number {
     s.stats.cuttings++;
   }
   return n;
-}
-/** Prélève des boutures : la plante part, deux graines de la même espèce reviennent. */
-export function harvestCutting(s: State, i: number): boolean {
-  const p = s.slots[i].plant;
-  if (!p || p.prog < 1) return false;
-  s.slots[i].plant = null;
-  s.seeds[p.sp] = (s.seeds[p.sp] ?? 0) + 2;
-  s.stats.cuttings++;
-  return true;
 }
 export function orderFits(s: State, p: Plant | null): boolean {
   return !!s.order && !!p && p.prog >= 1 && SPECIES_BY_ID[p.sp].family === s.order.family && p.q >= s.order.minQ;
@@ -1023,9 +972,6 @@ function stepCave(s: State, dt: number): void {
   }
 }
 export const MUSH_FLUSHES_N = MUSH_FLUSHES;
-export function mushCount(): number {
-  return MUSHROOMS.length;
-}
 
 export function buyBasket(s: State): boolean {
   const t = trekOf(s), next = BASKETS[t.basket + 1];

@@ -7,7 +7,7 @@ import * as sim from './sim';
 import type { UI } from './ui';
 import { EMOJI, fmt, mult, stars, vname, clock, potLabel, tile, esc, rarTag, needsChips, conditions, sparkline, level, trend } from './uikit';
 
-export function head(ui: UI, title: string): string {
+export function head(title: string): string {
   return `<div class="sh-head"><h2>${title}</h2><button class="x" data-act="close">✕</button></div>`;
 }
 
@@ -55,7 +55,7 @@ export function vitrineHtml(ui: UI): string {
     const rate = sp.value * sim.qualityMult(h.q) * sim.VARIANT_MULT[h.vr] * sim.TIP_RATE * 60;
     return `<div class="card"><div class="ico">${EMOJI[sp.id]}</div><div class="mid"><div class="nm">${esc(vname(sp, h.vr))}</div><div class="ds">${sim.qualityWord(h.q)} · ${rate.toFixed(1).replace('.', ',')} 🪙 par minute</div></div><button class="btn small" data-act="unshow" data-arg="${k}">Vendre ${fmt(sim.saleValue(s, h))} 🪙</button></div>`;
   }).join('');
-  return head(ui, '🏛️ Vitrine') + `<div class="sh-body">
+  return head('🏛️ Vitrine') + `<div class="sh-body">
     <p class="sub">Les plantes exposées attirent des visiteurs qui laissent des pourboires, même en ton absence.</p>
     <div class="facts"><span class="chip">👥 ${fmt(s.visitors)} visiteurs</span><span class="chip">🪙 ${perMin.toFixed(1).replace('.', ',')} par minute</span></div>
     <button class="btn gold wide" data-act="tips" ${tips > 0 ? '' : 'disabled'}>Ramasser les pourboires · ${fmt(tips)} 🪙</button>
@@ -68,7 +68,7 @@ export function waterHtml(ui: UI): string {
   const s = ui.s;
   if (!s.upgrades.water) {
     const can = s.coins >= sim.PRICES.water;
-    return head(ui, '💧 Arrosage automatique') + `<div class="sh-body">
+    return head('💧 Arrosage automatique') + `<div class="sh-body">
       <p class="sub">Un goutte-à-goutte arrose chaque pot dès qu'il a soif, en puisant dans une cuve d'eau de pluie. La pluie de la nuit la remplit à chaque lever du jour, et tu peux pomper à la main entre-temps.</p>
       <button class="btn primary wide" data-act="upgrade" data-arg="water" ${can ? '' : 'disabled'}>Installer · ${fmt(sim.PRICES.water)} 🪙</button>
       ${can ? '' : `<p class="sub center">Il te manque ${fmt(sim.PRICES.water - s.coins)} 🪙.</p>`}</div>`;
@@ -83,7 +83,7 @@ export function waterHtml(ui: UI): string {
     const on = !s.dry?.[z];
     return `<div class="card"><div class="ico">${(ZONES[z] ?? GARDEN).icon}</div><div class="mid"><div class="nm">${ui.zname(z)}</div><div class="ds">${n} plante${n > 1 ? 's' : ''}${on ? '' : ' · à arroser à la main'}</div></div><button class="btn small ${on ? 'primary' : ''}" data-act="valve" data-arg="${z}">${on ? 'Ouverte' : 'Fermée'}</button></div>`;
   }).join('');
-  return head(ui, '💧 Arrosage automatique') + `<div class="sh-body">
+  return head('💧 Arrosage automatique') + `<div class="sh-body">
     <h3>${TANKS[size].name}</h3>
     <div class="tankbar"><i style="width:${Math.round(100 * left / cap)}%"></i><span>${Math.floor(left)} / ${cap} arrosages</span></div>
     <p class="sub">${plants ? `Tes ${plants} plantes arrosées boivent environ ${perDay} arrosages par jour. ${perDay > cap ? 'La cuve ne tient pas la journée : ferme une vanne, pompe ou agrandis-la.' : 'La cuve tient la journée.'}` : 'Aucune plante à arroser pour l\'instant.'} La pluie de la nuit la remplit au lever du jour, dans ${clock(sim.untilDawn(s))}.</p>
@@ -98,10 +98,10 @@ export function gardenExtHtml(ui: UI): string {
   const s = ui.s;
   const n = s.gardenExt ?? 0;
   const e = GARDEN_EXT[Math.min(n, GARDEN_EXT.length - 1)];
-  if (n >= GARDEN_EXT.length) return head(ui, '🌳 Le jardin') + '<div class="sh-body"><p class="sub">Toutes les parcelles du jardin sont aménagées.</p></div>';
+  if (n >= GARDEN_EXT.length) return head('🌳 Le jardin') + '<div class="sh-body"><p class="sub">Toutes les parcelles du jardin sont aménagées.</p></div>';
   const early = ui.arg > n;
   const can = !early && s.coins >= e.price;
-  return head(ui, `🌳 ${e.name}`) + `<div class="sh-body">
+  return head(`🌳 ${e.name}`) + `<div class="sh-body">
     <p class="sub">${early ? `Cette parcelle viendra après « ${e.name} », de l'autre côté de l'allée.` : e.text + ' Comme le reste du jardin, son climat change à chaque saison.'}</p>
     <button class="btn primary wide" data-act="buygext" ${can ? '' : 'disabled'}>Aménager ${e.name.toLowerCase()} · ${fmt(e.price)} 🪙</button>
     ${can || early ? '' : `<p class="sub center">Il te manque ${fmt(e.price - s.coins)} 🪙.</p>`}</div>`;
@@ -115,7 +115,7 @@ export function zoneHtml(ui: UI): string {
   const can = s.coins >= price;
   const c = sim.zoneClimate(s, z);
   const fans = SPECIES.filter((sp) => sim.fitOf(sp, c) >= 1 && s.disc[sp.id]?.seen).map((sp) => `${EMOJI[sp.id]} ${sp.name}`);
-  return head(ui, `${z.icon} ${ui.zname(ui.arg)}`) + `<div class="sh-body">
+  return head(`${z.icon} ${ui.zname(ui.arg)}`) + `<div class="sh-body">
     <p class="sub">${garden ? 'Derrière la porte, un jardin en plein air : trois emplacements de plus. Son climat change à chaque saison.' : 'Ce coin est encore encombré. Aménage-le pour gagner trois emplacements.'}</p>
     ${zoneLine(ui, garden ? GARDEN_FIRST : ui.arg * SLOTS_PER_ZONE)}
     <p class="sub">${fans.length ? 'Parfaite pour : ' + fans.join(', ') + '.' : 'Aucune de tes espèces connues n\'y serait parfaitement à l\'aise pour l\'instant.'}</p>
@@ -134,7 +134,7 @@ export function buyPotHtml(ui: UI): string {
   const price = sim.potPrice(s);
   const can = s.coins >= price;
   const shelf = s.shelf.map((pd, k) => `<button class="card" data-act="place" data-arg="${k}"><div class="ico">🏺</div><div class="mid"><div class="nm">${potLabel(pd)}</div><div class="ds">Façonné à l'atelier</div></div><div class="end">Poser</div></button>`).join('');
-  return head(ui, 'Emplacement libre') + `<div class="sh-body">${zoneLine(ui, ui.arg)}
+  return head('Emplacement libre') + `<div class="sh-body">${zoneLine(ui, ui.arg)}
     ${shelf ? `<h3>Tes pots façonnés</h3>${shelf}` : ''}
     <h3>Pot tout fait</h3>
     <p class="sub">Un petit pot en terre cuite, tout de suite. Les pots moyens et grands, pour les arbustes et les grandes plantes, se façonnent à l'atelier.</p>
@@ -157,7 +157,7 @@ export function atelierHtml(ui: UI): string {
   }).join('');
   const shelf = s.shelf.map((pd, n) => `<div class="card"><div class="ico">🏺</div><div class="mid"><div class="nm">${potLabel(pd)}</div><div class="ds">Touche un emplacement libre de la serre pour le poser.</div></div><button class="btn small" data-act="paintshelf" data-arg="${n}">🎨 Peindre</button></div>`).join('');
   const next = sim.CLAY_EVERY - s.clayAcc;
-  return head(ui, '🏺 Atelier de poterie') + `<div class="sh-body">
+  return head('🏺 Atelier de poterie') + `<div class="sh-body">
     <div class="kv"><span>🧱 Argile</span><b>${s.clay} / ${sim.clayCap(s)}${s.clay < sim.clayCap(s) ? ` · +1 dans ${clock(next)}` : ' · bac plein'}</b></div>
     <h3>Four</h3>${kiln}
     <h3>Tour de potier</h3>${sizes}
@@ -195,14 +195,14 @@ export function seedHtml(ui: UI): string {
   const empty = `<p class="sub">Tu n'as plus de graines.</p>${s.packets > 0
     ? '<button class="btn gold wide" data-act="free">🎁 Ouvrir un sachet gratuit</button>'
     : `<button class="btn primary wide" data-act="buypacket" ${s.coins >= sim.PRICES.packet ? '' : 'disabled'}>Sachet mystère · ${sim.PRICES.packet} 🪙</button>`}`;
-  return head(ui, 'Que semer ici ?') + `<div class="sh-body">${zoneLine(ui, ui.arg)}${ids.length ? filters + (shown.length ? list : '<p class="sub">Aucune graine de ce genre en réserve.</p>') : empty}<div class="kv"><span>Ce pot</span><b>${potLabel(s.slots[ui.arg].pd)}</b></div><div class="kv"><span>Sa terre</span><b>${SOILS[potSoil].name}</b></div><div class="tiles">${tile('soil', '🟫', 'Terre')}${tile('paintslot', '🎨', 'Peindre')}${tile('admire', '🔍', 'Admirer')}${tile('stow', '📥', 'Ranger')}</div></div>`;
+  return head('Que semer ici ?') + `<div class="sh-body">${zoneLine(ui, ui.arg)}${ids.length ? filters + (shown.length ? list : '<p class="sub">Aucune graine de ce genre en réserve.</p>') : empty}<div class="kv"><span>Ce pot</span><b>${potLabel(s.slots[ui.arg].pd)}</b></div><div class="kv"><span>Sa terre</span><b>${SOILS[potSoil].name}</b></div><div class="tiles">${tile('soil', '🟫', 'Terre')}${tile('paintslot', '🎨', 'Peindre')}${tile('admire', '🔍', 'Admirer')}${tile('stow', '📥', 'Ranger')}</div></div>`;
 }
 
 /** La cave à champignons, avant de l'acheter. */
 export function caveHtml(ui: UI): string {
   const s = ui.s, can = s.coins >= CAVE_PRICE;
   const list = MUSHROOMS.map((m) => `<div class="card"><div class="ico">🍄</div><div class="mid"><div class="nm">${esc(m.name)} <i class="lat">${m.latin}</i></div><div class="ds">${esc(m.text)}</div></div></div>`).join('');
-  return head(ui, '🍄 La cave à champignons') + `<div class="sh-body">
+  return head('🍄 La cave à champignons') + `<div class="sh-body">
     <p class="sub">Sous la trappe, une vieille cave voûtée. Les champignons y poussent dans le noir, surtout la nuit : c'est là qu'on s'occupe quand la serre dort. Garde le doigt sur un bac pour le brumiser, balaie-le pour cueillir. Chaque bac donne trois volées, plus chères cueillies de nuit.</p>
     <button class="btn gold wide" data-act="cave-buy" ${can ? '' : 'disabled'}>Ouvrir la cave · ${fmt(CAVE_PRICE)} 🪙</button>
     <h3>Ce qui pourra y pousser</h3>${list}</div>`;
@@ -214,7 +214,7 @@ const THIRST_LONG = ['', 'Rare : laisse sécher la terre, l\'excès d\'eau l\'ab
 /** Choisir la terre d'un pot : chacune a ses plantes de prédilection. */
 export function soilHtml(ui: UI): string {
   const s = ui.s, slot = s.slots[ui.arg];
-  if (!slot?.pot) return head(ui, 'Terre') + '<div class="sh-body"></div>';
+  if (!slot?.pot) return head('Terre') + '<div class="sh-body"></div>';
   const cur = sim.soilOf(slot), p = slot.plant, sp = p ? SPECIES_BY_ID[p.sp] : null;
   const rows = SOIL_IDS.map((k) => {
     const d = SOILS[k], here = k === cur, can = s.coins >= d.price;
@@ -222,7 +222,7 @@ export function soilHtml(ui: UI): string {
     const end = here ? '<span class="chip ok">Dans ce pot</span>' : `<button class="btn ${can ? 'primary' : ''} small" data-act="setsoil" data-arg="${k}" ${can ? '' : 'disabled'}>${d.price ? `${fmt(d.price)} 🪙` : 'Gratuit'}</button>`;
     return `<div class="card"><div class="ico"><i class="soilchip" style="background:#${d.color.toString(16).padStart(6, '0')}"></i></div><div class="mid"><div class="nm">${d.name}${best}</div><div class="ds">${d.text}</div></div>${end}</div>`;
   }).join('');
-  return head(ui, sp ? `🟫 Rempoter ${esc(sp.name)}` : '🟫 Terre du pot') + `<div class="sh-body">
+  return head(sp ? `🟫 Rempoter ${esc(sp.name)}` : '🟫 Terre du pot') + `<div class="sh-body">
     <p class="sub">${sp ? `${esc(sp.name)} pousse le mieux dans la ${SOILS[sp.soil ?? 'universel'].name.toLowerCase()}. Rempoter la secoue un peu.` : 'Chaque plante a sa terre préférée : dans la bonne, elle pousse plus vite et plus belle.'}</p>
     ${rows}</div>`;
 }
@@ -230,7 +230,7 @@ export function soilHtml(ui: UI): string {
 export function plantHtml(ui: UI): string {
   const s = ui.s;
   const p = s.slots[ui.arg].plant;
-  if (!p) return head(ui, 'Pot vide') + '<div class="sh-body"></div>';
+  if (!p) return head('Pot vide') + '<div class="sh-body"></div>';
   const sp = SPECIES_BY_ID[p.sp];
   const c = sim.zoneClimate(s, sim.zoneOfSlot(ui.arg));
   const slot0 = s.slots[ui.arg], soil = sim.soilOf(slot0);
@@ -239,7 +239,7 @@ export function plantHtml(ui: UI): string {
   const eta = left < 60 ? `${Math.ceil(left)} s` : `${Math.ceil(left / 60)} min`;
   const vr = sim.stageOf(p.prog) >= 2 ? p.vr : 0;
   const slot = s.slots[ui.arg];
-  return head(ui, `${EMOJI[sp.id]} ${esc(vname(sp, vr))}`) + `<div class="sh-body">
+  return head(`${EMOJI[sp.id]} ${esc(vname(sp, vr))}`) + `<div class="sh-body">
     <div class="kv"><span>${STAGES[sim.stageOf(p.prog)]}</span><b>${p.prog >= 1 ? 'Prête' : 'encore ' + eta}</b></div>
     <div class="prog"><i style="width:${Math.round(p.prog * 100)}%"></i></div>
     <div class="facts"><span class="chip">⭐ ${sim.qualityWord(p.q)}</span><span class="chip ${p.water > 0 ? '' : 'ko'}">💧 ${sim.dripOn(s, ui.arg) ? 'auto' : p.water > 0 ? Math.round(p.water * 100) + ' %' : 'à sec'}</span>${p.pests > 0 ? '<span class="chip ko">🐛 chenilles</span>' : ''}${sim.harmony(slot) ? '<span class="chip ok">💚 pot accordé</span>' : ''}${sim.inSeason(s, sp) ? '<span class="chip ok">de saison</span>' : ''}<span class="chip">${THIRST[sp.thirst ?? 2]}</span>${p.vr ? `<span class="chip var" style="border-color:${RARITIES[sim.VARIANT_RARITY[p.vr]].color};color:${RARITIES[sim.VARIANT_RARITY[p.vr]].color}">✨ ${sim.VARIANT_NAMES[p.vr]} · ${RARITIES[sim.VARIANT_RARITY[p.vr]].name}</span>` : ''}</div>
@@ -247,7 +247,7 @@ export function plantHtml(ui: UI): string {
     <div class="tiles">${sim.dripOn(s, ui.arg) ? '' : tile('water', '💧', 'Arroser', { off: p.water > 0.95, hot: p.water < 0.5 })}${tile('fert', '🧪', 'Engrais', { off: !(s.fert > 0 && p.prog < 1), note: '×' + s.fert })}${p.cut === 1 && p.prog < 1 ? tile('prune', '✂️', 'Tailler', { hot: true }) : ''}${p.prog < 1 ? tile('soil', '🟫', 'Rempoter', { hot: soil !== sp.soil }) : ''}${tile('paintslot', '🎨', 'Peindre')}${tile('admire', '🔍', 'Admirer')}${tile('fiche', '📖', 'Fiche', { arg: sp.id })}</div></div>`;
 }
 
-export function marketHint(ui: UI, p: number): string {
+export function marketHint(p: number): string {
   if (p >= 1.2) return '<span class="up">Cours haut : c\'est le moment de vendre.</span>';
   if (p <= 0.85) return '<span class="down">Cours bas : mieux vaut attendre en réserve.</span>';
   return 'Cours proche de la normale.';
@@ -256,19 +256,19 @@ export function marketHint(ui: UI, p: number): string {
 export function harvestHtml(ui: UI): string {
   const s = ui.s;
   const p = s.slots[ui.arg].plant;
-  if (!p) return head(ui, 'Récolte') + '<div class="sh-body"></div>';
+  if (!p) return head('Récolte') + '<div class="sh-body"></div>';
   const sp = SPECIES_BY_ID[p.sp];
   const m = s.market[sp.family];
   const full = s.stock.length >= s.stockCap;
   const d = s.disc[sp.id];
   const n = sim.starsOf(d);
   const freeShow = s.showcase.some((h) => !h);
-  return head(ui, `${EMOJI[sp.id]} ${esc(vname(sp, p.vr))} en fleur`) + `<div class="sh-body">
+  return head(`${EMOJI[sp.id]} ${esc(vname(sp, p.vr))} en fleur`) + `<div class="sh-body">
     <div class="big">${stars(n)}</div>
     <p class="sub center">Spécimen ${sim.qualityWord(p.q).toLowerCase()}.${n >= 3 ? '' : ' Un emplacement parfait et de bons soins donnent plus d\'étoiles.'}</p>
     ${s.order && sim.orderFits(s, p) ? `<button class="btn gold wide" data-act="deliver">📦 Livrer à ${esc(s.order.who)} · ${fmt(sim.saleValue(s, p) + s.order.coins)} 🪙 +${s.order.clay} 🧱</button>` : ''}
     <div class="row"><button class="btn primary" data-act="sell">Vendre · ${fmt(sim.saleValue(s, p))} 🪙</button><button class="btn gold" data-act="show" ${freeShow ? '' : 'disabled'}>🏛️ ${freeShow ? 'Exposer' : 'Vitrine pleine'}</button></div>
-    <p class="sub center">Cours ${FAMILIES[sp.family].name.toLowerCase()} <b class="${level(m.p)}">${mult(m.p)}</b>. ${marketHint(ui, m.p)}</p>
+    <p class="sub center">Cours ${FAMILIES[sp.family].name.toLowerCase()} <b class="${level(m.p)}">${mult(m.p)}</b>. ${marketHint(m.p)}</p>
     <div class="tiles">${tile('store', '📦', 'Réserve', { off: full, note: `${s.stock.length}/${s.stockCap}` })}${tile('cutting', '✂️', 'Bouturer', { note: 'à la main' })}${sim.CROSS_FEE[sp.rarity] ? tile('cross', '🧬', 'Croiser', { note: `${sim.CROSS_FEE[sp.rarity]} 🪙` }) : ''}${tile('admire', '🔍', 'Admirer')}${tile('fiche', '📖', 'Fiche', { arg: sp.id })}</div></div>`;
 }
 
@@ -280,7 +280,7 @@ export function packetsHtml(ui: UI): string {
     const sp = SPECIES_BY_ID[id];
     return `<div class="card"><button class="ico" data-act="fiche" data-arg="${id}">${EMOJI[id]}</button><div class="mid"><div class="nm">${esc(sp.name)} ×${s.seeds[id]}</div><div class="ds">${rarTag(sp)}</div></div><button class="btn small" data-act="compost" data-arg="${id}">En engrais</button></div>`;
   }).join('');
-  return head(ui, '🎁 Sachets de graines') + `<div class="sh-body">
+  return head('🎁 Sachets de graines') + `<div class="sh-body">
     <p class="sub">Un sachet gratuit toutes les ${Math.round(sim.PACKET_EVERY / 60)} minutes, jusqu'à ${sim.MAX_PACKETS} en attente.</p>
     <button class="btn gold wide" data-act="free" ${s.packets > 0 ? '' : 'disabled'}>${s.packets > 0 ? `Ouvrir un sachet gratuit (${s.packets})` : `Prochain sachet dans ${timer}`}</button>
     <button class="btn wide" data-act="buypacket" ${s.coins >= sim.PRICES.packet ? '' : 'disabled'}>Sachet mystère · ${sim.PRICES.packet} 🪙</button>
@@ -299,7 +299,7 @@ export function marketHtml(ui: UI): string {
     return `<div class="card"><div class="ico">${EMOJI[sp.id]}</div><div class="mid"><div class="nm">${esc(vname(sp, h.vr))}</div><div class="ds">${sim.qualityWord(h.q)} · cours ${mult(s.market[sp.family].p)}</div></div><button class="btn primary small" data-act="sellstock" data-arg="${k}">Vendre ${fmt(sim.saleValue(s, h))} 🪙</button></div>`;
   }).join('');
   const news = s.news.slice(0, 6).map((n) => `<div class="news"><b class="${n.dir > 0 ? 'up' : 'down'}">${FAMILIES[n.family].icon} ${n.dir > 0 ? '▲' : '▼'}</b> ${esc(n.text)}</div>`).join('');
-  return head(ui, '📈 Marché') + `<div class="sh-body">
+  return head('📈 Marché') + `<div class="sh-body">
     <div class="card"><div class="ico">💐</div><div class="mid"><div class="nm">Ouvrir l'étal</div><div class="ds">Sers toi-même les clients : ils paient jusqu'à 70 % de plus que le cours.</div></div><button class="btn gold small" data-act="stall-go" ${s.stock.length ? '' : 'disabled'}>Ouvrir</button></div>
     <p class="sub">Le prix de vente suit le cours de chaque famille.</p>${rows}
     <h3>Réserve (${s.stock.length}/${s.stockCap})</h3>${stock || '<p class="sub">Vide. Avec le panier 🧺, range ici tes plantes en fleur, puis ouvre l\'étal.</p>'}
@@ -314,7 +314,7 @@ export function shopHtml(ui: UI): string {
       : `<button class="btn ${s.coins >= price ? 'primary' : ''} small" data-act="${act}" data-arg="${arg}" ${s.coins >= price ? '' : 'disabled'}>${fmt(price)} 🪙</button>`}</div>`;
   const gear = (ico: string, nm: string, ds: string, k: sim.ClimateGear) => !s.upgrades[k] ? item(ico, nm, ds, sim.PRICES[k], 'upgrade', k)
     : `<div class="card"><div class="ico">${ico}</div><div class="mid"><div class="nm">${nm}</div><div class="ds">${ds}</div></div><button class="btn small ${s.off[k] ? '' : 'primary'}" data-act="gear" data-arg="${k}">${s.off[k] ? 'Éteint' : 'Allumé'}</button></div>`;
-  return head(ui, '🛒 Boutique') + `<div class="sh-body">
+  return head('🛒 Boutique') + `<div class="sh-body">
     <div class="card testmode${s.test ? ' on' : ''}"><div class="ico">🧪</div><div class="mid"><div class="nm">Mode test illimité</div><div class="ds">${s.test ? 'Activé : pièces, argile et engrais à volonté, expédition sans attente. En le coupant, tu retrouves tes réserves d\'avant (les achats faits restent).' : 'Pour essayer les nouveautés : pièces, argile et engrais à volonté.'}</div></div><button class="btn small ${s.test ? 'gold' : ''}" data-act="testmode">${s.test ? 'Couper' : 'Activer'}</button></div>
     <h3>Graines</h3>
     ${item('💎', 'Sachet prestige', 'Trois graines, toutes rares ou mieux.', sim.PRICES.prestige, 'prestige', '')}
@@ -373,7 +373,7 @@ export function trekHtml(ui: UI): string {
     const end = price ? `<button class="btn ${s.coins >= price ? 'primary' : ''} small" data-act="trek-gear" data-arg="${GEAR_IDS.indexOf(k)}" ${s.coins >= price ? '' : 'disabled'}>${fmt(price)} 🪙</button>` : '<span class="chip ok">Maximum</span>';
     return `<div class="card ${lv ? '' : 'dim'}"><div class="ico">${g.icon}</div><div class="mid"><div class="nm">${g.names[Math.max(0, lv - 1)]} ${pips}</div><div class="ds">${now}${then ? `<br>${then}` : ''}</div></div>${end}</div>`;
   }).join('');
-  return head(ui, '🥾 Expédition') + `<div class="sh-body">
+  return head('🥾 Expédition') + `<div class="sh-body">
     <p class="sub">La serre est posée sur une petite planète. Pars à pied cueillir graines et boutures sauvages : plus tu t'éloignes, plus elles sont rares. Sois rentré avant la nuit, ou tu perdras la moitié du panier.</p>
     ${t.rest > 0 ? `<div class="card"><div class="ico">😴</div><div class="mid"><div class="nm">Une expédition par jour</div><div class="ds">Tu repars au lever du jour, dans ${clock(t.rest)}.</div></div></div>` : sim.trekDarkBlocked(s) ? `<div class="card"><div class="ico">🌑</div><div class="mid"><div class="nm">Il fait nuit noire</div><div class="ds">Sans lanterne, on ne part pas. Achète-la plus bas, ou attends le lever du jour dans ${clock(sim.untilDawn(s))}.</div></div></div>` : `<button class="btn gold big" data-act="trek-go">${sim.isNight(s) ? '🏮 Partir de nuit, lanterne allumée' : '🌍 Partir en expédition'}</button>`}
     <h3>Continents</h3>
@@ -401,7 +401,7 @@ export function seasonHtml(ui: UI): string {
     return `<div class="card"><div class="ico">${['🥉', '🥈', '🥇'][k]}</div><div class="mid"><div class="nm">Palier ${c.label}</div><div class="ds">+${c.coins} 🪙 · +${c.clay} argile${k === 2 ? ' · 2 sachets' : ''}</div></div>${end}</div>`;
   }).join('');
   const fams = season.fams.map((f) => `${FAMILIES[f].icon} ${FAMILIES[f].name}`).join(' et ');
-  return head(ui, `${season.icon} ${season.name}`) + `<div class="sh-body">
+  return head(`${season.icon} ${season.name}`) + `<div class="sh-body">
     <p class="sub">${season.text}</p>
     <div class="kv"><span>Heure</span><b>${sim.isNight(s) ? '🌑' : '☀️'} ${Math.floor(sim.hourOf(s))} h · ${sim.isNight(s) ? 'nuit' : 'jour'} ${sim.dayOf(s) + 1}</b></div>
     <p class="sub">Une journée dure une heure. La nuit, de 21 h à 5 h, les plantes poussent deux fois moins vite et boivent deux fois moins, sauf les plantes nocturnes qui en profitent. Au lever du jour, la pluie a rempli la cuve et tu peux repartir en expédition.</p>
@@ -427,7 +427,7 @@ export function trophiesHtml(ui: UI): string {
     return `<div class="card" ${done ? 'style="opacity:.6"' : ''}><div class="ico">${x.icon}</div><div class="mid"><div class="nm">${esc(x.name)}</div><div class="ds">${esc(x.text)}</div>${done || a >= b ? '' : `<div class="prog" style="height:6px;margin-top:5px"><i style="width:${Math.round(100 * a / b)}%"></i></div>`}</div>${end}</div>`;
   }).join('');
   const got = sim.TROPHIES.filter((x) => s.trophies?.[x.id]).length;
-  return head(ui, '🎓 Jardinier') + `<div class="sh-body">
+  return head('🎓 Jardinier') + `<div class="sh-body">
     <div class="big">Niveau ${lv.level}</div>
     <div class="prog"><i style="width:${Math.round(100 * lv.into / lv.span)}%"></i></div>
     <p class="sub center">${fmt(lv.into)} / ${fmt(lv.span)} points avant le niveau suivant, qui offre des pièces, de l'argile et un sachet.</p>
@@ -446,7 +446,7 @@ export function almanacHtml(ui: UI): string {
     const list = SPECIES.filter((sp) => sp.family === f);
     return `<h3>${FAMILIES[f].icon} ${FAMILIES[f].name} · ${list.filter((sp) => s.disc[sp.id]?.bloomed).length}/${list.length}</h3><div class="grid">${list.map(cell).join('')}</div>`;
   }).join('');
-  return head(ui, '📖 Almanach') + `<div class="sh-body">
+  return head('📖 Almanach') + `<div class="sh-body">
     <div class="big">${col.bloomed} / ${SPECIES.length}</div>
     <p class="sub center">espèces fleuries · ⭐ ${col.stars} sur ${SPECIES.length * 3} · ✨ ${col.variants} variantes rares sur ${SPECIES.length * (sim.VARIANTS.length - 1)}</p>
     <div class="tiles">${tile('nav', '🏛️', 'Vitrine', { arg: 'vitrine' })}${tile('nav', '🎓', 'Trophées', { arg: 'trophies' })}${tile('mute', s.mute ? '🔇' : '🔊', s.mute ? 'Sons coupés' : 'Sons')}</div>
@@ -467,7 +467,7 @@ export function ficheHtml(ui: UI, sp: Species): string {
   const season = SEASONS.filter((x) => x.fams.includes(sp.family)).map((x) => `${x.icon} ${x.name}`);
   const growing = s.slots.filter((sl) => sl.plant?.sp === sp.id).length;
   const kv = (k: string, v: string) => `<div class="kv"><span>${k}</span><b>${v}</b></div>`;
-  return head(ui, `${EMOJI[sp.id]} ${esc(sp.name)}`) + `<div class="sh-body">
+  return head(`${EMOJI[sp.id]} ${esc(sp.name)}`) + `<div class="sh-body">
     <p class="sub"><i>${esc(sp.latin)}</i> · ${FAMILIES[sp.family].name} · ${esc(sp.origin)}</p>
     <div>${rarTag(sp)} <span class="st">${stars(sim.starsOf(d))}</span>${sp.night ? ' <span class="chip">🌑 Nocturne</span>' : ''}</div>
     <h3>Ce qu'elle aime</h3>${needsChips(sp)}

@@ -56,10 +56,10 @@ describe.skipIf(!process.env.BALANCE)('rythme de jeu', () => {
         if (spot < 0 && !s.kiln && s.clay >= POT_SIZES[want - 1].clay) { const e = s.slots.findIndex((x) => x.pot && !x.plant && sim.potSize(x) < want); if (e >= 0) sim.stowPot(s, e); }
         if (sim.startPot(s, want)) acted = true;
       }
-      // Croisements : deux communes en fleur de la même famille deviennent une rare.
+      // Croisements : deux plantes en fleur pollinisées donnent une graine plus rare (mini-jeu supposé réussi).
       for (let i = 0; i < s.slots.length; i++) for (let j = i + 1; j < s.slots.length; j++) {
         const a = s.slots[i].plant, b = s.slots[j].plant;
-        if (a && b && s.disc[a.sp]?.bestQ >= 90 && s.disc[b.sp]?.bestQ >= 90 && !sim.crossBlock(s, i, j) && sim.cross(s, i, j, rng)) acted = true;
+        if (a && b && s.disc[a.sp]?.bestQ >= 90 && s.disc[b.sp]?.bestQ >= 90 && !sim.crossBlock(s, i, j)) { const from = sim.pollinate(s, i, j); if (from) { sim.crossSeed(s, from, rng); acted = true; } }
       }
       if (s.coins > 1200) { for (const k of ['fastKiln', 'bigClay'] as const) if (!s.upgrades[k] && sim.buyUpgrade(s, k)) acted = true; if (sim.buyPrestige(s, rng)) acted = true; }
       const seedsWaiting = Object.values(s.seeds).reduce((a, b) => a + b, 0);

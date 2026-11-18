@@ -670,9 +670,6 @@ export const TANKS: { cap: number; price: number; name: string }[] = [
   { cap: 200, price: 0, name: 'Tonneau' }, { cap: 500, price: 800, name: 'Citerne' }, { cap: 1200, price: 2500, name: 'Grande citerne' },
 ];
 export const TREK_TIME = 150;
-/** Marge de la coupe parfaite sur la jauge, selon la rareté (fraction de la jauge). */
-export const CUT_ZONE: Record<Rarity, number> = { commun: 0.3, rare: 0.22, exotique: 0.16, legendaire: 0.11 };
-export const TREK_REST = 240;
 /**
  * Équipement du personnage pour l'expédition, à plusieurs niveaux, acheté avec les pièces gagnées en jeu.
  * `v` donne l'effet de chaque niveau (index 0 : sans l'objet), `price` le prix de chaque niveau suivant.
