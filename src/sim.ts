@@ -27,6 +27,8 @@ export interface State {
   seeds: Record<string, number>;
   stock: Harvest[];
   stockCap: number;
+  /** Vrai une fois la réserve de départ passée de 4 à 6 places. */
+  stock6?: boolean;
   packets: number;
   /** Secondes avant le prochain sachet gratuit. */
   packetIn: number;
@@ -156,7 +158,8 @@ export function newState(now: number): State {
     slots,
     seeds: {},
     stock: [],
-    stockCap: 4,
+    stockCap: 6,
+    stock6: true,
     packets: 2,
     packetIn: PACKET_EVERY,
     zonesOpen: ZONE_PRICES.map((p) => p === 0),
@@ -1112,12 +1115,14 @@ export function buyPot(s: State, i: number): boolean {
   return true;
 }
 
+/** Places de réserve au maximum, agrandissements compris. */
+export const STOCK_MAX = 12;
 export function buyUpgrade(s: State, k: keyof Upgrades | 'stock'): boolean {
   if (!(k in PRICES)) return false;
   const price = PRICES[k];
   if (s.coins < price) return false;
   if (k === 'stock') {
-    if (s.stockCap >= 10) return false;
+    if (s.stockCap >= STOCK_MAX) return false;
     s.stockCap += 2;
   } else {
     if (s.upgrades[k]) return false;
@@ -1216,6 +1221,8 @@ export function load(now: number): State {
       if (s.v === SAVE_VERSION && Array.isArray(s.slots) && s.slots.length >= BASE_SLOTS) {
         // Les suspensions sont arrivées après : on complète sans rien toucher d'autre.
         while (s.slots.length < SLOT_COUNT) s.slots.push({ pot: false, plant: null });
+        // La réserve de départ est passée de 4 à 6 places : les anciennes parties gagnent les deux places.
+        if (!s.stock6) { s.stockCap = Math.min(STOCK_MAX, s.stockCap + 2); s.stock6 = true; }
         return s;
       }
     }

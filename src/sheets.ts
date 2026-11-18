@@ -279,7 +279,7 @@ export function shopHtml(ui: UI): string {
     ${gear('💡', 'Lampe horticole', 'Zone fraîche : plein soleil. Pour les tulipes.', 'lamp')}
     ${gear('♨️', 'Radiateur', 'Zone fraîche : tempéré au lieu de frais.', 'heat')}
     ${gear('🌀', 'Ventilateur', 'Zone plein sud : tempéré au lieu de chaud. Pour lavande, thym et romarin.', 'fan')}
-    ${s.stockCap < 10 ? item('📦', 'Réserve agrandie', `Deux places de plus (${s.stockCap} aujourd'hui).`, sim.PRICES.stock, 'upgrade', 'stock') : ''}
+    ${s.stockCap < sim.STOCK_MAX ? item('📦', 'Réserve agrandie', `Deux places de plus (${s.stockCap} aujourd'hui).`, sim.PRICES.stock, 'upgrade', 'stock') : ''}
     <h3>Agrandir la serre</h3>
     ${ZONES.map((z, r) => item(z.icon, `Suspension · ${ui.zname(r)}`, s.zonesOpen[r] ? 'Un emplacement de plus, en hauteur.' : 'Aménage d\'abord cette zone.', sim.EXTRA_PRICES[r], 'extra', String(r), !!s.extra?.[r])).join('')}
     <h3>Atelier</h3>

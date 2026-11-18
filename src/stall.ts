@@ -168,16 +168,18 @@ export class Stall {
     }
     // Les plantes de la réserve, emballées de papier kraft.
     const n = stock.length, perRow = n > 5 ? Math.ceil(n / 2) : n;
+    // Une grande réserve se serre sur l'étal pour rester entière à l'écran.
+    const gap = Math.min(0.4, 1.5 / Math.max(1, perRow - 1)), shrink = gap / 0.4;
     this.items = stock.map((h, i) => {
       const row = i < perRow ? 0 : 1, cnt = row ? n - perRow : perRow, col = row ? i - perRow : i;
       const root = new THREE.Group();
       root.add(mesh(new THREE.CylinderGeometry(0.17, 0.08, 0.26, 9, 1, true), 0xcaa472, 0, 0.13, 0), mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.02, 9), 0x5a3f2c, 0, 0.2, 0, false));
       const plant = buildPlant(SPECIES_BY_ID[h.sp], 4, 1, h.vr);
       plant.scale.setScalar(0.55);
-      root.scale.setScalar(0.85);
+      root.scale.setScalar(0.85 * shrink);
       plant.position.y = 0.2;
       root.add(plant);
-      const home = new THREE.Vector3((col - (cnt - 1) / 2) * 0.4 + (row && cnt < perRow ? 0 : row ? 0.2 : 0), TOP + 0.08, row ? 0.02 : 0.42);
+      const home = new THREE.Vector3((col - (cnt - 1) / 2) * gap + (row && cnt < perRow ? 0 : row ? gap / 2 : 0), TOP + 0.08, row ? 0.02 : 0.42);
       root.position.copy(home);
       w.add(root);
       return { h, root, home, sold: false };

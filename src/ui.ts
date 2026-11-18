@@ -1089,6 +1089,9 @@ export class UI {
       tip('shears', shaggy, '✂️ Une plante fait des pousses folles : passe le sécateur dessus, elle poussera plus vite et plus belle.');
       tip('basket', ripe >= 2, '🧺 Plusieurs plantes en fleur : le panier les range en réserve d\'un seul geste.');
       tip('door', this.scene.fp && s.zonesOpen[GARDEN_INDEX] && s.slots.some((sl) => sl.pot), '🚪 Pour sortir un pot au jardin, fais-le glisser sur la porte et tiens-le là un instant.');
+      tip('night', sim.isNight(s), '🌑 La nuit tombe : les plantes boivent moins et poussent moins vite, sauf les nocturnes qui s\'épanouissent dans le noir.');
+      tip('drip', s.slots.filter((sl) => sl.plant).length >= 5, '💧 Trop de plantes à arroser ? Le tonneau d\'arrosage de la serre arrose tout seul les pots dont la vanne est ouverte.');
+      tip('land', !sim.landOpen(s, 1) && sim.collection(s).bloomed >= 20, '🌴 Un autre continent t\'attend au-delà de l\'océan : fais fleurir 25 espèces, puis débloque-le depuis le sac à dos de l\'expédition.');
       tip('drag', s.slots.filter((sl) => sl.pot).length >= 2 && s.stats.planted >= 2, '✋ Un pot se déplace en le faisant glisser du doigt vers un autre emplacement.');
     }
     // Emplacements

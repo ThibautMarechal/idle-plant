@@ -121,7 +121,8 @@ describe('simulation', () => {
 
   it('la réserve a une capacité limitée', () => {
     const s = sim.newState(0);
-    for (let k = 0; k < 4; k++) s.stock.push({ sp: 'aloe', q: 50, vr: 0 });
+    expect(s.stockCap).toBe(6);
+    for (let k = 0; k < 6; k++) s.stock.push({ sp: 'aloe', q: 50, vr: 0 });
     s.slots[10].plant = { sp: 'aloe', prog: 1, water: 1, pests: 0, q: 50, vr: 0 };
     expect(sim.harvestStore(s, 10)).toBe(false);
   });
