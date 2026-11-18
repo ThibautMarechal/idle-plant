@@ -571,3 +571,5 @@ body[data-fp="1"] #nav { display: none; }
 .varrow { display: flex; gap: 4px; flex-wrap: wrap; margin: -2px 0 8px; }
 .varrow .chip.dim { opacity: 0.5; }
 .chip.var { background: #fff; font-weight: 800; }
+.card.testmode { border-style: dashed; }
+.card.testmode.on { background: #fff4c8; }

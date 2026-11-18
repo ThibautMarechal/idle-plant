@@ -315,6 +315,7 @@ export function shopHtml(ui: UI): string {
   const gear = (ico: string, nm: string, ds: string, k: sim.ClimateGear) => !s.upgrades[k] ? item(ico, nm, ds, sim.PRICES[k], 'upgrade', k)
     : `<div class="card"><div class="ico">${ico}</div><div class="mid"><div class="nm">${nm}</div><div class="ds">${ds}</div></div><button class="btn small ${s.off[k] ? '' : 'primary'}" data-act="gear" data-arg="${k}">${s.off[k] ? 'Éteint' : 'Allumé'}</button></div>`;
   return head(ui, '🛒 Boutique') + `<div class="sh-body">
+    <div class="card testmode${s.test ? ' on' : ''}"><div class="ico">🧪</div><div class="mid"><div class="nm">Mode test illimité</div><div class="ds">${s.test ? 'Activé : pièces, argile et engrais à volonté, expédition sans attente. En le coupant, tu retrouves tes réserves d\'avant (les achats faits restent).' : 'Pour essayer les nouveautés : pièces, argile et engrais à volonté.'}</div></div><button class="btn small ${s.test ? 'gold' : ''}" data-act="testmode">${s.test ? 'Couper' : 'Activer'}</button></div>
     <h3>Graines</h3>
     ${item('💎', 'Sachet prestige', 'Trois graines, toutes rares ou mieux.', sim.PRICES.prestige, 'prestige', '')}
     ${item('🎁', 'Sachet mystère', 'Trois graines de toutes familles.', sim.PRICES.packet, 'buypacket', '')}

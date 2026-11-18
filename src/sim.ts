@@ -93,6 +93,8 @@ export interface State {
   clock?: number;
   /** La cave à champignons, une fois achetée : ses bacs et les cueillettes faites. */
   cave?: Cave;
+  /** Mode test : pièces, argile et engrais illimités. Les vraies réserves sont mises de côté et rendues à l'arrêt. */
+  test?: { coins: number; clay: number; fert: number };
   /** Gradins achetés, un par zone de la serre. */
   tiers?: boolean[];
   /** Arrosage automatique : arrosages restants dans la cuve, taille de la cuve, zones dont la vanne est fermée. */
@@ -453,6 +455,7 @@ export function advance(s: State, now: number, rng: Rng = Math.random): number {
   if (dt <= 0) return 0;
   dt = Math.min(dt, MAX_OFFLINE);
   const total = dt;
+  if (s.test) fillTest(s);
   const offline = dt > 30;
   const step = Math.max(1, dt / 1500);
   while (dt > 0) {
@@ -1278,6 +1281,23 @@ export function slotOpen(s: State, i: number): boolean {
   if (i >= TIER_FIRST) return !!s.zonesOpen[z] && !!s.tiers?.[z];
   if (i >= GARDEN_FIRST) return !!s.zonesOpen[z] && i - GARDEN_FIRST < GARDEN_BASE * (1 + (s.gardenExt ?? 0));
   return !!s.zonesOpen[z] && (i < BASE_SLOTS || !!s.extra?.[z]);
+}
+/** Active ou coupe le mode test. À l'arrêt, on retrouve exactement ses pièces, son argile et son engrais d'avant. */
+export const TEST_COINS = 9_999_999;
+export function setTestMode(s: State, on: boolean): void {
+  if (on && !s.test) {
+    s.test = { coins: s.coins, clay: s.clay, fert: s.fert };
+    fillTest(s);
+  } else if (!on && s.test) {
+    Object.assign(s, { coins: s.test.coins, clay: s.test.clay, fert: s.test.fert });
+    delete s.test;
+  }
+}
+function fillTest(s: State): void {
+  s.coins = Math.max(s.coins, TEST_COINS);
+  s.clay = Math.max(s.clay, clayCap(s));
+  s.fert = Math.max(s.fert, 99);
+  if (s.trek) s.trek.rest = 0;
 }
 /** Prix du prochain gradin, ou null quand les quatre zones en ont un. */
 export function tierPrice(s: State): number | null {

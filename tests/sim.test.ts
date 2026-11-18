@@ -526,3 +526,18 @@ describe('agrandir la verrière', () => {
     expect(s.slots.length).toBe(SLOT_COUNT);
   });
 });
+
+describe('mode test', () => {
+  it('rend tout illimité puis restitue les vraies réserves', () => {
+    const s = sim.newState(0);
+    s.coins = 123; s.clay = 2; s.fert = 1;
+    sim.setTestMode(s, true);
+    expect(s.coins).toBe(sim.TEST_COINS);
+    s.coins -= 5000;
+    sim.advance(s, 1000);
+    expect(s.coins).toBe(sim.TEST_COINS);
+    sim.setTestMode(s, false);
+    expect([s.coins, s.clay, s.fert]).toEqual([123, 2, 1]);
+    expect(s.test).toBeUndefined();
+  });
+});

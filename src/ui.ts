@@ -512,6 +512,12 @@ export class UI {
         break;
       case 'gear': sim.toggleGear(s, arg as sim.ClimateGear); break;
       case 'pump': this.showPump(); break;
+      case 'testmode':
+        sim.setTestMode(s, !s.test);
+        this.toast(s.test ? 'Mode test activé : tout est illimité.' : 'Mode test coupé : tes vraies réserves sont revenues.');
+        this.bumpCoins();
+        this.refresh(true);
+        break;
       case 'cut-cancel': this.cutGame?.stop(); this.cutGame = null; $('modal').classList.remove('on'); break;
       case 'seedfilter': this.seedFilter = arg; this.refresh(true); break;
       case 'valve': sim.toggleValve(s, Number(arg)); play('tap'); break;
