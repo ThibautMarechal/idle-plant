@@ -437,7 +437,7 @@ export class Scene3D {
 
   /** Vrai si l'emplacement est là où l'on se tient. */
   private here(i: number): boolean {
-    return !this.theme.fp || (i >= GARDEN_FIRST ? 1 : 0) === this.spot;
+    return !this.theme.fp || (i >= GARDEN_FIRST && i < TIER_FIRST ? 1 : 0) === this.spot;
   }
 
   /** Position écran d'un objet cliquable du décor, et taille d'une unité à cet endroit. */

@@ -164,7 +164,7 @@ export class UI {
       else if (kind === 'leave') { play('tap'); this.toast('Un client repart les mains vides : la série est perdue.'); }
     };
     this.stall.onEnd = () => this.stallEnd();
-    $('cave').innerHTML = '<canvas id="cvgl"></canvas><div class="tr-top"><div class="tr-row"><span class="pill" id="cv-coins"></span><span class="pill" id="cv-time"></span><button class="btn small" data-act="cave-close">Remonter</button></div></div><div id="cv-labels"></div><p id="cv-hint" class="on"></p><div id="cv-pick"></div>';
+    $('cave').innerHTML = '<canvas id="cvgl"></canvas><div class="tr-top"><div class="tr-row cv-row"><button class="btn small cv-up" data-act="cave-close">Remonter</button><span class="pill" id="cv-coins"></span><span class="pill" id="cv-time"></span></div></div><div id="cv-labels"></div><p id="cv-hint" class="on"></p><div id="cv-pick"></div>';
     this.cellar = new Cellar($('cvgl') as HTMLCanvasElement);
     this.cellar.state = () => this.s;
     this.cellar.onChange = () => this.caveHud();
@@ -956,13 +956,13 @@ export class UI {
     if (!t.active || !c) return;
     const set = (id: string, txt: string) => { const el = $(id); if (el.textContent !== txt) el.textContent = txt; };
     set('cv-coins', `🪙 ${fmt(s.coins)}`);
-    set('cv-time', sim.isNight(s) ? `🌑 Nuit · ça pousse` : `☀️ Jour · lent · nuit dans ${clock(Math.max(0, sim.untilNight(s)))}`);
+    set('cv-time', sim.isNight(s) ? `🌑 Nuit` : `☀️ Nuit dans ${clock(Math.max(0, sim.untilNight(s)))}`);
     const labels = c.beds.map((b, i) => {
       if (!b) return `<div class="cvl empty" data-i="${i}"><small>Bac vide</small><small>Touche pour semer</small></div>`;
-      const m = MUSH_BY_ID[b.m];
-      if (sim.mushRotten(b)) return `<div class="cvl rot" data-i="${i}"><small>${esc(m.name)}</small><small>Pourri · touche pour vider</small></div>`;
+      const m = MUSH_BY_ID[b.m], nm = m.name.replace(/^Champignon de /, '');
+      if (sim.mushRotten(b)) return `<div class="cvl rot" data-i="${i}"><small>${esc(nm)}</small><small>Pourri · touche pour vider</small></div>`;
       const ripe = b.prog >= 1;
-      return `<div class="cvl${ripe ? ' ripe' : ''}${b.wet < 0.2 ? ' dry' : ''}" data-i="${i}"><small>${esc(m.name)} · ${b.flush + 1}/${sim.MUSH_FLUSHES_N}</small>${ripe ? `<small>Mûr · ${fmt(sim.mushValue(s, b))} 🪙</small>` : '<i class="pg"><u></u></i>'}<i class="wt"><u></u></i></div>`;
+      return `<div class="cvl${ripe ? ' ripe' : ''}${b.wet < 0.2 ? ' dry' : ''}" data-i="${i}"><small>${esc(nm)} · ${b.flush + 1}/${sim.MUSH_FLUSHES_N}</small>${ripe ? `<small>Mûr · ${fmt(sim.mushValue(s, b))} 🪙</small>` : '<i class="pg"><u></u></i>'}<i class="wt"><u></u></i></div>`;
     }).join('');
     const box = $('cv-labels');
     if (labels !== this.caveHtml) { this.caveHtml = labels; box.innerHTML = labels; }
