@@ -446,18 +446,22 @@ const pavillon: Theme = {
     // Table plein sud.
     bench(270, 0xe6c28a, 0xc99a66);
     // Plein sud : le soleil est là, derrière la vitre, et ses rayons tombent sur la table.
-    const disc = new THREE.Mesh(new THREE.SphereGeometry(1.3, 20, 12), new THREE.MeshBasicMaterial({ color: 0xffe27a }));
+    const disc = new THREE.Mesh(new THREE.SphereGeometry(1.3, 20, 12), new THREE.MeshBasicMaterial({ color: 0xffe27a, transparent: true }));
     disc.position.set(...at(270, 1.3, 7.2, 16));
     disc.userData.raw = true;
+    disc.userData.sunray = true;
     add(disc);
     for (let k = 0; k < 4; k++) {
       const ray = new THREE.Mesh(new THREE.BoxGeometry(0.55, 5.2, 0.02), new THREE.MeshBasicMaterial({ color: 0xfff1a8, transparent: true, opacity: 0.2, depthWrite: false }));
       ray.position.set(-1.5 + k * 1.0, 2.6, -4.55);
       ray.rotation.z = -0.22;
       ray.userData.raw = true;
+      ray.userData.sunray = true;
       wall(270, ray);
     }
-    wall(270, box(3.7, 0.02, 1.0, 0xfff1a8, 0, P.bench + 0.005, -P.pots - 0.05, false));
+    const patch = box(3.7, 0.02, 1.0, 0xfff1a8, 0, P.bench + 0.005, -P.pots - 0.05, false);
+    patch.userData.sunray = true;
+    wall(270, patch);
     // Coin atelier : tour, four et pots qui sèchent.
     wall(45, box(2.6, 0.12, 0.9, 0xb98a5a, 0, 0.9, -4.4), box(0.12, 0.84, 0.8, 0x8a5f3c, -1.2, 0.42, -4.4), box(0.12, 0.84, 0.8, 0x8a5f3c, 1.2, 0.42, -4.4),
       box(0.9, 1.1, 0.8, 0xb5654a, -0.75, 1.51, -4.45), box(0.4, 0.45, 0.06, 0x3a2a26, -0.75, 1.35, -4.03, false), box(0.3, 0.3, 0.02, 0xffb347, -0.75, 1.35, -3.99, false),

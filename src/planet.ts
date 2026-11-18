@@ -113,6 +113,15 @@ export function buildHero(g: TrekSetup['gear']): THREE.Group {
     h.userData.lamp = new THREE.PointLight(0xffc860, 0, 4 + g.lantern * 1.5, 1.6);
     h.userData.lamp.position.set(0.33, 0.6, 0);
     h.add(h.userData.lamp);
+    // Halo autour de la flamme et flaque de lumière au sol : on voit la lanterne de loin.
+    const glow = (geo: THREE.BufferGeometry) => { const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xffc860, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending })); m.userData.raw = true; (m.material as THREE.Material).userData.outlineParameters = { visible: false }; m.castShadow = false; return m; };
+    const halo = glow(new THREE.SphereGeometry(0.22, 12, 8));
+    halo.position.set(0.33, 0.5, 0);
+    const pool = glow(new THREE.CircleGeometry(1.4 + g.lantern * 0.45, 28));
+    pool.rotation.x = -Math.PI / 2;
+    pool.position.y = 0.04;
+    h.add(halo, pool);
+    h.userData.glow = [halo, pool];
   }
   // Serpe ou machette, glissée en travers du sac.
   if (g.machete) {
@@ -160,6 +169,7 @@ export class Planet {
   compass = 0;
   private gear: TrekSetup['gear'] = {};
   private lamp: THREE.PointLight | null = null;
+  private dark = false;
   /** Continent où l'on marche : ses trois régions sont BIOMES[land * 3 + région]. */
   land = 0;
   /** Vrai pendant le jeu de cueillette : le monde et le jour attendent. */
@@ -232,6 +242,7 @@ export class Planet {
     this.compass = setup.compass ?? 0;
     this.gear = setup.gear ?? {};
     this.land = setup.land ?? 0;
+    this.dark = !!setup.dark;
     this.total = setup.time;
     this.speed = setup.speed;
     this.reach = Math.max(1, setup.reach);
@@ -706,9 +717,18 @@ export class Planet {
   get campAngle(): number {
     return Math.atan2(-this.px, this.pz);
   }
-  /** 0 en plein jour, 1 à la nuit tombée. */
+  /** 0 en plein jour, 1 à la nuit tombée. Partie de nuit, la sortie reste dans le noir. */
   get night(): number {
-    return Math.max(0, Math.min(1, 1 - this.left / (TREK_TIME * 0.45)));
+    const n = Math.max(0, Math.min(1, 1 - this.left / (TREK_TIME * 0.45)));
+    return this.dark ? Math.max(0.9, n) : n;
+  }
+  get lantern(): number {
+    return this.gear.lantern ?? 0;
+  }
+  /** Le personnage à l'écran, pour centrer la lumière de la lanterne. */
+  get heroScreen(): { x: number; y: number } {
+    const s = this.screen(new THREE.Vector3(0, R + 0.6, 0));
+    return { x: s.x, y: s.y };
   }
   /** Part du jour qui reste, 0..1. */
   get day(): number {
@@ -895,7 +915,14 @@ export class Planet {
       this.loot[k.kind] += n;
       this.onEvent(k.kind, String(n));
     }
-    if (this.lamp) this.lamp.intensity = this.night * (1.2 + (this.gear.lantern ?? 1) * 0.5);
+    if (this.lamp) this.lamp.intensity = this.night * (2 + (this.gear.lantern ?? 1) * 0.8);
+    const glow = this.hero.userData.glow as THREE.Mesh[] | undefined;
+    if (glow) {
+      const f = 1 + Math.sin(t * 7) * 0.04;
+      (glow[0].material as THREE.MeshBasicMaterial).opacity = this.night * 0.55;
+      glow[0].scale.setScalar(f);
+      (glow[1].material as THREE.MeshBasicMaterial).opacity = this.night * 0.3;
+    }
     this.glints.forEach((g, i) => { g.rotation.y = t * 0.6 + i; g.visible = this.zoom < 20; });
     this.clouds.rotation.y = t * 0.02;
 

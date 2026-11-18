@@ -309,6 +309,13 @@ export function tankOf(s: State): number {
 export function dripOn(s: State, i: number): boolean {
   return s.upgrades.water && !s.dry?.[zoneIndexOfSlot(i)] && tankOf(s) >= 1;
 }
+/** Un coup de levier de la pompe à bras : un arrosage de plus dans la cuve. */
+export const PUMP_STROKE = 1;
+export function pumpStroke(s: State): boolean {
+  if (!s.upgrades.water || tankOf(s) >= tankCap(s)) return false;
+  s.tank = Math.min(tankCap(s), tankOf(s) + PUMP_STROKE);
+  return true;
+}
 /** Un coup de pompe : quelques arrosages de plus dans la cuve. */
 export function pumpTank(s: State): boolean {
   if (!s.upgrades.water || tankOf(s) >= tankCap(s)) return false;
@@ -831,11 +838,15 @@ export function buyTrekGear(s: State, k: GearId): boolean {
   trekOf(s).gear![k] = gearLv(s, k) + 1;
   return true;
 }
-export interface TrekSetup { time: number; speed: number; cap: number; slow: number; ease: number; loot: number; compass: number; gear: Partial<Record<GearId, number>> }
+export interface TrekSetup { dark?: boolean; time: number; speed: number; cap: number; slow: number; ease: number; loot: number; compass: number; gear: Partial<Record<GearId, number>> }
 /** Durée d'une sortie, vitesse de marche et effets de tout l'équipement. */
 export function trekSetup(s: State): TrekSetup {
   const v = (k: GearId) => GEAR[k].v[gearLv(s, k)];
-  return { time: TREK_TIME + v('lantern'), speed: v('boots'), cap: basketCap(s), slow: v('machete'), ease: v('gloves'), loot: v('shovel'), compass: v('compass'), gear: { ...trekOf(s).gear } };
+  return { dark: isNight(s), time: TREK_TIME + v('lantern'), speed: v('boots'), cap: basketCap(s), slow: v('machete'), ease: v('gloves'), loot: v('shovel'), compass: v('compass'), gear: { ...trekOf(s).gear } };
+}
+/** La nuit, on ne part pas sans lanterne. */
+export function trekDarkBlocked(s: State): boolean {
+  return isNight(s) && gearLv(s, 'lantern') === 0;
 }
 export function buyBasket(s: State): boolean {
   const t = trekOf(s), next = BASKETS[t.basket + 1];

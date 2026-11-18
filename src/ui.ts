@@ -47,6 +47,8 @@ export class UI {
   kind: SheetKind = 'none';
   arg = 0;
   argId = '';
+  /** Filtre de la liste des graines à semer. */
+  seedFilter = 'all';
   private lastSheet = '';
   private lastHud = '';
   private lastQuest = '';
@@ -486,7 +488,8 @@ export class UI {
         if (sim.fertilize(s, this.arg)) { this.scene.pop(this.arg); this.float(this.arg, '🧪'); this.buzz(15); }
         break;
       case 'gear': sim.toggleGear(s, arg as sim.ClimateGear); break;
-      case 'pump': if (sim.pumpTank(s)) { play('water'); this.buzz(12); } break;
+      case 'pump': this.showPump(); break;
+      case 'seedfilter': this.seedFilter = arg; this.refresh(true); break;
       case 'valve': sim.toggleValve(s, Number(arg)); play('tap'); break;
       case 'buytank': if (sim.buyTank(s)) { this.toast('Cuve agrandie et remplie !'); this.buzz(25); play('coin'); } break;
       case 'flip': this.flipNext(); break;
@@ -610,6 +613,7 @@ export class UI {
         break;
       }
       case 'trek-go': {
+        if (sim.trekDarkBlocked(s)) { this.toast('Il fait nuit noire : il te faut une lanterne pour partir.'); break; }
         const finds = sim.planetFinds(s, Math.random);
         if (!finds.length) { this.toast('Repose-toi encore un peu avant de repartir.'); break; }
         this.close();
@@ -814,7 +818,12 @@ export class UI {
     const px = (el: HTMLElement, x: number, y: number) => { el.style.left = x + 'px'; el.style.top = y + 'px'; };
     ($('tr-bar') as HTMLElement).style.width = t.day * 100 + '%';
     $('tr-bar').classList.toggle('late', t.left < 35);
-    ($('tr-night') as HTMLElement).style.opacity = String(t.night * 0.55);
+    const tn = $('tr-night') as HTMLElement;
+    tn.style.opacity = String(t.night * (t.lantern ? 0.8 : 0.55));
+    // La lanterne perce la nuit : un cercle de lumière autour du personnage.
+    const hs = t.heroScreen;
+    const mask = t.lantern && t.night > 0.05 ? `radial-gradient(circle at ${Math.round(hs.x)}px ${Math.round(hs.y)}px, transparent ${55 + t.lantern * 14}px, #000 ${110 + t.lantern * 26}px)` : '';
+    if (tn.dataset.mask !== mask) { tn.dataset.mask = mask; tn.style.maskImage = mask; tn.style.webkitMaskImage = mask; }
     const count: Record<string, number> = {};
     for (const id of t.bonus) count[id] = (count[id] ?? 0) + 1;
     // Un petit panier se montre en entier ; un grand se résume aux trois dernières trouvailles et au compte.
@@ -994,6 +1003,69 @@ export class UI {
   private flipped = 0;
 
   /** Ouverture façon paquet de cartes : on déchire, puis on retourne les graines une à une. */
+  /** La pompe à bras : on abaisse le levier du doigt, chaque coup complet verse un arrosage dans la cuve. */
+  private showPump(): void {
+    const s = this.s;
+    if (!s.upgrades.water) return;
+    this.close();
+    const m = $('modal');
+    m.innerHTML = `<div class="mtitle">Pompe à bras</div><p class="sub">Abaisse le levier jusqu'en bas, puis relève-le. Chaque coup verse un arrosage dans la cuve.</p>
+      <div class="pump" id="pump"><svg viewBox="0 0 220 240" width="220" height="240">
+        <rect x="18" y="168" width="74" height="62" rx="8" fill="#9fc6d6" stroke="#2b2118" stroke-width="4"/>
+        <rect id="pw" x="22" y="226" width="66" height="0" fill="#4aa8d8"/>
+        <rect x="104" y="60" width="34" height="150" rx="6" fill="#4f6f7a" stroke="#2b2118" stroke-width="4"/>
+        <rect x="92" y="204" width="58" height="22" rx="5" fill="#3b4a52" stroke="#2b2118" stroke-width="4"/>
+        <path d="M106 96 H62 V150" fill="none" stroke="#2b2118" stroke-width="16" stroke-linecap="round"/>
+        <path d="M106 96 H62 V150" fill="none" stroke="#5f8590" stroke-width="9" stroke-linecap="round"/>
+        <g id="pdrops" opacity="0"><ellipse cx="62" cy="164" rx="5" ry="8" fill="#4aa8d8" stroke="#2b2118" stroke-width="2"/><ellipse cx="56" cy="182" rx="3.5" ry="6" fill="#4aa8d8" stroke="#2b2118" stroke-width="2"/></g>
+        <g id="plever" style="transform-origin:121px 64px"><rect x="121" y="56" width="92" height="16" rx="8" fill="#b5443a" stroke="#2b2118" stroke-width="4"/><circle cx="203" cy="64" r="13" fill="#e2604f" stroke="#2b2118" stroke-width="4"/></g>
+        <circle cx="121" cy="64" r="8" fill="#f2c94c" stroke="#2b2118" stroke-width="4"/>
+      </svg></div><div class="tankbar pumpbar"><i id="pbar"></i><span id="ptxt"></span></div><button class="btn primary" data-act="closemodal">C'est bon</button>`;
+    m.classList.add('on');
+    const pump = $('pump'), lever = $('plever') as unknown as SVGGElement, drops = $('pdrops') as unknown as SVGGElement;
+    let ang = -28, armed = true, from: { y: number; a: number } | null = null, raf = 0;
+    const show = () => {
+      const cap = sim.tankCap(s), left = sim.tankOf(s);
+      ($('pbar') as HTMLElement).style.width = Math.round((100 * left) / cap) + '%';
+      $('ptxt').textContent = left >= cap ? `Cuve pleine · ${left} / ${cap}` : `${left} / ${cap} arrosages`;
+      ($('pw') as unknown as SVGRectElement).setAttribute('height', String(Math.round((52 * left) / cap)));
+      ($('pw') as unknown as SVGRectElement).setAttribute('y', String(226 - Math.round((52 * left) / cap)));
+      lever.style.transform = `rotate(${ang}deg)`;
+    };
+    show();
+    pump.onpointerdown = (e) => { pump.setPointerCapture(e.pointerId); from = { y: e.clientY, a: ang }; };
+    pump.onpointermove = (e) => {
+      if (!from) return;
+      ang = Math.max(-28, Math.min(30, from.a + (e.clientY - from.y) * 0.45));
+      if (ang > 24 && armed) {
+        armed = false;
+        if (sim.pumpStroke(s)) {
+          play('water'); this.buzz(18);
+          drops.style.transition = 'none'; drops.setAttribute('opacity', '1');
+          cancelAnimationFrame(raf);
+          raf = requestAnimationFrame(() => { drops.style.transition = 'opacity 0.5s'; drops.setAttribute('opacity', '0'); });
+        } else if (sim.tankOf(s) >= sim.tankCap(s)) this.toast('La cuve est pleine.');
+      }
+      if (ang < -12) armed = true;
+      show();
+    };
+    const up = () => {
+      from = null;
+      // Relâché, le levier remonte tout seul.
+      let last = performance.now();
+      const back = (now: number) => {
+        if (from || !m.contains(pump)) return;
+        ang = Math.max(-28, ang - Math.min(0.1, (now - last) / 1000) * 220);
+        last = now;
+        if (ang < -12) armed = true;
+        show();
+        if (ang > -28) requestAnimationFrame(back);
+      };
+      requestAnimationFrame(back);
+    };
+    pump.onpointerup = pump.onpointercancel = up;
+  }
+
   private showPacket(got: { id: string; isNew: boolean }[], chained = false): void {
     this.close();
     this.pack = got;
@@ -1015,19 +1087,31 @@ export class UI {
     const s = this.s;
     const n = this.pack.length;
     const done = this.flipped >= n;
-    const seeds = this.pack.map((g, k) => {
+    const seedHtml = (g: { id: string; isNew: boolean }, k: number) => {
       const sp = SPECIES_BY_ID[g.id];
       const col = RARITIES[sp.rarity].color;
       if (k >= this.flipped) return `<button class="sd${k === this.flipped ? ' next' : ''}" data-act="flip" style="--k:${k}" aria-label="Graine à ouvrir">${SEED_SVG}</button>`;
       const fresh = k === this.flipped - 1;
       return `<div class="sd open${fresh ? ' pop' : ''}${sp.rarity !== 'commun' ? ' glow' : ''}" style="--glow:${col}">${fresh ? '<i class="half l"></i><i class="half r"></i>' : ''}<span class="disc">${g.isNew ? '<span class="new">NOUVEAU</span>' : ''}<span class="e">${EMOJI[sp.id]}</span></span><b>${esc(sp.name)}</b>${rarTag(sp)}</div>`;
-    }).join('');
+    };
     const best = this.pack.slice(0, this.flipped).some((g) => SPECIES_BY_ID[g.id].rarity !== 'commun');
     // Le nombre de colonnes suit le nombre de graines : tout tient à l'écran, même après une grosse cueillette.
     const cols = n <= 3 ? n : n === 4 ? 2 : n <= 9 ? 3 : n <= 16 ? 4 : 5;
-    $('modal').innerHTML = `<div class="mtitle">${done ? (best ? 'Belle trouvaille !' : 'Voilà tes graines') : n > 1 ? `Ouvre tes ${n} graines` : 'Ouvre ta graine'}</div><div class="seeds c${cols}" data-act="flip" style="--cols:${cols}">${seeds}</div>${done
-      ? `<div class="mrowb">${s.packets > 0 ? `<button class="btn gold" data-act="free">🎁 Sachet suivant (${s.packets})</button>` : ''}<button class="btn primary" data-act="closemodal">Au jardin !</button></div>`
-      : `<div class="mrowb"><p class="sub">Touche une graine pour voir ce qu'elle donnera.</p>${n - this.flipped > 3 ? '<button class="btn small" data-act="flipall">Tout ouvrir</button>' : ''}</div>`}`;
+    const title = done ? (best ? 'Belle trouvaille !' : 'Voilà tes graines') : n > 1 ? `Ouvre tes ${n} graines` : 'Ouvre ta graine';
+    const foot = done
+      ? `${s.packets > 0 ? `<button class="btn gold" data-act="free">🎁 Sachet suivant (${s.packets})</button>` : ''}<button class="btn primary" data-act="closemodal">Au jardin !</button>`
+      : `<p class="sub">Touche une graine pour voir ce qu'elle donnera.</p>${n - this.flipped > 3 ? '<button class="btn small" data-act="flipall">Tout ouvrir</button>' : ''}`;
+    // Une graine ouverte ne touche qu'à elle-même : les autres gardent leur animation et la grille sa position.
+    const grid = $('modal').querySelector('.seeds');
+    if (grid && this.flipped > 0 && grid.children.length === n) {
+      const k = this.flipped - 1;
+      grid.children[k].outerHTML = seedHtml(this.pack[k], k);
+      grid.children[this.flipped]?.classList.add('next');
+      $('modal').querySelector('.mtitle')!.textContent = title;
+      $('modal').querySelector('.mrowb')!.innerHTML = foot;
+      return;
+    }
+    $('modal').innerHTML = `<div class="mtitle">${title}</div><div class="seeds c${cols}" data-act="flip" style="--cols:${cols}">${this.pack.map(seedHtml).join('')}</div><div class="mrowb">${foot}</div>`;
   }
 
   /** Ouvre toutes les graines restantes, l'une après l'autre. */

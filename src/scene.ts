@@ -54,6 +54,9 @@ export class Scene3D {
   /** Parcelles du jardin : jardinières achetées et carrés de terre encore à vendre. */
   private beds: THREE.Object3D[] = [];
   private flutters: THREE.Object3D[] = [];
+  private sunrays: THREE.Mesh[] = [];
+  private sky: THREE.Group | null = null;
+  private skyMats: THREE.Material[] = [];
   private now = 0;
   private theme!: Theme;
   private slots: SlotView[] = [];
@@ -143,7 +146,9 @@ export class Scene3D {
     this.doors = [];
     this.beds = [];
     this.flutters = [];
-    this.world.traverse((o) => { if (o.userData.water) this.waters.push(o); if (o.userData.door) this.doors.push(o); if (o.userData.ext || o.userData.plot) this.beds.push(o); if (o.userData.flutter !== undefined) this.flutters.push(o); });
+    this.sunrays = [];
+    this.world.traverse((o) => { if (o.userData.water) this.waters.push(o); if (o.userData.door) this.doors.push(o); if (o.userData.ext || o.userData.plot) this.beds.push(o); if (o.userData.flutter !== undefined) this.flutters.push(o); if (o.userData.sunray) this.sunrays.push(o as THREE.Mesh); });
+    this.buildSky();
 
     const mistMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35, depthWrite: false });
     for (let k = 0; k < 6; k++) {
@@ -621,10 +626,61 @@ export class Scene3D {
     if (!l || Math.abs(k - this.light) < 0.004) return;
     this.light = k;
     const dusk = 1 - Math.abs(k * 2 - 1);
-    l.sun.intensity = l.sunBase * (0.12 + 0.88 * k);
-    l.hemi.intensity = l.hemiBase * (0.5 + 0.5 * k);
+    l.sun.intensity = l.sunBase * (0.06 + 0.94 * k);
+    l.hemi.intensity = l.hemiBase * (0.4 + 0.6 * k);
     l.sun.color.copy(l.sunColor).lerp(NIGHT_SUN, 1 - k).lerp(DUSK_SUN, dusk * 0.6);
     l.hemi.color.copy(l.sky).lerp(NIGHT_SKY, (1 - k) * 0.85);
+    // La nuit, plus de rayons de soleil : ils s'effacent avec le jour.
+    for (const r of this.sunrays) {
+      const m = r.material as THREE.Material;
+      if (m.transparent) { m.userData.base ??= m.opacity; m.opacity = (m.userData.base as number) * k * k; }
+      r.visible = m.transparent ? k > 0.02 : k > 0.5;
+    }
+    // Étoiles et lune sont accrochées au ciel 3D : elles tournent avec le regard.
+    if (this.sky) {
+      this.sky.visible = k < 0.98;
+      const o = Math.min(1, (1 - k) * 1.3);
+      for (const m of this.skyMats) m.opacity = o * ((m.userData.k as number | undefined) ?? 1);
+    }
+  }
+
+  /** Un ciel de nuit en vrai décor : étoiles et lune loin autour de la serre, invisibles de jour. */
+  private buildSky(): void {
+    if (!this.theme.fp) { this.sky = null; return; }
+    const g = new THREE.Group();
+    const n = 260, pos = new Float32Array(n * 3);
+    let seed = 7;
+    const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    for (let i = 0; i < n; i++) {
+      const a = rnd() * Math.PI * 2, h = 0.08 + rnd() * 0.9, r = 60;
+      const c = Math.sqrt(1 - h * h);
+      pos.set([Math.cos(a) * c * r, h * r, Math.sin(a) * c * r], i * 3);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const pm = new THREE.PointsMaterial({ color: 0xffffff, size: 2.4, sizeAttenuation: false, transparent: true, opacity: 0, depthWrite: false, fog: false });
+    pm.userData.outlineParameters = { visible: false };
+    g.add(new THREE.Points(geo, pm));
+    const mm = new THREE.MeshBasicMaterial({ color: 0xfdf6d8, transparent: true, opacity: 0, depthWrite: false, fog: false });
+    mm.userData.outlineParameters = { visible: false };
+    const moon = new THREE.Mesh(new THREE.CircleGeometry(2.6, 28), mm);
+    moon.position.set(38, 20, -40);
+    moon.lookAt(0, 0, 0);
+    const hm = new THREE.MeshBasicMaterial({ color: 0xfdf6d8, transparent: true, opacity: 0, depthWrite: false, fog: false });
+    hm.userData.outlineParameters = { visible: false };
+    const halo = new THREE.Mesh(new THREE.CircleGeometry(4.2, 28), hm);
+    halo.position.copy(moon.position).multiplyScalar(1.01);
+    halo.lookAt(0, 0, 0);
+    g.add(moon, halo);
+    g.traverse((o) => { o.userData.raw = true; o.renderOrder = -10; o.castShadow = false; o.receiveShadow = false; });
+    this.skyMats = [pm, mm];
+    // Le halo reste plus discret que la lune.
+    this.skyMats.push(hm);
+    hm.userData.k = 0.25;
+    g.visible = false;
+    this.sky = g;
+    this.world.add(g);
+    this.light = -1;
   }
 
   /** Rend une petite scène à part dans une texture, avec le même trait que la serre, et en lit les pixels. */

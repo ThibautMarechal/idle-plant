@@ -86,7 +86,7 @@ export function waterHtml(ui: UI): string {
     <h3>${TANKS[size].name}</h3>
     <div class="tankbar"><i style="width:${Math.round(100 * left / cap)}%"></i><span>${Math.floor(left)} / ${cap} arrosages</span></div>
     <p class="sub">${plants ? `Tes ${plants} plantes arrosées boivent environ ${perDay} arrosages par jour. ${perDay > cap ? 'La cuve ne tient pas la journée : ferme une vanne, pompe ou agrandis-la.' : 'La cuve tient la journée.'}` : 'Aucune plante à arroser pour l\'instant.'} La pluie de la nuit la remplit au lever du jour, dans ${clock(sim.untilDawn(s))}.</p>
-    <button class="btn gold wide" data-act="pump" ${left >= cap ? 'disabled' : ''}>Pomper · +${sim.PUMP} arrosages</button>
+    <button class="btn gold wide" data-act="pump" ${left >= cap ? 'disabled' : ''}>Pomper à la main</button>
     <h3>Vannes</h3>
     ${zones}
     ${next ? `<h3>Agrandir</h3><div class="card"><div class="ico">💧</div><div class="mid"><div class="nm">${next.name}</div><div class="ds">${next.cap} arrosages au lieu de ${cap}.</div></div><button class="btn ${s.coins >= next.price ? 'primary' : ''} small" data-act="buytank" ${s.coins >= next.price ? '' : 'disabled'}>${fmt(next.price)} 🪙</button></div>` : ''}</div>`;
@@ -170,7 +170,23 @@ export function seedHtml(ui: UI): string {
   const ids = Object.keys(s.seeds).sort((a, b) => sim.fitOf(SPECIES_BY_ID[b], c) - sim.fitOf(SPECIES_BY_ID[a], c));
   const size = sim.potSize(s.slots[ui.arg]);
   const potSoil = sim.soilOf(s.slots[ui.arg]);
-  const list = ids.map((id) => {
+  // Filtres : ce qui se plaît ici, ce qui aime cette terre, les raretés, puis chaque famille présente.
+  const tests: Record<string, (sp: Species) => boolean> = {
+    all: () => true,
+    fit: (sp) => sim.fitOf(sp, c) >= 0.8 && sim.sizeOf(sp) <= size,
+    soil: (sp) => (sp.soil ?? 'universel') === potSoil,
+    rare: (sp) => sp.rarity !== 'commun',
+  };
+  const fams = FAMILY_IDS.filter((f) => ids.some((id) => SPECIES_BY_ID[id].family === f));
+  for (const f of fams) tests[f] = (sp) => sp.family === f;
+  const names: Record<string, string> = { all: 'Toutes', fit: 'Bien ici', soil: 'Pour cette terre', rare: 'Rares et plus' };
+  for (const f of fams) names[f] = `${FAMILIES[f].icon} ${FAMILIES[f].name}`;
+  const cur = tests[ui.seedFilter] ? ui.seedFilter : 'all';
+  const count = (k: string) => ids.filter((id) => tests[k](SPECIES_BY_ID[id])).length;
+  const keys = Object.keys(tests).filter((k) => k === 'all' || k === cur || count(k) > 0);
+  const filters = ids.length > 4 ? `<div class="seedfilters">${keys.map((k) => `<button class="fchip${k === cur ? ' on' : ''}" data-act="seedfilter" data-arg="${k}">${names[k]} <small>${count(k)}</small></button>`).join('')}</div>` : '';
+  const shown = ids.filter((id) => tests[cur](SPECIES_BY_ID[id]));
+  const list = (shown.length ? shown : []).map((id) => {
     const sp = SPECIES_BY_ID[id];
     const small = sim.sizeOf(sp) > size;
     return `<button class="card" data-act="plant" data-arg="${id}" ${small ? 'disabled style="opacity:.55"' : ''}><div class="ico">${EMOJI[id]}</div><div class="mid"><div class="nm">${esc(sp.name)} ${rarTag(sp)}</div>${sim.inSeason(s, sp) ? `<div class="ds">${SEASONS[sim.seasonOf(s).index].icon} De saison : pousse plus vite</div>` : ''}${small ? `<div class="ds">🏺 Il lui faut un ${POT_SIZES[sim.sizeOf(sp) - 1].name.toLowerCase()} : façonne-le à l'atelier.</div>` : needsChips(sp, c) + (sp.soil === potSoil ? '' : `<div class="ds">🟫 Préfère la ${SOILS[sp.soil ?? 'universel'].name.toLowerCase()}</div>`)}</div><div class="end">×${s.seeds[id]}</div></button>`;
@@ -178,7 +194,7 @@ export function seedHtml(ui: UI): string {
   const empty = `<p class="sub">Tu n'as plus de graines.</p>${s.packets > 0
     ? '<button class="btn gold wide" data-act="free">🎁 Ouvrir un sachet gratuit</button>'
     : `<button class="btn primary wide" data-act="buypacket" ${s.coins >= sim.PRICES.packet ? '' : 'disabled'}>Sachet mystère · ${sim.PRICES.packet} 🪙</button>`}`;
-  return head(ui, 'Que semer ici ?') + `<div class="sh-body">${zoneLine(ui, ui.arg)}${ids.length ? list : empty}<div class="kv"><span>Ce pot</span><b>${potLabel(s.slots[ui.arg].pd)}</b></div><div class="kv"><span>Sa terre</span><b>${SOILS[potSoil].name}</b></div><div class="tiles">${tile('soil', '🟫', 'Terre')}${tile('paintslot', '🎨', 'Peindre')}${tile('admire', '🔍', 'Admirer')}${tile('stow', '📥', 'Ranger')}</div></div>`;
+  return head(ui, 'Que semer ici ?') + `<div class="sh-body">${zoneLine(ui, ui.arg)}${ids.length ? filters + (shown.length ? list : '<p class="sub">Aucune graine de ce genre en réserve.</p>') : empty}<div class="kv"><span>Ce pot</span><b>${potLabel(s.slots[ui.arg].pd)}</b></div><div class="kv"><span>Sa terre</span><b>${SOILS[potSoil].name}</b></div><div class="tiles">${tile('soil', '🟫', 'Terre')}${tile('paintslot', '🎨', 'Peindre')}${tile('admire', '🔍', 'Admirer')}${tile('stow', '📥', 'Ranger')}</div></div>`;
 }
 
 const THIRST = ['', '💧 boit peu', '💧 boit normalement', '💧 boit beaucoup'];
@@ -344,7 +360,7 @@ export function trekHtml(ui: UI): string {
   }).join('');
   return head(ui, '🥾 Expédition') + `<div class="sh-body">
     <p class="sub">La serre est posée sur une petite planète. Pars à pied cueillir graines et boutures sauvages : plus tu t'éloignes, plus elles sont rares. Sois rentré avant la nuit, ou tu perdras la moitié du panier.</p>
-    ${t.rest > 0 ? `<div class="card"><div class="ico">😴</div><div class="mid"><div class="nm">Une expédition par jour</div><div class="ds">Tu repars au lever du jour, dans ${clock(t.rest)}.</div></div></div>` : '<button class="btn gold big" data-act="trek-go">🌍 Partir en expédition</button>'}
+    ${t.rest > 0 ? `<div class="card"><div class="ico">😴</div><div class="mid"><div class="nm">Une expédition par jour</div><div class="ds">Tu repars au lever du jour, dans ${clock(t.rest)}.</div></div></div>` : sim.trekDarkBlocked(s) ? `<div class="card"><div class="ico">🌑</div><div class="mid"><div class="nm">Il fait nuit noire</div><div class="ds">Sans lanterne, on ne part pas. Achète-la plus bas, ou attends le lever du jour dans ${clock(sim.untilDawn(s))}.</div></div></div>` : `<button class="btn gold big" data-act="trek-go">${sim.isNight(s) ? '🏮 Partir de nuit, lanterne allumée' : '🌍 Partir en expédition'}</button>`}
     <h3>Continents</h3>
     ${lands}
     <h3>Régions : ${LANDS[land].name.toLowerCase()}</h3>
