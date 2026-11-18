@@ -114,7 +114,7 @@ export class UI {
     this.applyTheme();
     $('studio').innerHTML = '<div class="st-head"><h2 id="st-title"></h2><button class="x" data-act="st-close">✕</button></div><p id="st-hint"></p><canvas id="stgl"></canvas><div id="st-tools"></div>';
     this.studio = new Studio($('stgl') as HTMLCanvasElement);
-    $('trek').innerHTML = '<canvas id="trgl"></canvas><div id="tr-night"></div><div class="tr-top"><div class="tr-time"><i id="tr-bar"></i></div><div class="tr-row"><span class="pill" id="tr-basket"></span><span class="pill" id="tr-rare">🧭<b id="tr-rarr">▲</b><span id="tr-rd"></span></span><span class="pill" id="tr-camp"><b id="tr-arrow">▲</b><span id="tr-dist"></span></span></div></div><div id="tr-stick"><i></i></div><div id="tr-label"></div><p id="tr-hint"></p><div id="pick"><div class="pk-card"><b id="pk-title"></b><canvas id="pkc"></canvas><p id="pk-hint"></p></div></div>';
+    $('trek').innerHTML = '<canvas id="trgl"></canvas><div id="tr-night"></div><div class="tr-top"><div class="tr-time"><i id="tr-bar"></i></div><div class="tr-row"><span class="pill" id="tr-basket"></span><span class="pill" id="tr-rare">🧭<b id="tr-rarr"><svg viewBox="0 0 12 28" width="11" height="26"><path d="M6 1L10 14H2z" fill="#f2b51f" stroke="#3b2a20" stroke-width="1.2" stroke-linejoin="round"/><path d="M2 14h8L6 27z" fill="#fdfaf2" stroke="#3b2a20" stroke-width="1.2" stroke-linejoin="round"/><circle cx="6" cy="14" r="1.6" fill="#3b2a20"/></svg></b><span id="tr-rd"></span></span><span class="pill" id="tr-camp"><b id="tr-arrow"><svg viewBox="0 0 12 28" width="11" height="26"><path d="M6 1L10 14H2z" fill="#e2342c" stroke="#3b2a20" stroke-width="1.2" stroke-linejoin="round"/><path d="M2 14h8L6 27z" fill="#fdfaf2" stroke="#3b2a20" stroke-width="1.2" stroke-linejoin="round"/><circle cx="6" cy="14" r="1.6" fill="#3b2a20"/></svg></b><span id="tr-dist"></span></span></div></div><div id="tr-stick"><i></i></div><div id="tr-label"></div><p id="tr-hint"></p><div id="pick"><div class="pk-card"><b id="pk-title"></b><canvas id="pkc"></canvas><p id="pk-hint"></p></div></div>';
     this.trek = new Planet($('trgl') as HTMLCanvasElement);
     this.trek.onChange = () => this.trekHud();
     this.pick = new Pick($('pkc') as HTMLCanvasElement);
@@ -797,7 +797,7 @@ export class UI {
     const count: Record<string, number> = {};
     for (const id of t.bonus) count[id] = (count[id] ?? 0) + 1;
     // Un petit panier se montre en entier ; un grand se résume aux trois dernières trouvailles et au compte.
-    const room = t.compass ? 3 : 5;
+    const room = t.compass >= 5 ? 2 : t.compass ? 3 : 5;
     const shown = t.basket.map((id) => EMOJI[id] + (count[id]-- > 0 ? '✨' : '')).slice(-room).join('');
     const b = t.cap > room ? `🧺 ${shown} ${t.basket.length}/${t.cap}` : `🧺 ${shown}${'·'.repeat(Math.max(0, t.cap - t.basket.length))}${t.loot.clay ? ` 🧱${t.loot.clay}` : ''}${t.loot.coins ? ` 🪙${t.loot.coins}` : ''}`;
     if ($('tr-basket').textContent !== b) $('tr-basket').textContent = b;
@@ -808,7 +808,7 @@ export class UI {
     ($('tr-rare') as HTMLElement).style.display = rare ? '' : 'none';
     if (rare) {
       ($('tr-rarr') as HTMLElement).style.transform = `rotate(${rare.angle}rad)`;
-      const rd = `${Math.round(rare.dist)} m`;
+      const rd = `${rare.id ? EMOJI[rare.id] + ' ' : ''}${Math.round(rare.dist)} m`;
       if ($('tr-rd').textContent !== rd) $('tr-rd').textContent = rd;
     }
     const arrow = $('tr-arrow');

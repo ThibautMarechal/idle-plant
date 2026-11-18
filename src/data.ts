@@ -494,18 +494,24 @@ export const TREK_REST = 240;
  */
 export type GearId = 'boots' | 'lantern' | 'machete' | 'gloves' | 'shovel' | 'compass';
 export const GEAR: Record<GearId, { icon: string; names: string[]; price: number[]; v: number[]; say: (v: number) => string }> = {
-  boots: { icon: '🥾', names: ['Bottes de marche', 'Bottes de randonnée', 'Bottes d\'explorateur'], price: [300, 2500, 9000], v: [1, 1.3, 1.5, 1.7],
+  boots: { icon: '🥾', names: ['Bottes de marche', 'Bottes de randonnée', 'Bottes ferrées', 'Bottes d\'explorateur', 'Bottes de sept lieues'],
+    price: [300, 1500, 4500, 10000, 20000], v: [1, 1.2, 1.35, 1.5, 1.65, 1.8],
     say: (v) => `Tu marches ${Math.round((v - 1) * 100)} % plus vite.` },
-  lantern: { icon: '🏮', names: ['Lanterne', 'Lanterne à huile', 'Lampe tempête'], price: [500, 3000, 10000], v: [0, 45, 90, 140],
+  lantern: { icon: '🏮', names: ['Lanterne', 'Lanterne à huile', 'Lampe tempête', 'Lampe à carbure', 'Lanterne aux lucioles'],
+    price: [500, 2000, 5000, 11000, 22000], v: [0, 30, 60, 90, 125, 160],
     say: (v) => `La nuit tombe ${v} secondes plus tard.` },
-  machete: { icon: '🔪', names: ['Serpe', 'Machette'], price: [900, 5000], v: [0.35, 0.6, 0.85],
-    say: (v) => `Ronces, vase et neige te ralentissent ${v >= 0.8 ? 'à peine' : 'moins'}.` },
-  gloves: { icon: '🧤', names: ['Gants de cueilleur', 'Gants de botaniste'], price: [700, 4000], v: [0, 1, 2],
-    say: (v) => `La cueillette est ${v > 1 ? 'bien plus' : 'plus'} facile : plus de temps, moins de pièges.` },
-  shovel: { icon: '⛏️', names: ['Pelle de poche', 'Pioche de prospecteur'], price: [600, 3500], v: [1, 2, 3],
-    say: (v) => `Tu ramasses ${v} fois plus d'argile et de pièces en chemin.` },
-  compass: { icon: '🧭', names: ['Boussole de botaniste'], price: [1500], v: [0, 1],
-    say: () => 'Une flèche montre la plante rare la plus proche.' },
+  machete: { icon: '🔪', names: ['Serpe', 'Faucille', 'Machette', 'Machette affûtée', 'Coupe-coupe d\'or'],
+    price: [900, 2500, 6000, 12000, 24000], v: [0.35, 0.5, 0.62, 0.74, 0.86, 0.95],
+    say: (v) => `Dans les ronces, la vase ou la neige, tu gardes ${Math.round(v * 100)} % de ta vitesse.` },
+  gloves: { icon: '🧤', names: ['Gants de jardin', 'Gants de cueilleur', 'Gants de cuir', 'Gants de botaniste', 'Gants de maître cueilleur'],
+    price: [700, 2000, 5000, 11000, 22000], v: [0, 0.5, 1, 1.5, 2, 2.5],
+    say: (v) => `Cueillette ${['', 'un peu plus facile', 'plus facile', 'nettement plus facile', 'bien plus facile', 'presque sans faute'][Math.round(v * 2)]} : plus de temps, moins de pièges.` },
+  shovel: { icon: '⛏️', names: ['Pelle de poche', 'Pelle de jardinier', 'Pioche', 'Pioche de prospecteur', 'Pioche de géologue'],
+    price: [600, 1800, 4500, 10000, 20000], v: [1, 1.5, 2, 2.5, 3, 4],
+    say: (v) => `Tu ramasses ${String(v).replace('.', ',')} fois plus d'argile et de pièces en chemin.` },
+  compass: { icon: '🧭', names: ['Boussole', 'Boussole de botaniste', 'Boussole de précision', 'Boussole à aiguille de jade', 'Boussole des légendes'],
+    price: [1500, 3500, 7000, 13000, 25000], v: [0, 1, 2, 3, 4, 5],
+    say: (v) => ['', 'Une aiguille dorée montre la plante rare la plus proche, à moins de 25 m.', 'L\'aiguille dorée porte jusqu\'à 50 m.', 'L\'aiguille dorée trouve les plantes rares partout où tu peux marcher.', 'Partout où tu marches, l\'aiguille dorée vise d\'abord les plantes exotiques et légendaires.', 'Partout, l\'aiguille dorée vise les plus belles plantes et te dit lesquelles.'][v] },
 };
 export const GEAR_IDS = Object.keys(GEAR) as GearId[];
 export const BASKETS: { cap: number; price: number }[] = [{ cap: 4, price: 0 }, { cap: 6, price: 350 }, { cap: 9, price: 900 }];

@@ -804,11 +804,11 @@ export function buyTrekGear(s: State, k: GearId): boolean {
   trekOf(s).gear![k] = gearLv(s, k) + 1;
   return true;
 }
-export interface TrekSetup { time: number; speed: number; cap: number; slow: number; ease: number; loot: number; compass: boolean; gear: Partial<Record<GearId, number>> }
+export interface TrekSetup { time: number; speed: number; cap: number; slow: number; ease: number; loot: number; compass: number; gear: Partial<Record<GearId, number>> }
 /** Durée d'une sortie, vitesse de marche et effets de tout l'équipement. */
 export function trekSetup(s: State): TrekSetup {
   const v = (k: GearId) => GEAR[k].v[gearLv(s, k)];
-  return { time: TREK_TIME + v('lantern'), speed: v('boots'), cap: basketCap(s), slow: v('machete'), ease: v('gloves'), loot: v('shovel'), compass: v('compass') > 0, gear: { ...trekOf(s).gear } };
+  return { time: TREK_TIME + v('lantern'), speed: v('boots'), cap: basketCap(s), slow: v('machete'), ease: v('gloves'), loot: v('shovel'), compass: v('compass'), gear: { ...trekOf(s).gear } };
 }
 export function buyBasket(s: State): boolean {
   const t = trekOf(s), next = BASKETS[t.basket + 1];

@@ -102,7 +102,7 @@ export function buildHero(g: TrekSetup['gear']): THREE.Group {
   // Deux yeux sous le chapeau.
   for (const x of [-0.08, 0.08]) M(new THREE.SphereGeometry(0.03, 6, 5), 0x3b2a20, x, 1.03, -0.215).castShadow = false;
   // Bottes : brunes, puis rouges, puis dorées.
-  if (g.boots) for (const x of [-0.11, 0.11]) M(new THREE.BoxGeometry(0.15, 0.13, 0.22), [0x6b4a34, 0xb5443a, 0xd8a83a][g.boots - 1], x, 0.065, -0.25);
+  if (g.boots) for (const x of [-0.11, 0.11]) M(new THREE.BoxGeometry(0.15, 0.13, 0.22), [0x6b4a34, 0x4f6f8a, 0xb5443a, 0x3f8a5a, 0xd8a83a][g.boots - 1], x, 0.065, -0.25);
   // Lanterne à la ceinture : elle s'allume à la tombée de la nuit.
   if (g.lantern) {
     M(new THREE.CylinderGeometry(0.008, 0.008, 0.12, 4), 0x3b2a20, 0.33, 0.62, 0);
@@ -117,21 +117,21 @@ export function buildHero(g: TrekSetup['gear']): THREE.Group {
   // Serpe ou machette, glissée en travers du sac.
   if (g.machete) {
     M(new THREE.CylinderGeometry(0.03, 0.03, 0.22, 6), 0x8a5f3c, -0.14, 0.82, 0.37, 0, 0.7);
-    M(new THREE.BoxGeometry(0.07, g.machete > 1 ? 0.48 : 0.3, 0.015), 0xcfd8dc, 0.03 + (g.machete > 1 ? 0.07 : 0), 0.98 + (g.machete > 1 ? 0.07 : 0), 0.37, 0, 0.7);
+    M(new THREE.BoxGeometry(0.07, 0.26 + g.machete * 0.05, 0.015), 0xcfd8dc, 0.03 + g.machete * 0.015, 0.98 + g.machete * 0.015, 0.37, 0, 0.7);
   }
   // Pelle ou pioche plantée dans le sac.
   if (g.shovel) {
     M(new THREE.CylinderGeometry(0.022, 0.022, 0.6, 5), 0xb07a4f, 0.13, 0.9, 0.33, -0.2, -0.25);
-    if (g.shovel > 1) M(new THREE.BoxGeometry(0.34, 0.06, 0.05), 0x9fb4c4, 0.2, 1.18, 0.27, -0.2, -0.25);
+    if (g.shovel > 2) M(new THREE.BoxGeometry(0.34, 0.06, 0.05), 0x9fb4c4, 0.2, 1.18, 0.27, -0.2, -0.25);
     else M(new THREE.BoxGeometry(0.13, 0.15, 0.03), 0x9fb4c4, 0.2, 1.2, 0.28, -0.2, -0.25);
   }
   // Gants : deux petites mains vertes de part et d'autre.
-  if (g.gloves) for (const x of [-0.27, 0.27]) M(new THREE.SphereGeometry(0.075, 8, 6), g.gloves > 1 ? 0x3f8a5a : 0x7fbf6a, x, 0.45, -0.06);
+  if (g.gloves) for (const x of [-0.27, 0.27]) M(new THREE.SphereGeometry(0.075, 8, 6), [0x7fbf6a, 0x6fa8d6, 0x9a6a3c, 0x3f8a5a, 0xd8a83a][g.gloves - 1], x, 0.45, -0.06);
   // Boussole en sautoir.
-  if (g.compass) { const c = M(new THREE.CylinderGeometry(0.08, 0.08, 0.03, 12), 0xd8a83a, 0, 0.66, -0.24, Math.PI / 2 - 0.3); c.castShadow = false; }
+  if (g.compass) { const c = M(new THREE.CylinderGeometry(0.06 + g.compass * 0.01, 0.06 + g.compass * 0.01, 0.03, 12), g.compass >= 4 ? 0x5fbf8a : 0xd8a83a, 0, 0.66, -0.24, Math.PI / 2 - 0.3); c.castShadow = false; }
   // Le chapeau prend un ruban de couleur avec l'expérience.
   const total = Object.values(g).reduce((a, b) => a + (b ?? 0), 0);
-  if (total >= 4) M(new THREE.CylinderGeometry(0.255, 0.255, 0.07, 12), total >= 9 ? 0xe2574c : 0x4f8ad6, 0, 1.22, 0);
+  if (total >= 4) M(new THREE.CylinderGeometry(0.255, 0.255, 0.07, 12), total >= 30 ? 0xd8a83a : total >= 20 ? 0xe2574c : total >= 12 ? 0x3f8a5a : 0x4f8ad6, 0, 1.22, 0);
   return h;
 }
 
@@ -157,7 +157,7 @@ export class Planet {
   slow = 0.35;
   ease = 0;
   lootMul = 1;
-  compass = false;
+  compass = 0;
   private gear: TrekSetup['gear'] = {};
   private lamp: THREE.PointLight | null = null;
   /** Continent où l'on marche : ses trois régions sont BIOMES[land * 3 + région]. */
@@ -229,7 +229,7 @@ export class Planet {
     this.slow = setup.slow ?? 0.35;
     this.ease = setup.ease ?? 0;
     this.lootMul = setup.loot ?? 1;
-    this.compass = !!setup.compass;
+    this.compass = setup.compass ?? 0;
     this.gear = setup.gear ?? {};
     this.land = setup.land ?? 0;
     this.total = setup.time;
@@ -676,15 +676,25 @@ export class Planet {
     return this.basket.length >= this.cap;
   }
   /** Distance à la serre, en mètres. */
-  /** Direction (comme `campAngle`) et distance de la plante rare la plus proche, pour la boussole. */
-  get rare(): { angle: number; dist: number } | null {
+  /**
+   * Ce que vise l'aiguille dorée de la boussole, selon son niveau : la plante rare la plus proche à 25 m, puis 50 m,
+   * puis partout ; ensuite les exotiques et légendaires d'abord ; au dernier niveau, elle dit laquelle.
+   */
+  get rare(): { angle: number; dist: number; id: string | null } | null {
+    const lv = this.compass;
+    if (!lv) return null;
+    const range = lv === 1 ? 25 : lv === 2 ? 50 : Infinity;
     let best: Find | null = null, bd = Infinity;
     for (const f of this.finds) {
-      if (f.taken || f.tier < 1) continue;
+      if (f.taken || f.tier < 1 || Math.hypot(f.thing.x, f.thing.z) > this.edge) continue;
       const d = Math.hypot(f.thing.x - this.px, f.thing.z - this.pz);
-      if (d < bd && Math.hypot(f.thing.x, f.thing.z) <= this.edge) { bd = d; best = f; }
+      if (d > range) continue;
+      // Au niveau 4, une trouvaille lointaine passe avant une rare ordinaire.
+      const score = d - (lv >= 4 && f.tier === 2 ? 1000 : 0);
+      if (score < bd) { bd = score; best = f; }
     }
-    return best ? { angle: Math.atan2(-(best.thing.x - this.px), best.thing.z - this.pz), dist: bd } : null;
+    if (!best) return null;
+    return { angle: Math.atan2(-(best.thing.x - this.px), best.thing.z - this.pz), dist: Math.hypot(best.thing.x - this.px, best.thing.z - this.pz), id: lv >= 5 ? best.id : null };
   }
   get campDist(): number {
     return Math.hypot(this.px, this.pz);
@@ -881,8 +891,9 @@ export class Planet {
       if (k.kind === 'coins') k.inner.rotation.y = t * 2.5;
       if (this.ended || Math.hypot(k.thing.x - this.px, k.thing.z - this.pz) > 1.2) continue;
       k.got = true;
-      this.loot[k.kind] += k.n * this.lootMul;
-      this.onEvent(k.kind, String(k.n * this.lootMul));
+      const n = Math.round(k.n * this.lootMul);
+      this.loot[k.kind] += n;
+      this.onEvent(k.kind, String(n));
     }
     if (this.lamp) this.lamp.intensity = this.night * (1.2 + (this.gear.lantern ?? 1) * 0.5);
     this.glints.forEach((g, i) => { g.rotation.y = t * 0.6 + i; g.visible = this.zoom < 20; });

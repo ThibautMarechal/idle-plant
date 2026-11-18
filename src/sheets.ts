@@ -310,7 +310,7 @@ export function trekHtml(ui: UI): string {
   }).join('');
   const rows = [0, 1, 2].map((r) => row(land * LAND_BIOMES + r)).join('');
   const gearCount = GEAR_IDS.reduce((a, k) => a + sim.gearLv(s, k), 0), gearMax = GEAR_IDS.reduce((a, k) => a + GEAR[k].price.length, 0);
-  const heroWord = (n: number) => n >= gearMax ? 'Grand explorateur' : n >= 9 ? 'Aventurier aguerri' : n >= 4 ? 'Randonneur' : 'Promeneur du dimanche';
+  const heroWord = (n: number) => n >= gearMax ? 'Légende des sentiers' : n >= 20 ? 'Grand explorateur' : n >= 12 ? 'Aventurier aguerri' : n >= 4 ? 'Randonneur' : 'Promeneur du dimanche';
   // L'équipement du personnage : chaque objet a plusieurs niveaux, payés avec les pièces du jeu.
   const gear = GEAR_IDS.map((k) => {
     const g = GEAR[k], lv = sim.gearLv(s, k), price = sim.gearNext(s, k), max = g.price.length;
