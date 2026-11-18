@@ -488,6 +488,24 @@ export const TREK_TIME = 150;
 /** Marge de la coupe parfaite sur la jauge, selon la rareté (fraction de la jauge). */
 export const CUT_ZONE: Record<Rarity, number> = { commun: 0.3, rare: 0.22, exotique: 0.16, legendaire: 0.11 };
 export const TREK_REST = 240;
-/** Équipement d'expédition : les bottes font marcher plus vite, la lanterne allonge la journée. */
-export const TREK_GEAR = { boots: { price: 300, speed: 1.3 }, lantern: { price: 500, time: 45 } };
+/**
+ * Équipement du personnage pour l'expédition, à plusieurs niveaux, acheté avec les pièces gagnées en jeu.
+ * `v` donne l'effet de chaque niveau (index 0 : sans l'objet), `price` le prix de chaque niveau suivant.
+ */
+export type GearId = 'boots' | 'lantern' | 'machete' | 'gloves' | 'shovel' | 'compass';
+export const GEAR: Record<GearId, { icon: string; names: string[]; price: number[]; v: number[]; say: (v: number) => string }> = {
+  boots: { icon: '🥾', names: ['Bottes de marche', 'Bottes de randonnée', 'Bottes d\'explorateur'], price: [300, 2500, 9000], v: [1, 1.3, 1.5, 1.7],
+    say: (v) => `Tu marches ${Math.round((v - 1) * 100)} % plus vite.` },
+  lantern: { icon: '🏮', names: ['Lanterne', 'Lanterne à huile', 'Lampe tempête'], price: [500, 3000, 10000], v: [0, 45, 90, 140],
+    say: (v) => `La nuit tombe ${v} secondes plus tard.` },
+  machete: { icon: '🔪', names: ['Serpe', 'Machette'], price: [900, 5000], v: [0.35, 0.6, 0.85],
+    say: (v) => `Ronces, vase et neige te ralentissent ${v >= 0.8 ? 'à peine' : 'moins'}.` },
+  gloves: { icon: '🧤', names: ['Gants de cueilleur', 'Gants de botaniste'], price: [700, 4000], v: [0, 1, 2],
+    say: (v) => `La cueillette est ${v > 1 ? 'bien plus' : 'plus'} facile : plus de temps, moins de pièges.` },
+  shovel: { icon: '⛏️', names: ['Pelle de poche', 'Pioche de prospecteur'], price: [600, 3500], v: [1, 2, 3],
+    say: (v) => `Tu ramasses ${v} fois plus d'argile et de pièces en chemin.` },
+  compass: { icon: '🧭', names: ['Boussole de botaniste'], price: [1500], v: [0, 1],
+    say: () => 'Une flèche montre la plante rare la plus proche.' },
+};
+export const GEAR_IDS = Object.keys(GEAR) as GearId[];
 export const BASKETS: { cap: number; price: number }[] = [{ cap: 4, price: 0 }, { cap: 6, price: 350 }, { cap: 9, price: 900 }];

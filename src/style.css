@@ -427,7 +427,8 @@ body[data-style="bd"] .hudrow .pill { padding: 7px 8px; font-size: 14px; }
 .tr-time i.late { background: var(--red, #e2604f); }
 .tr-row { gap: 6px; }
 #tr-camp { display: flex; gap: 6px; align-items: center; }
-#tr-arrow { display: inline-block; font-size: 13px; }
+#tr-arrow, #tr-rarr { display: inline-block; font-size: 13px; }
+#tr-rare { display: flex; gap: 5px; align-items: center; margin-left: auto; }
 #tr-night { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, #1b1b3a 0%, #5a2a4a 55%, #c9603a 100%); opacity: 0; mix-blend-mode: multiply; }
 #tr-stick { position: absolute; display: none; width: 140px; height: 140px; margin: -70px 0 0 -70px; border-radius: 50%; border: 3px solid rgba(255, 255, 255, 0.8); background: rgba(255, 255, 255, 0.14); pointer-events: none; }
 #tr-stick.on { display: block; }
@@ -519,3 +520,13 @@ body[data-fp="1"] #nav { display: none; }
 .tankbar i { display: block; height: 100%; background: linear-gradient(180deg, #8fd6f2, #5ab4e6); transition: width 0.25s; }
 .tankbar span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; }
 .card.sel { background: #e4f4dc !important; }
+
+.pips { display: inline-flex; gap: 3px; margin-left: 2px; }
+.pips i { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--ink, #3b2a20); background: #fff; }
+.pips i.on { background: #f8cf45; }
+.card.dim .ico { opacity: 0.55; }
+.hero-card { display: flex; align-items: center; gap: 12px; background: #e8f3f6; border: 2.5px solid var(--ink, #3b2a20); border-radius: 18px; padding: 8px 12px 8px 4px; margin-bottom: 10px; }
+.hero-card .nm { font-weight: 800; font-size: 15px; }
+.hero-card .ds { font-size: 12px; color: var(--soft); margin-top: 2px; }
+#heropic { width: 104px; height: 104px; flex: none; }
+#heropic canvas { width: 100%; height: 100%; display: block; }

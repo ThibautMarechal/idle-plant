@@ -1,5 +1,5 @@
-import { BASKETS, BIOMES, LANDS, LAND_BIOMES, DAY_LENGTH, TANKS, GARDEN_BASE, GARDEN_EXT, TREK_GEAR, TREK_TIME, GARDEN, GARDEN_CLIMATE, GARDEN_FIRST, GARDEN_INDEX, PROF_MAX, PROF_MIN, BASE_SLOTS, SEASONS, SEASON_LENGTH, CLIENTS, FAMILIES, FAMILY_IDS, GLAZES, NEWS, POT_SIZES, RARITIES, SLOT_COUNT, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, ZONES } from './data';
-import type { Family, Rarity, Species, Zone } from './data';
+import { BASKETS, BIOMES, LANDS, LAND_BIOMES, DAY_LENGTH, TANKS, GARDEN_BASE, GARDEN_EXT, GEAR, TREK_TIME, GARDEN, GARDEN_CLIMATE, GARDEN_FIRST, GARDEN_INDEX, PROF_MAX, PROF_MIN, BASE_SLOTS, SEASONS, SEASON_LENGTH, CLIENTS, FAMILIES, FAMILY_IDS, GLAZES, NEWS, POT_SIZES, RARITIES, SLOT_COUNT, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, ZONES } from './data';
+import type { Family, GearId, Rarity, Species, Zone } from './data';
 
 /** `vr` : variante, 0 normale, 1 panachée, 2 dorée. */
 /** `cut` : 1 = la plante demande une taille, 2 = taillée (elle pousse plus vite). */
@@ -87,7 +87,7 @@ export interface State {
   /** Astuces déjà montrées une fois. */
   hints?: Record<string, boolean>;
   /** Expéditions : repos restant (s), taille du panier, milieux ouverts, sorties faites. */
-  trek?: { rest: number; basket: number; open: boolean[]; done: number; boots?: boolean; lantern?: boolean; day?: number; land?: number };
+  trek?: { rest: number; basket: number; open: boolean[]; done: number; boots?: boolean; lantern?: boolean; day?: number; land?: number; gear?: Partial<Record<GearId, number>> };
   /** Horloge du jeu, en secondes : elle fait tourner le jour et la nuit. */
   clock?: number;
   /** Arrosage automatique : arrosages restants dans la cuve, taille de la cuve, zones dont la vanne est fermée. */
@@ -785,17 +785,30 @@ export function openBiome(s: State, b: number): boolean {
   t.open[b] = true;
   return true;
 }
-export function buyTrekGear(s: State, k: 'boots' | 'lantern'): boolean {
+/** Niveau d'un équipement (0 : pas encore acheté). Les anciennes bottes et lanterne valent le niveau 1. */
+export function gearLv(s: State, k: GearId): number {
   const t = trekOf(s);
-  if (t[k] || s.coins < TREK_GEAR[k].price) return false;
-  s.coins -= TREK_GEAR[k].price;
-  t[k] = true;
+  const g = (t.gear ??= {});
+  if (g.boots === undefined && t.boots) g.boots = 1;
+  if (g.lantern === undefined && t.lantern) g.lantern = 1;
+  return g[k] ?? 0;
+}
+/** Prix du niveau suivant, ou 0 si l'équipement est au maximum. */
+export function gearNext(s: State, k: GearId): number {
+  return GEAR[k].price[gearLv(s, k)] ?? 0;
+}
+export function buyTrekGear(s: State, k: GearId): boolean {
+  const price = gearNext(s, k);
+  if (!price || s.coins < price) return false;
+  s.coins -= price;
+  trekOf(s).gear![k] = gearLv(s, k) + 1;
   return true;
 }
-/** Durée d'une sortie et vitesse de marche, équipement compris. */
-export function trekSetup(s: State): { time: number; speed: number; cap: number } {
-  const t = trekOf(s);
-  return { time: TREK_TIME + (t.lantern ? TREK_GEAR.lantern.time : 0), speed: t.boots ? TREK_GEAR.boots.speed : 1, cap: basketCap(s) };
+export interface TrekSetup { time: number; speed: number; cap: number; slow: number; ease: number; loot: number; compass: boolean; gear: Partial<Record<GearId, number>> }
+/** Durée d'une sortie, vitesse de marche et effets de tout l'équipement. */
+export function trekSetup(s: State): TrekSetup {
+  const v = (k: GearId) => GEAR[k].v[gearLv(s, k)];
+  return { time: TREK_TIME + v('lantern'), speed: v('boots'), cap: basketCap(s), slow: v('machete'), ease: v('gloves'), loot: v('shovel'), compass: v('compass') > 0, gear: { ...trekOf(s).gear } };
 }
 export function buyBasket(s: State): boolean {
   const t = trekOf(s), next = BASKETS[t.basket + 1];

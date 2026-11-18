@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { OutlineEffect } from 'three/examples/jsm/effects/OutlineEffect.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { BIOMES, LAND_BIOMES, SPECIES_BY_ID, TREK_TIME } from './data';
+import type { TrekSetup } from './sim';
 import { buildPlant } from './plants3d';
 import { artStyle, finish, mat } from './styles';
 
@@ -91,6 +92,49 @@ function makeGeo() {
   };
 }
 
+
+/** Le personnage, chapeau de paille et sac à dos, avec l'équipement qu'il porte : on voit ses progrès d'un coup d'œil. */
+export function buildHero(g: TrekSetup['gear']): THREE.Group {
+  const h = group(mesh(new THREE.CylinderGeometry(0.2, 0.3, 0.75, 9), 0x4f8ad6, 0, 0.42, 0), mesh(new THREE.SphereGeometry(0.24, 10, 8), 0xf3c9a5, 0, 1.0, 0),
+    mesh(new THREE.CylinderGeometry(0.46, 0.46, 0.04, 12), 0xf2d27a, 0, 1.17, 0), mesh(new THREE.CylinderGeometry(0.2, 0.25, 0.2, 10), 0xf2d27a, 0, 1.27, 0),
+    mesh(new THREE.BoxGeometry(0.34, 0.42, 0.2), 0xb5654a, 0, 0.5, 0.26));
+  const M = (geo: THREE.BufferGeometry, color: number, x: number, y: number, z: number, rx = 0, rz = 0) => { const m = mesh(geo, color, x, y, z); m.rotation.set(rx, 0, rz); h.add(m); return m; };
+  // Deux yeux sous le chapeau.
+  for (const x of [-0.08, 0.08]) M(new THREE.SphereGeometry(0.03, 6, 5), 0x3b2a20, x, 1.03, -0.215).castShadow = false;
+  // Bottes : brunes, puis rouges, puis dorées.
+  if (g.boots) for (const x of [-0.11, 0.11]) M(new THREE.BoxGeometry(0.15, 0.13, 0.22), [0x6b4a34, 0xb5443a, 0xd8a83a][g.boots - 1], x, 0.065, -0.25);
+  // Lanterne à la ceinture : elle s'allume à la tombée de la nuit.
+  if (g.lantern) {
+    M(new THREE.CylinderGeometry(0.008, 0.008, 0.12, 4), 0x3b2a20, 0.33, 0.62, 0);
+    const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.15, 8), new THREE.MeshBasicMaterial({ color: 0xffd36a }));
+    glass.position.set(0.33, 0.5, 0); glass.userData.raw = true;
+    h.add(glass);
+    M(new THREE.ConeGeometry(0.09, 0.07, 8), 0x3b2a20, 0.33, 0.6, 0);
+    h.userData.lamp = new THREE.PointLight(0xffc860, 0, 4 + g.lantern * 1.5, 1.6);
+    h.userData.lamp.position.set(0.33, 0.6, 0);
+    h.add(h.userData.lamp);
+  }
+  // Serpe ou machette, glissée en travers du sac.
+  if (g.machete) {
+    M(new THREE.CylinderGeometry(0.03, 0.03, 0.22, 6), 0x8a5f3c, -0.14, 0.82, 0.37, 0, 0.7);
+    M(new THREE.BoxGeometry(0.07, g.machete > 1 ? 0.48 : 0.3, 0.015), 0xcfd8dc, 0.03 + (g.machete > 1 ? 0.07 : 0), 0.98 + (g.machete > 1 ? 0.07 : 0), 0.37, 0, 0.7);
+  }
+  // Pelle ou pioche plantée dans le sac.
+  if (g.shovel) {
+    M(new THREE.CylinderGeometry(0.022, 0.022, 0.6, 5), 0xb07a4f, 0.13, 0.9, 0.33, -0.2, -0.25);
+    if (g.shovel > 1) M(new THREE.BoxGeometry(0.34, 0.06, 0.05), 0x9fb4c4, 0.2, 1.18, 0.27, -0.2, -0.25);
+    else M(new THREE.BoxGeometry(0.13, 0.15, 0.03), 0x9fb4c4, 0.2, 1.2, 0.28, -0.2, -0.25);
+  }
+  // Gants : deux petites mains vertes de part et d'autre.
+  if (g.gloves) for (const x of [-0.27, 0.27]) M(new THREE.SphereGeometry(0.075, 8, 6), g.gloves > 1 ? 0x3f8a5a : 0x7fbf6a, x, 0.45, -0.06);
+  // Boussole en sautoir.
+  if (g.compass) { const c = M(new THREE.CylinderGeometry(0.08, 0.08, 0.03, 12), 0xd8a83a, 0, 0.66, -0.24, Math.PI / 2 - 0.3); c.castShadow = false; }
+  // Le chapeau prend un ruban de couleur avec l'expérience.
+  const total = Object.values(g).reduce((a, b) => a + (b ?? 0), 0);
+  if (total >= 4) M(new THREE.CylinderGeometry(0.255, 0.255, 0.07, 12), total >= 9 ? 0xe2574c : 0x4f8ad6, 0, 1.22, 0);
+  return h;
+}
+
 /**
  * L'expédition : un grand monde qu'on parcourt à pied, vu comme une petite planète qui roule sous les pas.
  * La serre est au centre de la carte. La forêt l'entoure, le marais vient ensuite, les dunes sont tout au bout :
@@ -109,6 +153,13 @@ export class Planet {
   near = -1;
   /** Région où l'on se trouve : 0 forêt, 1 marais, 2 dunes. */
   biome = 0;
+  /** Effets de l'équipement : vitesse gardée dans les ronces, aisance à la cueillette, butin multiplié, boussole. */
+  slow = 0.35;
+  ease = 0;
+  lootMul = 1;
+  compass = false;
+  private gear: TrekSetup['gear'] = {};
+  private lamp: THREE.PointLight | null = null;
   /** Continent où l'on marche : ses trois régions sont BIOMES[land * 3 + région]. */
   land = 0;
   /** Vrai pendant le jeu de cueillette : le monde et le jour attendent. */
@@ -174,7 +225,12 @@ export class Planet {
     window.addEventListener('resize', () => { if (this.active) this.resize(); });
   }
 
-  open(finds: { id: string; hidden: boolean; tier: number; ring: number }[], setup: { time: number; speed: number; cap: number; reach: number; land?: number }): void {
+  open(finds: { id: string; hidden: boolean; tier: number; ring: number }[], setup: Partial<TrekSetup> & { time: number; speed: number; cap: number; reach: number; land?: number }): void {
+    this.slow = setup.slow ?? 0.35;
+    this.ease = setup.ease ?? 0;
+    this.lootMul = setup.loot ?? 1;
+    this.compass = !!setup.compass;
+    this.gear = setup.gear ?? {};
     this.land = setup.land ?? 0;
     this.total = setup.time;
     this.speed = setup.speed;
@@ -558,9 +614,8 @@ export class Planet {
     for (let i = 0; i < 5; i++) this.add(group(flat(part(G.disc, 0xd9cdb8, 0, 0.04, 0, 0.34, 1, 0.34, false))), (i % 2) * 0.3 - 0.15, -3.0 - i * 0.7);
 
     // Le personnage : chapeau de paille, sac à dos. Il reste au sommet de la planète, c'est elle qui roule.
-    this.hero = group(mesh(new THREE.CylinderGeometry(0.2, 0.3, 0.75, 9), 0x4f8ad6, 0, 0.42, 0), mesh(new THREE.SphereGeometry(0.24, 10, 8), 0xf3c9a5, 0, 1.0, 0),
-      mesh(new THREE.CylinderGeometry(0.46, 0.46, 0.04, 12), 0xf2d27a, 0, 1.17, 0), mesh(new THREE.CylinderGeometry(0.2, 0.25, 0.2, 10), 0xf2d27a, 0, 1.27, 0),
-      mesh(new THREE.BoxGeometry(0.34, 0.42, 0.2), 0xb5654a, 0, 0.5, 0.26));
+    this.hero = buildHero(this.gear);
+    this.lamp = this.hero.userData.lamp ?? null;
     this.hero.position.set(0, R, 0);
     w.add(this.hero);
 
@@ -621,6 +676,16 @@ export class Planet {
     return this.basket.length >= this.cap;
   }
   /** Distance à la serre, en mètres. */
+  /** Direction (comme `campAngle`) et distance de la plante rare la plus proche, pour la boussole. */
+  get rare(): { angle: number; dist: number } | null {
+    let best: Find | null = null, bd = Infinity;
+    for (const f of this.finds) {
+      if (f.taken || f.tier < 1) continue;
+      const d = Math.hypot(f.thing.x - this.px, f.thing.z - this.pz);
+      if (d < bd && Math.hypot(f.thing.x, f.thing.z) <= this.edge) { bd = d; best = f; }
+    }
+    return best ? { angle: Math.atan2(-(best.thing.x - this.px), best.thing.z - this.pz), dist: bd } : null;
+  }
   get campDist(): number {
     return Math.hypot(this.px, this.pz);
   }
@@ -774,7 +839,7 @@ export class Planet {
         const slowed = this.slows.some((o) => Math.hypot(o.x - this.px, o.z - this.pz) < o.r);
         if (slowed && !this.slowed) this.onEvent('slow');
         this.slowed = slowed;
-        const v = Math.min(1, len) * SPEED * this.speed * (slowed ? 0.35 : 1) * dt;
+        const v = Math.min(1, len) * SPEED * this.speed * (slowed ? this.slow : 1) * dt;
         this.fx = sx / len; this.fz = sz / len;
         this.px += this.fx * v; this.pz += this.fz * v;
         this.step += v;
@@ -816,9 +881,10 @@ export class Planet {
       if (k.kind === 'coins') k.inner.rotation.y = t * 2.5;
       if (this.ended || Math.hypot(k.thing.x - this.px, k.thing.z - this.pz) > 1.2) continue;
       k.got = true;
-      this.loot[k.kind] += k.n;
-      this.onEvent(k.kind, String(k.n));
+      this.loot[k.kind] += k.n * this.lootMul;
+      this.onEvent(k.kind, String(k.n * this.lootMul));
     }
+    if (this.lamp) this.lamp.intensity = this.night * (1.2 + (this.gear.lantern ?? 1) * 0.5);
     this.glints.forEach((g, i) => { g.rotation.y = t * 0.6 + i; g.visible = this.zoom < 20; });
     this.clouds.rotation.y = t * 0.02;
 

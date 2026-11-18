@@ -76,6 +76,9 @@ const ICONS: Record<string, string> = {
   snow: '<path d="M12 2v20M3.5 7l17 10M3.5 17l17-10M9.5 3.500L12 6l2.5-2.500M9.5 20.500L12 18l2.5 2.5" stroke="#5db4de" stroke-width="1.8"/>',
   volcano: '<path d="M2.5 21L9 8h6l6.5 13z" fill="#7a6a66"/><path d="M9 8l1.500 3 1.500-2 1.500 2.500L15 8z" fill="#f0703a"/><path d="M12 5.500V2.500M8.500 5L7 3M15.500 5L17 3" stroke="#f0703a" stroke-width="1.6"/>',
   peak: '<path d="M2 20.500L9.500 5l4 7 2.500-3.500 6 12z" fill="#9fb4c4"/><path d="M9.500 5L7 10.200l2.500-1.200 1.500 1.500 1.300-1.500z" fill="#fff"/>',
+  knife: '<path d="M4 20l9-9" stroke-width="3.2"/><path d="M4 20l9-9" stroke="#8a5f3c" stroke-width="1.4"/><path d="M12 12L20 3.500c1 3-1 8-5.500 11.5z" fill="#cfd8dc"/>',
+  pick: '<path d="M8 21L15.500 7" stroke-width="3.2"/><path d="M8 21L15.500 7" stroke="#b07a4f" stroke-width="1.4"/><path d="M5.500 7.500C9 3.500 16 2.500 21 5c-4 0-9 1-13.500 4.500z" fill="#9fb4c4"/>',
+  compass: '<circle cx="12" cy="12" r="9" fill="#f4ead2"/><path d="M12 5.500l2.200 6.500L12 18.500 9.800 12z" fill="#e2574c"/><path d="M12 12l2.200 0L12 18.500 9.800 12z" fill="#fff"/><circle cx="12" cy="12" r="1" fill="#3b2a20"/>',
   pine: '<path d="M12 15v6.5" stroke-width="3"/><path d="M12 2l5 7h-2.500l4.5 6.500H5L9.5 9H7z" fill="#4f9d69"/>',
   lotus: '<path d="M3 17.500c3 3 15 3 18 0" stroke="#3f9d6b" stroke-width="2.2"/><path d="M4 9c4 0 7 3 8 7.5-4 0-8-2.5-8-7.500zM20 9c-4 0-7 3-8 7.5 4 0 8-2.5 8-7.500z" fill="#f7c2d6"/><path d="M12 5c3 3 3 8.5 0 11.5-3-3-3-8.5 0-11.500z" fill="#f3a8c4"/>',
   dunes: '<circle cx="17" cy="7" r="3.2" fill="#f8cf45"/><path d="M2 19.500c4-6.5 8-6.5 11-2 2-3 6-3 9 2z" fill="#ecd08f"/>',
@@ -105,7 +108,7 @@ const OF: Record<string, string> = {
   '🧤': 'glove', '🏡': 'house', '🌍': 'planet', '🏮': 'lantern', '🥇': 'gold', '🥈': 'silver', '🥉': 'bronze', '❔': 'question',
   '🔊': 'sound', '🔇': 'mute', '📅': 'calendar', '🧽': 'sponge', '⬇': 'down', '🎯': 'target', '🌫': 'fog', '💡': 'bulb', '♨': 'heat',
   '😴': 'sleep', '☀': 'sun', '🌡': 'thermo', '⚠': 'warn', '🌑': 'moon', '❄': 'snow', '🌲': 'pine', '🪷': 'lotus', '🏜': 'dunes',
-  '🌵': 'cactus', '🌿': 'herb', '🍃': 'fern', '🍂': 'autumn', '🌸': 'orchid', '🌼': 'flower', '💐': 'bouquet', '🌴': 'palm', '🌋': 'volcano', '🏔': 'peak',
+  '🌵': 'cactus', '🌿': 'herb', '🍃': 'fern', '🍂': 'autumn', '🌸': 'orchid', '🌼': 'flower', '💐': 'bouquet', '🌴': 'palm', '🔪': 'knife', '⛏': 'pick', '🧭': 'compass', '🌋': 'volcano', '🏔': 'peak',
   '🪰': 'flytrap', '🌳': 'tree', '🌱': 'sprout', '🌰': 'seed', '💚': 'hgreen', '💛': 'hgold', '🤍': 'hwhite',
 };
 
@@ -267,8 +270,53 @@ function portraits(snap: Snap): void {
   setTimeout(step, 400);
 }
 
+let SNAP: Snap | null = null;
+/**
+ * Photographie un objet 3D vu de trois quarts face, sur fond transparent (le personnage et son équipement).
+ * Renvoie null si le moteur n'est pas prêt : l'appelant garde alors son dessin.
+ */
+export function photo(obj: THREE.Object3D, size = 240): HTMLCanvasElement | null {
+  if (!SNAP) return null;
+  const rt = new THREE.WebGLRenderTarget(size, size, { samples: 4 });
+  try {
+    const px = new Uint8Array(size * size * 4);
+    const scene = new THREE.Scene();
+    scene.add(new THREE.HemisphereLight(0xffffff, 0xd8c7a8, 1.3));
+    const sun = new THREE.DirectionalLight(0xfff1d0, 1.5);
+    sun.position.set(2, 4, -3);
+    scene.add(sun, obj);
+    const cam = new THREE.PerspectiveCamera(30, 1, 0.05, 50);
+    const box = new THREE.Box3().setFromObject(obj), mid = box.getCenter(new THREE.Vector3()), dim = box.getSize(new THREE.Vector3());
+    const r = Math.max(dim.x, dim.y, dim.z) * 0.5 * 1.15, d = r / Math.tan((cam.fov * Math.PI) / 360);
+    cam.position.set(mid.x + d * 0.45, mid.y + d * 0.28, mid.z - d * 0.85);
+    cam.lookAt(mid);
+    SNAP(scene, cam, rt, px);
+    scene.remove(obj);
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    const img = ctx.createImageData(size, size);
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const src = ((size - 1 - y) * size + x) * 4, dst = (y * size + x) * 4, a = px[src + 3], k = a ? 255 / a : 0;
+        for (let c = 0; c < 3; c++) img.data[dst + c] = toSrgb[Math.min(255, Math.round(px[src + c] * k))];
+        img.data[dst + 3] = a;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    return canvas;
+  } catch (e) {
+    console.warn('photo', e);
+    return null;
+  } finally {
+    rt.dispose();
+  }
+}
+
 /** À appeler une fois au démarrage : surveille tout ce que l'interface écrit et y remplace les émojis par des dessins. */
 export function installIcons(snap: Snap): void {
+  SNAP = snap;
   try {
     sweep(document.body);
     // Garde-fou : si quelque chose défait nos remplacements en boucle, on arrête de surveiller plutôt que de figer le jeu.

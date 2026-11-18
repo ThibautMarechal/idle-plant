@@ -87,7 +87,9 @@ export class Pick {
   }
 
   /** `level` : 0 commun, 1 rare, 2 exotique, 3 légendaire. */
-  start(kind: PickKind, emoji: string, level: number, done: (score: number) => void): void {
+  /** `ease` : gants du cueilleur (0, 1, 2), qui adoucissent le jeu. */
+  start(kind: PickKind, emoji: string, level: number, done: (score: number) => void, ease = 0): void {
+    level = Math.max(0, level - ease * 0.6);
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     this.w = this.canvas.clientWidth || 340;
     this.h = this.canvas.clientHeight || 420;
@@ -115,7 +117,7 @@ export class Pick {
       this.queue.sort((a, b) => a.at - b.at);
     } else if (kind === 'pull') {
       this.loose = this.lean = this.side = this.stage = this.lift = this.fly = 0;
-      this.left = this.span = 8;
+      this.left = this.span = 8 + ease * 1.5;
       this.bits = [];
     } else {
       this.stems = [0, 1, 2].map((k) => ({ x: this.w * (0.22 + k * 0.28), phase: rnd() * TAU, speed: 1.6 + level * 0.45 + k * 0.35, cut: -1, score: 0, fall: 0 }));

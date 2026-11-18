@@ -1,9 +1,10 @@
-import { BIOMES, LAND_BIOMES, LANDS, GARDEN_EXT, GARDEN_INDEX, SEASONS, FAMILIES, FAMILY_IDS, GLAZES, PAINTS, POT_SIZES, RARITIES, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, STAGES, ZONES } from './data';
+import { GEAR, GEAR_IDS, BIOMES, LAND_BIOMES, LANDS, GARDEN_EXT, GARDEN_INDEX, SEASONS, FAMILIES, FAMILY_IDS, GLAZES, PAINTS, POT_SIZES, RARITIES, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, STAGES, ZONES } from './data';
 import type { Family } from './data';
 import type { Scene3D } from './scene';
 import { buildPlant } from './plants3d';
 import { Studio } from './studio';
-import { Planet } from './planet';
+import { Planet, buildHero } from './planet';
+import { photo } from './icons';
 import { Pick, PICK_OF, PICK_TEXT } from './pick';
 import { Stall } from './stall';
 import { finish, STYLES } from './styles';
@@ -113,7 +114,7 @@ export class UI {
     this.applyTheme();
     $('studio').innerHTML = '<div class="st-head"><h2 id="st-title"></h2><button class="x" data-act="st-close">✕</button></div><p id="st-hint"></p><canvas id="stgl"></canvas><div id="st-tools"></div>';
     this.studio = new Studio($('stgl') as HTMLCanvasElement);
-    $('trek').innerHTML = '<canvas id="trgl"></canvas><div id="tr-night"></div><div class="tr-top"><div class="tr-time"><i id="tr-bar"></i></div><div class="tr-row"><span class="pill" id="tr-basket"></span><span class="pill" id="tr-camp"><b id="tr-arrow">▲</b><span id="tr-dist"></span></span></div></div><div id="tr-stick"><i></i></div><div id="tr-label"></div><p id="tr-hint"></p><div id="pick"><div class="pk-card"><b id="pk-title"></b><canvas id="pkc"></canvas><p id="pk-hint"></p></div></div>';
+    $('trek').innerHTML = '<canvas id="trgl"></canvas><div id="tr-night"></div><div class="tr-top"><div class="tr-time"><i id="tr-bar"></i></div><div class="tr-row"><span class="pill" id="tr-basket"></span><span class="pill" id="tr-rare">🧭<b id="tr-rarr">▲</b><span id="tr-rd"></span></span><span class="pill" id="tr-camp"><b id="tr-arrow">▲</b><span id="tr-dist"></span></span></div></div><div id="tr-stick"><i></i></div><div id="tr-label"></div><p id="tr-hint"></p><div id="pick"><div class="pk-card"><b id="pk-title"></b><canvas id="pkc"></canvas><p id="pk-hint"></p></div></div>';
     this.trek = new Planet($('trgl') as HTMLCanvasElement);
     this.trek.onChange = () => this.trekHud();
     this.pick = new Pick($('pkc') as HTMLCanvasElement);
@@ -124,7 +125,7 @@ export class UI {
       $('pk-title').textContent = `${EMOJI[id]} ${sp.name} · ${PICK_TEXT[kind].title}`;
       $('pk-hint').textContent = PICK_TEXT[kind].hint;
       play('tap');
-      this.pick.start(kind, EMOJI[id], Object.keys(RARITIES).indexOf(sp.rarity), (score) => { $('pick').className = ''; this.trek.resolve(score); });
+      this.pick.start(kind, EMOJI[id], Object.keys(RARITIES).indexOf(sp.rarity), (score) => { $('pick').className = ''; this.trek.resolve(score); }, this.trek.ease);
     };
     this.trek.onEvent = (kind, id) => {
       if (kind === 'wall') { this.toast(id === 'lock' ? 'Une mer de nuages : la région suivante se débloque depuis le sac à dos de la serre.' : 'La mer de nuages : c\'est le bout du monde connu.'); return; }
@@ -602,8 +603,8 @@ export class UI {
         else this.toast('Pas assez de pièces.');
         break;
       case 'trek-gear': {
-        const k = n === 1 ? 'lantern' : 'boots';
-        if (sim.buyTrekGear(s, k)) { play('craft'); this.buzz(20); this.toast(k === 'boots' ? 'Bottes de marche : tu avances plus vite.' : 'Lanterne : la nuit tombe plus tard.'); }
+        const k = GEAR_IDS[n];
+        if (k && sim.buyTrekGear(s, k)) { play('craft'); this.buzz(20); const g = GEAR[k], lv = sim.gearLv(s, k); this.toast(`${g.icon} ${g.names[lv - 1]} : ${g.say(g.v[lv]).replace(/^./, (c) => c.toLowerCase())}`); }
         else this.toast('Pas assez de pièces.');
         break;
       }
@@ -769,6 +770,23 @@ export class UI {
   }
 
   /** Bandeau de l'expédition : jour restant, panier, boussole du camp, manette, étiquette et jauge de coupe. */
+  /** Le portrait du personnage avec son équipement, dans le sac à dos de l'expédition. */
+  private heroShot: { key: string; c: HTMLCanvasElement } | null = null;
+  private heroPic(): void {
+    const box = document.getElementById('heropic');
+    if (!box) return;
+    const gear = sim.trekSetup(this.s).gear, key = JSON.stringify(gear);
+    if (this.heroShot?.key !== key) {
+      const c = photo(buildHero(gear), 240);
+      if (!c) return;
+      this.heroShot = { key, c };
+    }
+    const src = this.heroShot.c, c = document.createElement('canvas');
+    c.width = src.width; c.height = src.height;
+    c.getContext('2d')?.drawImage(src, 0, 0);
+    box.replaceChildren(c);
+  }
+
   private trekHud(): void {
     const t = this.trek;
     if (!t.active) return;
@@ -778,10 +796,21 @@ export class UI {
     ($('tr-night') as HTMLElement).style.opacity = String(t.night * 0.55);
     const count: Record<string, number> = {};
     for (const id of t.bonus) count[id] = (count[id] ?? 0) + 1;
-    const b = `🧺 ${t.basket.map((id) => EMOJI[id] + (count[id]-- > 0 ? '✨' : '')).join('')}${'·'.repeat(Math.max(0, t.cap - t.basket.length))}${t.loot.clay ? ` 🧱${t.loot.clay}` : ''}${t.loot.coins ? ` 🪙${t.loot.coins}` : ''}`;
+    // Un petit panier se montre en entier ; un grand se résume aux trois dernières trouvailles et au compte.
+    const room = t.compass ? 3 : 5;
+    const shown = t.basket.map((id) => EMOJI[id] + (count[id]-- > 0 ? '✨' : '')).slice(-room).join('');
+    const b = t.cap > room ? `🧺 ${shown} ${t.basket.length}/${t.cap}` : `🧺 ${shown}${'·'.repeat(Math.max(0, t.cap - t.basket.length))}${t.loot.clay ? ` 🧱${t.loot.clay}` : ''}${t.loot.coins ? ` 🪙${t.loot.coins}` : ''}`;
     if ($('tr-basket').textContent !== b) $('tr-basket').textContent = b;
     const dist = t.atCamp ? '🏡 Pousse la porte' : `🏡 ${Math.round(t.campDist)} m`;
     if ($('tr-dist').textContent !== dist) $('tr-dist').textContent = dist;
+    // Boussole : la plante rare la plus proche.
+    const rare = t.compass ? t.rare : null;
+    ($('tr-rare') as HTMLElement).style.display = rare ? '' : 'none';
+    if (rare) {
+      ($('tr-rarr') as HTMLElement).style.transform = `rotate(${rare.angle}rad)`;
+      const rd = `${Math.round(rare.dist)} m`;
+      if ($('tr-rd').textContent !== rd) $('tr-rd').textContent = rd;
+    }
     const arrow = $('tr-arrow');
     arrow.style.transform = `rotate(${t.campAngle}rad)`;
     arrow.style.visibility = t.atCamp ? 'hidden' : 'visible';
@@ -1227,6 +1256,7 @@ export class UI {
         const top = body?.scrollTop ?? 0;
         $('sheet').innerHTML = html;
         this.lastSheet = html;
+        this.heroPic();
         const nb = $('sheet').querySelector('.sh-body');
         if (nb) nb.scrollTop = top;
       }

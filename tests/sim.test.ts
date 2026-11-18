@@ -420,4 +420,23 @@ describe('jour, nuit et arrosage automatique', () => {
     // Chaque milieu lointain a de quoi remplir tous les paliers.
     for (const h of ['jungle', 'mangrove', 'volcan', 'taiga', 'toundra', 'cimes']) expect(SPECIES.filter((x) => x.home === h).length).toBeGreaterThanOrEqual(4);
   });
+
+  it('équipement à plusieurs niveaux, et anciennes bottes reprises', () => {
+    const s = sim.newState(0);
+    s.coins = 100000;
+    sim.trekOf(s).boots = true;
+    expect(sim.gearLv(s, 'boots')).toBe(1);
+    expect(sim.trekSetup(s).speed).toBeCloseTo(1.3);
+    expect(sim.buyTrekGear(s, 'boots')).toBe(true);
+    expect(sim.buyTrekGear(s, 'boots')).toBe(true);
+    expect(sim.buyTrekGear(s, 'boots')).toBe(false);
+    expect(sim.trekSetup(s).speed).toBeCloseTo(1.7);
+    expect(sim.trekSetup(s).slow).toBeCloseTo(0.35);
+    sim.buyTrekGear(s, 'machete'); sim.buyTrekGear(s, 'shovel'); sim.buyTrekGear(s, 'gloves'); sim.buyTrekGear(s, 'compass');
+    const st = sim.trekSetup(s);
+    expect([st.slow, st.loot, st.ease, st.compass]).toEqual([0.6, 2, 1, true]);
+    expect(sim.gearNext(s, 'compass')).toBe(0);
+    s.coins = 10;
+    expect(sim.buyTrekGear(s, 'lantern')).toBe(false);
+  });
 });

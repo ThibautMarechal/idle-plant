@@ -1,5 +1,5 @@
 /** Le contenu de chaque panneau, un par fonction. `ui` donne l'état et le panneau ouvert. */
-import { BASKETS, LANDS, LAND_BIOMES, DAY_LENGTH, GARDEN_EXT, TANKS, TREK_GEAR, BIOMES, GARDEN, GARDEN_FIRST, GARDEN_INDEX, SEASONS, FAMILIES, FAMILY_IDS, GLAZES, LEVEL_WORDS, POT_SIZES, RARITIES, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, STAGES, ZONES } from './data';
+import { BASKETS, LANDS, LAND_BIOMES, DAY_LENGTH, GARDEN_EXT, TANKS, GEAR, GEAR_IDS, BIOMES, GARDEN, GARDEN_FIRST, GARDEN_INDEX, SEASONS, FAMILIES, FAMILY_IDS, GLAZES, LEVEL_WORDS, POT_SIZES, RARITIES, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, STAGES, ZONES } from './data';
 import type { Species } from './data';
 import * as sim from './sim';
 
@@ -309,8 +309,17 @@ export function trekHtml(ui: UI): string {
     return `<button class="card ${k === land ? 'sel' : ''}" data-act="trek-land" data-arg="${k}"><div class="ico">${l.icon}</div><div class="mid"><div class="nm">${l.name}</div><div class="ds">${l.text} ${sim.trekReach(s, k)}/${LAND_BIOMES} régions ouvertes.</div></div>${k === land ? '<span class="chip ok">Destination</span>' : '<span class="chip">Choisir</span>'}</button>`;
   }).join('');
   const rows = [0, 1, 2].map((r) => row(land * LAND_BIOMES + r)).join('');
-  const gear = (k: 'boots' | 'lantern', n: number, ico: string, nm: string, ds: string) => `<div class="card"><div class="ico">${ico}</div><div class="mid"><div class="nm">${nm}</div><div class="ds">${ds}</div></div>${t[k]
-    ? '<span class="chip ok">Dans le sac</span>' : `<button class="btn ${s.coins >= TREK_GEAR[k].price ? 'primary' : ''} small" data-act="trek-gear" data-arg="${n}" ${s.coins >= TREK_GEAR[k].price ? '' : 'disabled'}>${fmt(TREK_GEAR[k].price)} 🪙</button>`}</div>`;
+  const gearCount = GEAR_IDS.reduce((a, k) => a + sim.gearLv(s, k), 0), gearMax = GEAR_IDS.reduce((a, k) => a + GEAR[k].price.length, 0);
+  const heroWord = (n: number) => n >= gearMax ? 'Grand explorateur' : n >= 9 ? 'Aventurier aguerri' : n >= 4 ? 'Randonneur' : 'Promeneur du dimanche';
+  // L'équipement du personnage : chaque objet a plusieurs niveaux, payés avec les pièces du jeu.
+  const gear = GEAR_IDS.map((k) => {
+    const g = GEAR[k], lv = sim.gearLv(s, k), price = sim.gearNext(s, k), max = g.price.length;
+    const pips = `<span class="pips">${Array.from({ length: max }, (_, i) => `<i class="${i < lv ? 'on' : ''}"></i>`).join('')}</span>`;
+    const now = lv ? g.say(g.v[lv]) : 'Pas encore dans ton sac.';
+    const then = price ? `${lv ? 'Niveau suivant' : 'Avec'} : ${g.say(g.v[lv + 1]).replace(/^./, (c) => c.toLowerCase())}` : '';
+    const end = price ? `<button class="btn ${s.coins >= price ? 'primary' : ''} small" data-act="trek-gear" data-arg="${GEAR_IDS.indexOf(k)}" ${s.coins >= price ? '' : 'disabled'}>${fmt(price)} 🪙</button>` : '<span class="chip ok">Maximum</span>';
+    return `<div class="card ${lv ? '' : 'dim'}"><div class="ico">${g.icon}</div><div class="mid"><div class="nm">${g.names[Math.max(0, lv - 1)]} ${pips}</div><div class="ds">${now}${then ? `<br>${then}` : ''}</div></div>${end}</div>`;
+  }).join('');
   return head(ui, '🥾 Expédition') + `<div class="sh-body">
     <p class="sub">La serre est posée sur une petite planète. Pars à pied cueillir graines et boutures sauvages : plus tu t'éloignes, plus elles sont rares. Sois rentré avant la nuit, ou tu perdras la moitié du panier.</p>
     ${t.rest > 0 ? `<div class="card"><div class="ico">😴</div><div class="mid"><div class="nm">Une expédition par jour</div><div class="ds">Tu repars au lever du jour, dans ${clock(t.rest)}.</div></div></div>` : '<button class="btn gold big" data-act="trek-go">🌍 Partir en expédition</button>'}
@@ -318,10 +327,12 @@ export function trekHtml(ui: UI): string {
     ${lands}
     <h3>Régions : ${LANDS[land].name.toLowerCase()}</h3>
     ${rows}
+    <h3>Ton sac</h3>
     <div class="card"><div class="ico">🧺</div><div class="mid"><div class="nm">Panier : ${sim.basketCap(s)} plantes</div><div class="ds">${next ? `Un plus grand panier en porte ${next.cap}.` : 'C\'est le plus grand panier.'}</div></div>${next
       ? `<button class="btn ${s.coins >= next.price ? 'primary' : ''} small" data-act="trek-basket" ${s.coins >= next.price ? '' : 'disabled'}>${fmt(next.price)} 🪙</button>` : '<span class="chip ok">Maximum</span>'}</div>
-    ${gear('boots', 0, '🥾', 'Bottes de marche', 'Tu marches nettement plus vite.')}
-    ${gear('lantern', 1, '🏮', 'Lanterne', 'La nuit tombe trois quarts de minute plus tard.')}</div>`;
+    <h3>Équipement</h3>
+    <div class="hero-card"><div id="heropic"></div><div class="mid"><div class="nm">Ton explorateur</div><div class="ds">${heroWord(gearCount)} · ${gearCount}/${gearMax} améliorations</div><div class="ds">Tout ce que tu achètes ici, il le porte sur lui.</div></div></div>
+    ${gear}</div>`;
 }
 
 export function seasonHtml(ui: UI): string {
