@@ -242,7 +242,7 @@ export function plantHtml(ui: UI): string {
   return head(ui, `${EMOJI[sp.id]} ${esc(vname(sp, vr))}`) + `<div class="sh-body">
     <div class="kv"><span>${STAGES[sim.stageOf(p.prog)]}</span><b>${p.prog >= 1 ? 'Prête' : 'encore ' + eta}</b></div>
     <div class="prog"><i style="width:${Math.round(p.prog * 100)}%"></i></div>
-    <div class="facts"><span class="chip">⭐ ${sim.qualityWord(p.q)}</span><span class="chip ${p.water > 0 ? '' : 'ko'}">💧 ${sim.dripOn(s, ui.arg) ? 'auto' : p.water > 0 ? Math.round(p.water * 100) + ' %' : 'à sec'}</span>${p.pests > 0 ? '<span class="chip ko">🐛 chenilles</span>' : ''}${sim.harmony(slot) ? '<span class="chip ok">💚 pot accordé</span>' : ''}${sim.inSeason(s, sp) ? '<span class="chip ok">de saison</span>' : ''}<span class="chip">${THIRST[sp.thirst ?? 2]}</span></div>
+    <div class="facts"><span class="chip">⭐ ${sim.qualityWord(p.q)}</span><span class="chip ${p.water > 0 ? '' : 'ko'}">💧 ${sim.dripOn(s, ui.arg) ? 'auto' : p.water > 0 ? Math.round(p.water * 100) + ' %' : 'à sec'}</span>${p.pests > 0 ? '<span class="chip ko">🐛 chenilles</span>' : ''}${sim.harmony(slot) ? '<span class="chip ok">💚 pot accordé</span>' : ''}${sim.inSeason(s, sp) ? '<span class="chip ok">de saison</span>' : ''}<span class="chip">${THIRST[sp.thirst ?? 2]}</span>${p.vr ? `<span class="chip var" style="border-color:${RARITIES[sim.VARIANT_RARITY[p.vr]].color};color:${RARITIES[sim.VARIANT_RARITY[p.vr]].color}">✨ ${sim.VARIANT_NAMES[p.vr]} · ${RARITIES[sim.VARIANT_RARITY[p.vr]].name}</span>` : ''}</div>
     ${conditions(sp, c, soil)}
     <div class="tiles">${sim.dripOn(s, ui.arg) ? '' : tile('water', '💧', 'Arroser', { off: p.water > 0.95, hot: p.water < 0.5 })}${tile('fert', '🧪', 'Engrais', { off: !(s.fert > 0 && p.prog < 1), note: '×' + s.fert })}${p.cut === 1 && p.prog < 1 ? tile('prune', '✂️', 'Tailler', { hot: true }) : ''}${p.prog < 1 ? tile('soil', '🟫', 'Rempoter', { hot: soil !== sp.soil }) : ''}${tile('paintslot', '🎨', 'Peindre')}${tile('admire', '🔍', 'Admirer')}${tile('fiche', '📖', 'Fiche', { arg: sp.id })}</div></div>`;
 }
@@ -444,7 +444,7 @@ export function almanacHtml(ui: UI): string {
   }).join('');
   return head(ui, '📖 Almanach') + `<div class="sh-body">
     <div class="big">${col.bloomed} / ${SPECIES.length}</div>
-    <p class="sub center">espèces fleuries · ⭐ ${col.stars} sur ${SPECIES.length * 3} · ✨ ${col.variants} variantes sur ${SPECIES.length * 2}</p>
+    <p class="sub center">espèces fleuries · ⭐ ${col.stars} sur ${SPECIES.length * 3} · ✨ ${col.variants} variantes rares sur ${SPECIES.length * (sim.VARIANTS.length - 1)}</p>
     <div class="tiles">${tile('nav', '🏛️', 'Vitrine', { arg: 'vitrine' })}${tile('nav', '🎓', 'Trophées', { arg: 'trophies' })}${tile('mute', s.mute ? '🔇' : '🔊', s.mute ? 'Sons coupés' : 'Sons')}</div>
     ${cells}
     <p class="sub center">${fmt(s.stats.sold)} plantes vendues · ${fmt(s.stats.earned)} 🪙 gagnées</p>
@@ -482,9 +482,10 @@ export function ficheHtml(ui: UI, sp: Species): string {
     ${kv('Du semis à la fleur', `${grow} dans un coin idéal`)}
     ${kv('Valeur de base', `${fmt(sp.value)} 🪙`)}
     ${kv('Cours du jour', `${mult(s.market[sp.family].p)}, soit ${fmt(sp.value * s.market[sp.family].p)} 🪙`)}
-    ${kv('Panachée ou dorée', `${fmt(sp.value * sim.VARIANT_MULT[1])} 🪙 ou ${fmt(sp.value * sim.VARIANT_MULT[2])} 🪙`)}
+    ${kv('Variantes rares', `jusqu'à ${fmt(sp.value * sim.VARIANT_MULT[6])} 🪙 en cristal`)}
     <h3>Dans ta collection</h3>
-    ${kv('Variantes obtenues', `${d?.bloomed ? 'Normale' : 'Aucune'}${d?.vars[1] ? ' · Panachée 🤍' : ''}${d?.vars[2] ? ' · Dorée 💛' : ''}`)}
+    ${kv('Variantes obtenues', `${d?.vars.filter(Boolean).length ?? 0} / ${sim.VARIANTS.length}`)}
+    <div class="varrow">${sim.VARIANT_NAMES.map((nm, k) => `<span class="chip${d?.vars[k] ? ' ok' : ' dim'}" style="border-color:${RARITIES[sim.VARIANT_RARITY[k]].color}">${d?.vars[k] ? nm : '?'}</span>`).join('')}</div>
     ${kv('Meilleure qualité', bloomed ? `${Math.round(d!.bestQ)} % · ${sim.qualityWord(d!.bestQ)}` : 'Pas encore fleurie')}
     ${kv('Graines en réserve', String(s.seeds[sp.id] ?? 0))}
     ${kv('En culture', String(growing))}

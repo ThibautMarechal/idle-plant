@@ -115,9 +115,25 @@ export const SHELF_CAP = 6;
 export const PAINT_PRICE = 15;
 export const HARMONY_SPEED = 1.12;
 export const ORDER_TIME = 600;
-export const VARIANTS = ['', 'panachée', 'dorée'];
-export const VARIANT_MULT = [1, 2.5, 6];
-export const VARIANT_ODDS = [0.08, 0.015];
+/** Chaque plante semée tire sa propre variante : la rareté est celle du spécimen, pas seulement de l'espèce. */
+export const VARIANTS = ['', 'panachée', 'dorée', 'pourpre', 'albinos', 'géante', 'cristal'];
+export const VARIANT_NAMES = ['Type', 'Panachée', 'Dorée', 'Pourpre', 'Albinos', 'Géante', 'Cristal'];
+export const VARIANT_MULT = [1, 2.5, 6, 2, 2.2, 4, 15];
+export const VARIANT_RARITY: Rarity[] = ['commun', 'rare', 'exotique', 'rare', 'rare', 'exotique', 'legendaire'];
+export const VARIANT_TEXT = ['',
+  'Son feuillage est marbré de crème : elle vaut deux fois et demie le prix normal.',
+  'Une variante dorée, rarissime : elle vaut six fois plus et fera venir les visiteurs en vitrine.',
+  'Fleurs et feuilles teintées de pourpre : deux fois le prix normal.',
+  'Une albinos aux fleurs d\'un blanc pur et au feuillage pâle : plus du double du prix.',
+  'Un spécimen géant, bien plus grand que ses frères : il vaut quatre fois plus.',
+  'Une variante cristal, translucide comme du verre : la plus rare de toutes, quinze fois le prix.'];
+/** Chances, sur une plante semée : cristal, dorée, géante, panachée, pourpre, albinos (le reste est du type). */
+const VARIANT_ODDS: [number, number][] = [[6, 0.003], [2, 0.015], [5, 0.02], [1, 0.06], [3, 0.05], [4, 0.04]];
+export function rollVariant(r: number): number {
+  let acc = 0;
+  for (const [vr, p] of VARIANT_ODDS) { acc += p; if (r < acc) return vr; }
+  return 0;
+}
 export const SHOWCASE_SIZE = 4;
 export const TIP_RATE = 0.0004;
 export const TIP_CAP_SECONDS = 1800;
@@ -785,7 +801,7 @@ export function showcaseRate(s: State): number {
 export function collection(s: State): { seen: number; bloomed: number; stars: number; variants: number } {
   const all = Object.values(s.disc);
   return {
-    variants: all.reduce((a, d) => a + (d.vars[1] ? 1 : 0) + (d.vars[2] ? 1 : 0), 0),
+    variants: all.reduce((a, d) => a + d.vars.slice(1).filter(Boolean).length, 0),
     seen: all.filter((d) => d.seen).length,
     bloomed: all.filter((d) => d.bloomed).length,
     stars: all.reduce((a, d) => a + starsOf(d), 0),
@@ -1106,8 +1122,7 @@ export function plantSeed(s: State, i: number, id: string, rng: Rng = Math.rando
   discOf(s, id).seen = true;
   s.seeds[id]--;
   if (s.seeds[id] === 0) delete s.seeds[id];
-  const r = rng();
-  const vr = r < VARIANT_ODDS[1] ? 2 : r < VARIANT_ODDS[1] + VARIANT_ODDS[0] ? 1 : 0;
+  const vr = rollVariant(rng());
   slot.plant = { sp: id, prog: 0, water: 1, pests: 0, q: 50, vr };
   s.stats.planted++;
   return true;

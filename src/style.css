@@ -567,3 +567,7 @@ body[data-fp="1"] #nav { display: none; }
 .cut-card { max-width: 360px; align-items: center; }
 #ctc { width: 100%; height: min(400px, 52vh); border: 2.5px solid var(--ink); border-radius: 14px; touch-action: none; display: block; }
 #ct-hint { min-height: 2.6em; margin: 0; }
+
+.varrow { display: flex; gap: 4px; flex-wrap: wrap; margin: -2px 0 8px; }
+.varrow .chip.dim { opacity: 0.5; }
+.chip.var { background: #fff; font-weight: 800; }

@@ -1313,7 +1313,7 @@ export class UI {
     const m = $('modal');
     m.innerHTML = `<div class="mtitle">${vr ? `Variante ${sim.VARIANTS[vr]} !` : n === 1 ? 'Nouvelle espèce dans l\'almanach !' : n === 3 ? 'Spécimen d\'exposition !' : 'Encore plus belle !'}</div>
       <div class="rc solo" style="border-color:${RARITIES[sp.rarity].color}"><span class="e">${EMOJI[id]}</span>${esc(vname(sp, vr))}<i>${esc(sp.latin)}</i><span class="st">${stars(n)}</span></div>
-      <div class="fact">${vr ? (vr === 2 ? 'Une variante dorée, rarissime : elle vaut six fois plus et fera venir les visiteurs en vitrine.' : 'Une variante panachée : son feuillage marbré de crème vaut deux fois et demie le prix normal.') : esc(sp.fact)}</div>
+      <div class="fact">${vr ? `${sim.VARIANT_TEXT[vr]} Rareté du spécimen : ${RARITIES[sim.VARIANT_RARITY[vr]].name.toLowerCase()}.` : esc(sp.fact)}</div>
       <button class="btn primary" data-act="closemodal">Continuer</button>`;
     m.classList.add('on');
     this.buzz(40);

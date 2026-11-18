@@ -642,11 +642,23 @@ function buildRose(sp: Species, f: number, buds: boolean, bloom: boolean, leaf: 
 }
 
 /** Construit le modèle d'une plante. `stage` de 0 (graine) à 4 (floraison), `health` de 0 à 1. */
+/** Couleur des feuilles et des fleurs de chaque variante : pourpre, albinos et cristal changent aussi la fleur. */
+const VAR_LEAF: [number, number][] = [[0, 0], [0xf4f2cf, 0.5], [0xf2b92e, 0.85], [0x6a2a5a, 0.55], [0xe8f0e0, 0.6], [0, 0], [0x9fe0ff, 0.7]];
+const VAR_FLOWER: Record<number, number> = { 3: 0x8a2ab0, 4: 0xffffff, 6: 0xd8f6ff };
+
 export function buildPlant(sp: Species, stage: number, health: number, variant = 0): THREE.Group {
+  if (VAR_FLOWER[variant]) sp = { ...sp, flower: VAR_FLOWER[variant] };
+  const g = growPlant(sp, stage, health, variant);
+  // Le spécimen géant est simplement plus grand.
+  if (variant === 5 && stage >= 2) g.scale.multiplyScalar(1.3);
+  return g;
+}
+
+function growPlant(sp: Species, stage: number, health: number, variant: number): THREE.Group {
   const g = new THREE.Group();
   const base = new THREE.Color(sp.leaf);
-  if (variant === 1) base.lerp(new THREE.Color(0xf4f2cf), 0.5);
-  if (variant === 2) base.lerp(new THREE.Color(0xf2b92e), 0.85);
+  const vl = VAR_LEAF[variant];
+  if (vl && vl[1]) base.lerp(new THREE.Color(vl[0]), vl[1]);
   const leaf = tint(base.getHex(), health);
   const rnd = seeded(hash(sp.id) + stage * 7);
   if (stage === 0) {
