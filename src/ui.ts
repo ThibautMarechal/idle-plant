@@ -1,4 +1,4 @@
-import { MUSHROOMS, MUSH_BY_ID, CAVE_PRICE, SOILS, GEAR, GEAR_IDS, BIOMES, LAND_BIOMES, LANDS, GARDEN_EXT, GARDEN_INDEX, SEASONS, FAMILIES, FAMILY_IDS, GLAZES, PAINTS, POT_SIZES, RARITIES, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, STAGES, ZONES } from './data';
+import { CAVE_PRICE, SOILS, GEAR, GEAR_IDS, BIOMES, LAND_BIOMES, LANDS, GARDEN_EXT, GARDEN_INDEX, SEASONS, FAMILIES, FAMILY_IDS, GLAZES, PAINTS, POT_SIZES, RARITIES, rarityRank, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, STAGES, ZONES } from './data';
 import type { Family } from './data';
 import type { Scene3D } from './scene';
 import { buildPlant } from './plants3d';
@@ -7,7 +7,7 @@ import { Planet, buildHero } from './planet';
 import { photo } from './icons';
 import { Pick, PICK_OF, PICK_TEXT } from './pick';
 import { Stall } from './stall';
-import { Cellar } from './cellar';
+import { CaveUI } from './caveui';
 import { Cutting } from './cutting';
 import { Pollen } from './pollen';
 import { finish } from './styles';
@@ -16,8 +16,8 @@ import * as sim from './sim';
 import { play, setMuted, unlock } from './sound';
 import type { State } from './sim';
 
-import type { SoilId, MushId } from './data';
-import { EMOJI, SheetKind, $, fmt, stars, vname, hex, clock, potLabel, esc, rarTag } from './uikit';
+import type { SoilId } from './data';
+import { EMOJI, SheetKind, $, setText, fmt, stars, vname, hex, clock, potLabel, esc, rarTag } from './uikit';
 import { sheetHtml, paintTarget } from './sheets';
 
 /** Pour chaque objectif : où emmener le joueur quand il le touche, et quoi lui dire. */
@@ -61,11 +61,7 @@ export class UI {
   private trek!: Planet;
   private pick!: Pick;
   private stall!: Stall;
-  private cellar!: Cellar;
-  private caveHtml = '';
-  private caveTip = '';
-  private caveTipAt = 0;
-  private cavePick = -1;
+  private cave!: CaveUI;
   private cutGame: Cutting | Pollen | null = null;
   private stallHtml = '';
   /** Outil tenu au doigt : arrosoir ou gant, promené au-dessus des plantes. */
@@ -136,7 +132,7 @@ export class UI {
       $('pk-title').textContent = `${EMOJI[id]} ${sp.name} · ${PICK_TEXT[kind].title}`;
       $('pk-hint').textContent = PICK_TEXT[kind].hint;
       play('tap');
-      this.pick.start(kind, EMOJI[id], Object.keys(RARITIES).indexOf(sp.rarity), (score) => { $('pick').className = ''; this.trek.resolve(score); }, this.trek.ease);
+      this.pick.start(kind, EMOJI[id], rarityRank(sp.rarity), (score) => { $('pick').className = ''; this.trek.resolve(score); }, this.trek.ease);
     };
     this.trek.onEvent = (kind, id) => {
       if (kind === 'wall') { this.toast(id === 'lock' ? 'Une mer de nuages : la région suivante se débloque depuis le sac à dos de la serre.' : 'La mer de nuages : c\'est le bout du monde connu.'); return; }
@@ -163,20 +159,14 @@ export class UI {
       else if (kind === 'leave') { play('tap'); this.toast('Un client repart les mains vides : la série est perdue.'); }
     };
     this.stall.onEnd = () => this.stallEnd();
-    $('cave').innerHTML = '<canvas id="cvgl"></canvas><div class="tr-top"><div class="tr-row cv-row"><button class="btn small cv-up" data-act="cave-close">Remonter</button><span class="pill" id="cv-coins"></span><span class="pill" id="cv-time"></span></div></div><div id="cv-labels"></div><p id="cv-hint" class="on"></p><div id="cv-pick"></div>';
-    this.cellar = new Cellar($('cvgl') as HTMLCanvasElement);
-    this.cellar.state = () => this.s;
-    this.cellar.onChange = () => this.caveHud();
-    this.cellar.onAsk = (i) => { this.cavePick = i; this.cavePanel(); };
-    this.cellar.onPick = (i) => {
-      const gain = sim.pickBed(this.s, i);
-      if (gain) { play('coin'); this.buzz(25); this.caveSay(`Cueilli : +${fmt(gain)} 🪙${sim.isNight(this.s) ? ' (prime de nuit)' : ''}`); this.bumpCoins(); }
-    };
-    this.cellar.onClear = (i) => { if (sim.clearBed(this.s, i)) { play('tap'); this.buzz(15); this.caveSay('Bac vidé : tu peux le réensemencer.'); } };
-    this.cellar.onHint = (_i, k) => {
-      if (k === 'buy') { const p = sim.caveBedPrice(this.s); this.caveSay(p === null ? 'La cave est pleine.' : `Un bac de plus : ${fmt(p)} 🪙. Touche « Bac en plus » en bas.`); return; }
-      this.caveSay(k === 'cut' ? 'Mûr ! Balaie le bac d\'un coup de doigt pour cueillir.' : 'Garde le doigt sur le bac pour le brumiser.');
-    };
+    this.cave = new CaveUI({
+      state: () => this.s,
+      toast: (text) => this.toast(text),
+      buzz: (ms) => this.buzz(ms),
+      bumpCoins: () => this.bumpCoins(),
+      openShop: () => this.open('cave'),
+      closeSheet: () => this.close(),
+    });
     $('tools').innerHTML = '<button class="tool" data-tool="shears">✂️</button><button class="tool" data-tool="basket">🧺</button><button class="tool" data-tool="can">🚿</button><button class="tool" data-tool="glove">🧤</button>';
     const grab = (tool: string, label: string, el: HTMLElement, e: PointerEvent) => {
       this.tool = tool;
@@ -208,7 +198,7 @@ export class UI {
       unlock();
       this.pointerDown = true;
       sx = e.clientX; sy = e.clientY;
-      onScene = !(e.target as HTMLElement).closest('#sheet, #modal, #bottom, #hud, #backdrop, #studio, #trek, #stall');
+      onScene = !(e.target as HTMLElement).closest('#sheet, #modal, #bottom, #hud, #backdrop, #studio, #trek, #stall, #cave');
       panning = false;
       if (!onScene || this.tool) return;
       fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -286,7 +276,7 @@ export class UI {
       }
     });
     app.addEventListener('wheel', (e) => {
-      if ((e.target as HTMLElement).closest('#sheet, #modal, #studio, #trek, #stall')) return;
+      if ((e.target as HTMLElement).closest('#sheet, #modal, #studio, #trek, #stall, #cave')) return;
       this.scene.zoomBy(Math.exp(-e.deltaY * 0.0016));
     }, { passive: true });
     for (const ev of ['pointercancel', 'pointerleave']) app.addEventListener(ev, (e) => { fingers.delete((e as PointerEvent).pointerId); this.dropTool(); this.pointerDown = false; this.holdAt = null; if (this.drag >= 0) { this.endDrag(); this.refresh(true); } });
@@ -481,6 +471,7 @@ export class UI {
   }
 
   private act(name: string, arg: string): void {
+    if (name.startsWith('cave-') && this.cave.act(name, arg)) return;
     const s = this.s;
     const n = Number(arg);
     switch (name) {
@@ -515,7 +506,7 @@ export class UI {
         this.bumpCoins();
         this.refresh(true);
         break;
-      case 'cut-cancel': this.cutGame?.stop(); this.cutGame = null; $('modal').classList.remove('on'); break;
+      case 'cut-cancel': this.cutGame?.stop(); this.endCard(); break;
       case 'seedfilter': this.seedFilter = arg; this.refresh(true); break;
       case 'valve': sim.toggleValve(s, Number(arg)); play('tap'); break;
       case 'buytank': if (sim.buyTank(s)) { this.toast('Cuve agrandie et remplie !'); this.buzz(25); play('coin'); } break;
@@ -657,35 +648,6 @@ export class UI {
         $('stall').className = 'on';
         this.stall.open([...s.stock]);
         this.stallHud();
-        break;
-      case 'cave-go':
-        if (!s.cave) { this.open('cave'); break; }
-        this.close();
-        $('cave').className = 'on';
-        this.cavePick = -1;
-        this.caveHtml = '';
-        this.cellar.open();
-        this.cavePanel();
-        break;
-      case 'cave-buy':
-        if (sim.buyCave(s)) { play('level'); this.buzz(30); this.act('cave-go', ''); }
-        else this.toast('Pas assez de pièces.');
-        break;
-      case 'cave-close':
-        this.cellar.close();
-        $('cave').className = '';
-        break;
-      case 'cave-bed':
-        if (sim.buyCaveBed(s)) { play('craft'); this.buzz(20); this.caveSay('Nouveau bac installé sur l\'étagère.'); this.cavePanel(); }
-        else this.toast('Pas assez de pièces.');
-        break;
-      case 'cave-seed':
-        if (sim.seedBed(s, this.cavePick, arg as MushId)) { play('plant'); this.buzz(15); this.caveSay(`${MUSH_BY_ID[arg as MushId].name} : ensemencé. Garde le bac humide.`); this.cavePick = -1; this.cavePanel(); }
-        else this.toast('Pas assez de pièces.');
-        break;
-      case 'cave-cancel':
-        this.cavePick = -1;
-        this.cavePanel();
         break;
       case 'stall-close':
         this.stall.shut();
@@ -908,73 +870,13 @@ export class UI {
     if (hintEl.textContent !== hint) { hintEl.textContent = hint; hintEl.className = hint ? 'on' : ''; }
   }
 
-  /** Une phrase en bas de la cave, qui s'efface d'elle-même. */
-  private caveSay(text: string): void {
-    this.caveTip = text;
-    this.caveTipAt = Date.now();
-  }
-
-  /** Le bas de la cave : choisir un champignon pour un bac vide, ou acheter un bac de plus. */
-  private cavePanel(): void {
-    const s = this.s, c = s.cave, box = $('cv-pick');
-    if (!c) { box.innerHTML = ''; return; }
-    if (this.cavePick >= 0 && !c.beds[this.cavePick]) {
-      const rows = MUSHROOMS.map((m) => {
-        const open = sim.mushOpen(s, m.id), can = open && s.coins >= m.price;
-        const ds = open ? `${m.glow ? 'Seulement la nuit · ' : ''}${Math.round(m.grow / 60)} min de nuit par volée · ${sim.MUSH_FLUSHES_N} volées de ~${fmt(m.value)} 🪙` : `Après ${m.need} cueillettes (tu en as ${c.total})`;
-        return `<button class="card${open ? '' : ' dim'}" data-act="cave-seed" data-arg="${m.id}" ${can ? '' : 'disabled'}><div class="ico">🍄</div><div class="mid"><div class="nm">${esc(m.name)}</div><div class="ds">${ds}</div></div><div class="end">${open ? `${fmt(m.price)} 🪙` : '🔒'}</div></button>`;
-      }).join('');
-      box.innerHTML = `<div class="cv-panel"><div class="cv-head"><b>Que faire pousser ?</b><button class="btn small" data-act="cave-cancel">Fermer</button></div><div class="cv-list">${rows}</div></div>`;
-      box.className = 'on';
-      return;
-    }
-    const p = sim.caveBedPrice(s);
-    box.innerHTML = p !== null ? `<button class="btn small cv-more" data-act="cave-bed" ${s.coins >= p ? '' : 'disabled'}>Bac en plus · ${fmt(p)} 🪙</button>` : '';
-    box.className = '';
-  }
-
-  /** Bandeau de la cave et une étiquette au-dessus de chaque bac. */
-  private caveHud(): void {
-    const t = this.cellar, s = this.s, c = s.cave;
-    if (!t.active || !c) return;
-    const set = (id: string, txt: string) => { const el = $(id); if (el.textContent !== txt) el.textContent = txt; };
-    set('cv-coins', `🪙 ${fmt(s.coins)}`);
-    set('cv-time', sim.isNight(s) ? `🌑 Nuit` : `☀️ Nuit dans ${clock(Math.max(0, sim.untilNight(s)))}`);
-    const labels = c.beds.map((b, i) => {
-      if (!b) return `<div class="cvl empty" data-i="${i}"><small>Bac vide</small><small>Touche pour semer</small></div>`;
-      const m = MUSH_BY_ID[b.m], nm = m.name.replace(/^Champignon de /, '');
-      if (sim.mushRotten(b)) return `<div class="cvl rot" data-i="${i}"><small>${esc(nm)}</small><small>Pourri · touche pour vider</small></div>`;
-      const ripe = b.prog >= 1;
-      return `<div class="cvl${ripe ? ' ripe' : ''}${b.wet < 0.2 ? ' dry' : ''}" data-i="${i}"><small>${esc(nm)} · ${b.flush + 1}/${sim.MUSH_FLUSHES_N}</small>${ripe ? `<small>Mûr · ${fmt(sim.mushValue(s, b))} 🪙</small>` : '<i class="pg"><u></u></i>'}<i class="wt"><u></u></i></div>`;
-    }).join('');
-    const box = $('cv-labels');
-    if (labels !== this.caveHtml) { this.caveHtml = labels; box.innerHTML = labels; }
-    c.beds.forEach((b, i) => {
-      const el = box.children[i] as HTMLElement | undefined;
-      if (!el) return;
-      const r = t.bedScreen(i);
-      el.style.left = r.x + 'px';
-      el.style.top = r.y + 'px';
-      if (!b) return;
-      const pg = el.querySelector('.pg u') as HTMLElement | null, wt = el.querySelector('.wt u') as HTMLElement | null;
-      if (pg) pg.style.width = Math.round(b.prog * 100) + '%';
-      if (wt) wt.style.width = Math.round(b.wet * 100) + '%';
-    });
-    const ripe = c.beds.some((b) => b && b.prog >= 1 && !sim.mushRotten(b)), dry = c.beds.some((b) => b && b.wet < 0.2 && b.prog < 1);
-    const fresh = Date.now() - this.caveTipAt < 2600;
-    const hint = fresh ? this.caveTip : t.mode === 'mist' ? '💦 Brumisation…' : ripe ? 'Balaie un bac mûr du doigt pour cueillir.' : dry ? 'Un bac a soif : garde le doigt dessus pour le brumiser.' : c.beds.every((b) => !b) ? 'Touche un bac vide pour y semer du blanc de champignon.' : sim.isNight(s) ? 'La nuit, les champignons poussent trois fois plus vite.' : '';
-    set('cv-hint', hint);
-    $('cv-hint').className = hint ? 'on' : '';
-  }
-
   /** Bandeau de l'étal : recette, série, clients à venir, et une bulle par client qui attend. */
   private stallHud(): void {
     const t = this.stall;
     if (!t.active) return;
-    const set = (id: string, txt: string) => { const el = $(id); if (el.textContent !== txt) el.textContent = txt; };
-    set('sl-earn', `🪙 +${fmt(t.earned)}`);
-    set('sl-combo', t.combo > 1 ? `🔥 Série de ${t.combo}` : `🌼 ${t.left} à vendre`);
-    set('sl-queue', `👥 ${t.queue}`);
+    setText('sl-earn', `🪙 +${fmt(t.earned)}`);
+    setText('sl-combo', t.combo > 1 ? `🔥 Série de ${t.combo}` : `🌼 ${t.left} à vendre`);
+    setText('sl-queue', `👥 ${t.queue}`);
     const bs = t.bubbles();
     const html = bs.map((b) => `<div class="bub${b.aim ? ' aim' : ''}${b.fit ? ' fit' : ''}${b.left < 0.3 ? ' late' : ''}" data-seat="${b.seat}"><b>${b.wish ? FAMILIES[b.wish].icon : '💛'}</b><small>${b.wish ? esc(FAMILIES[b.wish].name) : 'Coup de cœur'}</small><i><u></u></i></div>`).join('');
     const box = $('sl-bubbles');
@@ -985,7 +887,7 @@ export class UI {
       el.style.top = b.y + 'px';
       (el.querySelector('u') as HTMLElement).style.width = Math.max(0, b.left) * 100 + '%';
     });
-    set('sl-hint', t.closing ? 'On ferme l\'étal…' : t.held >= 0 ? (t.target >= 0 ? 'Lâche pour servir ce client.' : `${EMOJI[t.heldId]} ${SPECIES_BY_ID[t.heldId].name} (${FAMILIES[SPECIES_BY_ID[t.heldId].family].name}) : glisse-la jusqu'au client qui la veut.`)
+    setText('sl-hint', t.closing ? 'On ferme l\'étal…' : t.held >= 0 ? (t.target >= 0 ? 'Lâche pour servir ce client.' : `${EMOJI[t.heldId]} ${SPECIES_BY_ID[t.heldId].name} (${FAMILIES[SPECIES_BY_ID[t.heldId].family].name}) : glisse-la jusqu'au client qui la veut.`)
       : t.served + t.missed === 0 ? 'Chaque client annonce la famille qu\'il cherche. Sers-le vite : il paie mieux, et les clients ravis à la suite font monter la série.' : '');
     $('sl-hint').className = $('sl-hint').textContent ? 'on' : '';
   }
@@ -1106,27 +1008,36 @@ export class UI {
   private flipped = 0;
 
   /** Ouverture façon paquet de cartes : on déchire, puis on retourne les graines une à une. */
+  /** Ouvre un mini-jeu dessiné dans une carte, au centre de l'écran. `make` reçoit le canevas et rend le jeu. */
+  private playCard(title: string, cancel: string, make: (canvas: HTMLCanvasElement) => Cutting | Pollen): void {
+    const m = $('modal');
+    m.innerHTML = `<div class="pk-card cut-card"><b>${title}</b><canvas id="ctc"></canvas><p class="sub" id="ct-hint"></p>${cancel ? `<button class="btn small" data-act="cut-cancel">${cancel}</button>` : ''}</div>`;
+    m.classList.add('on');
+    const game = make($('ctc') as HTMLCanvasElement);
+    game.onNote((t) => { $('ct-hint').textContent = t; });
+    this.cutGame = game;
+    requestAnimationFrame(() => game.start());
+  }
+
+  /** Fin d'un mini-jeu en carte : on la referme. */
+  private endCard(): void {
+    this.cutGame = null;
+    $('modal').classList.remove('on');
+  }
+
   /** Le bouturage à la main : couper sous un nœud, puis repiquer. La plante mère repart de plus bas. */
   private showCutting(i: number): void {
     const p = this.s.slots[i]?.plant;
     if (!p || p.prog < 1) return;
     const sp = SPECIES_BY_ID[p.sp];
     this.close();
-    const m = $('modal');
-    m.innerHTML = `<div class="pk-card cut-card"><b>✂️ Bouturer ${esc(sp.name)}</b><canvas id="ctc"></canvas><p class="sub" id="ct-hint"></p><button class="btn small" data-act="cut-cancel">Laisser la plante</button></div>`;
-    m.classList.add('on');
-    const level = ['commun', 'rare', 'exotique', 'legendaire'].indexOf(sp.rarity);
-    const game = new Cutting($('ctc') as HTMLCanvasElement, sp, Math.max(0, level), (score) => {
-      this.cutGame = null;
+    this.playCard(`✂️ Bouturer ${esc(sp.name)}`, 'Laisser la plante', (cv) => new Cutting(cv, sp, rarityRank(sp.rarity), (score) => {
+      this.endCard();
       const n = sim.takeCutting(this.s, i, score);
-      m.classList.remove('on');
       if (n) { play('plant'); this.buzz(25); this.float(i, `✂️ +${n} graine${n > 1 ? 's' : ''}`); this.toast(n > 1 ? `Coupe parfaite : deux boutures de ${sp.name} prennent racine.` : `La bouture de ${sp.name} prend racine.`); }
       else { play('tap'); this.buzz(60); this.toast('Bouture ratée : elle ne prendra pas. La plante mère, elle, repousse.'); }
       this.refresh(true);
-    });
-    game.onNote((t) => { $('ct-hint').textContent = t; });
-    this.cutGame = game;
-    requestAnimationFrame(() => game.start());
+    }));
   }
 
   /** Le croisement au pinceau : le prix est payé et les fleurs utilisées, que la pollinisation réussisse ou non. */
@@ -1139,23 +1050,15 @@ export class UI {
     if (!from) return;
     this.close();
     this.scene.pop(i); this.scene.pop(j);
-    const m = $('modal');
-    m.innerHTML = `<div class="pk-card cut-card"><b>🧬 ${esc(spa.name)} × ${esc(spb.name)}</b><canvas id="ctc"></canvas><p class="sub" id="ct-hint"></p></div>`;
-    m.classList.add('on');
-    const level = Math.max(0, ['commun', 'rare', 'exotique', 'legendaire'].indexOf(spa.rarity));
-    const game = new Pollen($('ctc') as HTMLCanvasElement, spa, spb, level, (score) => {
-      this.cutGame = null;
-      m.classList.remove('on');
+    this.playCard(`🧬 ${esc(spa.name)} × ${esc(spb.name)}`, '', (cv) => new Pollen(cv, spa, spb, rarityRank(spa.rarity), (score) => {
+      this.endCard();
       if (!score) { play('tap'); this.buzz(60); this.toast(`Pollinisation ratée : les ${fmt(fee)} pièces sont perdues, les deux plantes refleuriront.`); this.refresh(true); return; }
       const got = sim.crossSeed(this.s, from);
       if (score > 1) { this.s.seeds[from] = (this.s.seeds[from] ?? 0) + 1; this.toast(`Pollinisation parfaite : une graine de ${spa.name} en prime.`); }
       this.buzz(30);
       this.showPacket([got]);
       this.refresh(true);
-    });
-    game.onNote((t) => { $('ct-hint').textContent = t; });
-    this.cutGame = game;
-    requestAnimationFrame(() => game.start());
+    }));
   }
 
   /** La pompe à bras : on abaisse le levier du doigt, chaque coup complet verse un arrosage dans la cuve. */

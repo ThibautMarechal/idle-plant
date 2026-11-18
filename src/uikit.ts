@@ -13,6 +13,11 @@ export const EMOJI: Record<string, string> = SPECIES_MARK;
 export type SheetKind = 'trek' | 'season' | 'trophies' | 'atelier' | 'paint' | 'vitrine' | 'none' | 'seed' | 'buypot' | 'plant' | 'harvest' | 'packets' | 'market' | 'shop' | 'almanac' | 'fiche' | 'zone' | 'gext' | 'water' | 'soil' | 'cave';
 
 export const $ = (id: string) => document.getElementById(id)!;
+/** Change le texte d'un élément seulement s'il diffère : évite de redessiner la page à chaque image. */
+export function setText(id: string, txt: string): void {
+  const el = $(id);
+  if (el.textContent !== txt) el.textContent = txt;
+}
 export const fmt = (n: number) => Math.round(n).toLocaleString('fr-FR');
 export const mult = (p: number) => '×' + p.toFixed(2).replace('.', ',');
 export const stars = (n: number) => '⭐'.repeat(n) + '☆'.repeat(3 - n);

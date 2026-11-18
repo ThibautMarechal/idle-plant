@@ -67,6 +67,8 @@ export const RARITIES: Record<Rarity, { name: string; color: string; weight: num
   exotique: { name: 'Exotique', color: '#b05fd6', weight: 5.5 },
   legendaire: { name: 'Légendaire', color: '#f0a020', weight: 0.5 },
 };
+/** Rang d'une rareté : 0 pour commun, 3 pour légendaire. */
+export const rarityRank = (r: Rarity): number => (Object.keys(RARITIES) as Rarity[]).indexOf(r);
 
 export const SPECIES: Species[] = [
   { id: 'echeveria', name: 'Echeveria', latin: 'Echeveria elegans', family: 'succulentes', rarity: 'commun', origin: 'Mexique',

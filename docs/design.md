@@ -216,7 +216,7 @@ Le multijoueur est **asynchrone et coopératif**, jamais du temps réel concurre
 
 - [ ] **Univers** : botanique réaliste (espèces réelles, fiches pédagogiques vraies) vs fantaisiste vs mélange. → *Recommandation : réaliste — c'est la condition de l'aspect éducatif ; variantes fantaisistes très rares en récompense d'end-game.*
 - [ ] **Support de départ** : mobile-first, web-first, ou les deux dès le départ.
-- [ ] **Direction artistique** : aquarelle/botanique d'herbier, pixel art cozy, ou 3D mignonne — à tester par mockups.
+- [x] **Direction artistique** : 3D façon bande dessinée (contours encrés, aplats vifs), retenue après essai de quatre styles.
 - [ ] **Nom du jeu** : « Le Grainier » est un titre de travail.
 
 ## 8. Prochaines étapes suggérées
