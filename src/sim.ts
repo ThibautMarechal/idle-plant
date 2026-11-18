@@ -1,4 +1,4 @@
-import { MUSHROOMS, MUSH_BY_ID, CAVE_PRICE, CAVE_BEDS, MUSH_FLUSHES, SOILS, BASKETS, BIOMES, LANDS, LAND_BIOMES, DAY_LENGTH, TANKS, GARDEN_BASE, GARDEN_EXT, GEAR, TREK_TIME, GARDEN, GARDEN_CLIMATE, GARDEN_FIRST, GARDEN_INDEX, PROF_MAX, PROF_MIN, BASE_SLOTS, SEASONS, SEASON_LENGTH, CLIENTS, FAMILIES, FAMILY_IDS, GLAZES, NEWS, POT_SIZES, RARITIES, SLOT_COUNT, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, ZONES } from './data';
+import { TIER_FIRST, TIER_PRICES, MUSHROOMS, MUSH_BY_ID, CAVE_PRICE, CAVE_BEDS, MUSH_FLUSHES, SOILS, BASKETS, BIOMES, LANDS, LAND_BIOMES, DAY_LENGTH, TANKS, GARDEN_BASE, GARDEN_EXT, GEAR, TREK_TIME, GARDEN, GARDEN_CLIMATE, GARDEN_FIRST, GARDEN_INDEX, PROF_MAX, PROF_MIN, BASE_SLOTS, SEASONS, SEASON_LENGTH, CLIENTS, FAMILIES, FAMILY_IDS, GLAZES, NEWS, POT_SIZES, RARITIES, SLOT_COUNT, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, ZONES } from './data';
 import type { MushId, Family, GearId, Rarity, SoilId, Species, Zone } from './data';
 
 /** `vr` : variante, 0 normale, 1 panachée, 2 dorée. */
@@ -93,6 +93,8 @@ export interface State {
   clock?: number;
   /** La cave à champignons, une fois achetée : ses bacs et les cueillettes faites. */
   cave?: Cave;
+  /** Gradins achetés, un par zone de la serre. */
+  tiers?: boolean[];
   /** Arrosage automatique : arrosages restants dans la cuve, taille de la cuve, zones dont la vanne est fermée. */
   tank?: number;
   tankSize?: number;
@@ -1268,13 +1270,26 @@ export function stallSell(s: State, h: Harvest, mult: number): number {
 }
 
 export function zoneIndexOfSlot(i: number): number {
-  return i >= GARDEN_FIRST ? GARDEN_INDEX : i < BASE_SLOTS ? Math.floor(i / SLOTS_PER_ZONE) : i - BASE_SLOTS;
+  return i >= TIER_FIRST ? Math.floor((i - TIER_FIRST) / SLOTS_PER_ZONE) : i >= GARDEN_FIRST ? GARDEN_INDEX : i < BASE_SLOTS ? Math.floor(i / SLOTS_PER_ZONE) : i - BASE_SLOTS;
 }
 /** Un emplacement est utilisable si sa zone est aménagée et, pour une suspension, si elle est achetée. */
 export function slotOpen(s: State, i: number): boolean {
   const z = zoneIndexOfSlot(i);
+  if (i >= TIER_FIRST) return !!s.zonesOpen[z] && !!s.tiers?.[z];
   if (i >= GARDEN_FIRST) return !!s.zonesOpen[z] && i - GARDEN_FIRST < GARDEN_BASE * (1 + (s.gardenExt ?? 0));
   return !!s.zonesOpen[z] && (i < BASE_SLOTS || !!s.extra?.[z]);
+}
+/** Prix du prochain gradin, ou null quand les quatre zones en ont un. */
+export function tierPrice(s: State): number | null {
+  return TIER_PRICES[(s.tiers ?? []).filter(Boolean).length] ?? null;
+}
+/** Agrandit la verrière : un gradin de trois pots devant l'établi de la zone. */
+export function buyTier(s: State, z: number): boolean {
+  const p = tierPrice(s);
+  if (p === null || z < 0 || z >= ZONES.length || !s.zonesOpen[z] || s.tiers?.[z] || s.coins < p) return false;
+  s.coins -= p;
+  (s.tiers ??= [false, false, false, false])[z] = true;
+  return true;
 }
 /** Ajoute la parcelle suivante au jardin. */
 export function buyGardenExt(s: State): boolean {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SPECIES, SPECIES_BY_ID, ZONES } from '../src/data';
+import { SLOT_COUNT, TIER_FIRST, SPECIES, SPECIES_BY_ID, ZONES } from '../src/data';
 import * as sim from '../src/sim';
 
 function rngOf(seed: number): sim.Rng {
@@ -262,7 +262,7 @@ describe('simulation', () => {
 
   it('suspension : un emplacement de plus par zone aménagée', () => {
     const s = sim.newState(0);
-    expect(s.slots.length).toBe(25);
+    expect(s.slots.length).toBe(SLOT_COUNT);
     expect(sim.slotOpen(s, 14)).toBe(false);
     s.coins = 1000;
     expect(sim.buyExtra(s, 0)).toBe(false); // zone pas encore aménagée
@@ -505,5 +505,24 @@ describe('cave à champignons', () => {
     expect(b.wet).toBeLessThan(0.2);
     sim.mistBed(s, 0, 1);
     expect(b.wet).toBe(1);
+  });
+});
+
+describe('agrandir la verrière', () => {
+  it('un gradin par zone ajoute trois emplacements, de plus en plus cher', () => {
+    const s = sim.newState(0);
+    s.coins = 50000;
+    s.zonesOpen = [true, true, true, true, false];
+    const first = TIER_FIRST;
+    expect(sim.slotOpen(s, first)).toBe(false);
+    expect(sim.zoneIndexOfSlot(first + 4)).toBe(1);
+    const p0 = sim.tierPrice(s)!;
+    expect(sim.buyTier(s, 1)).toBe(true);
+    expect(s.coins).toBe(50000 - p0);
+    expect(sim.slotOpen(s, first + 3)).toBe(true);
+    expect(sim.slotOpen(s, first)).toBe(false);
+    expect(sim.buyTier(s, 1)).toBe(false);
+    expect(sim.tierPrice(s)!).toBeGreaterThan(p0);
+    expect(s.slots.length).toBe(SLOT_COUNT);
   });
 });

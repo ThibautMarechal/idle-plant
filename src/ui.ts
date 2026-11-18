@@ -529,6 +529,10 @@ export class UI {
         setMuted(s.mute);
         if (!s.mute) play('tap');
         break;
+      case 'tier':
+        if (sim.buyTier(s, n)) { this.toast(`La verrière s'agrandit : ${this.zname(n)} gagne un gradin de trois pots.`); play('level'); this.buzz(30); this.close(); this.goZone(n); }
+        else this.toast(s.zonesOpen[n] ? 'Pas assez de pièces.' : 'Aménage d\'abord cette zone.');
+        break;
       case 'extra':
         if (sim.buyExtra(s, n)) { this.toast(`Suspension installée : ${this.zname(n)} gagne un emplacement.`); play('craft'); this.buzz(25); this.close(); this.goZone(n); }
         else this.toast(s.zonesOpen[n] ? 'Pas assez de pièces.' : 'Aménage d\'abord cette zone.');

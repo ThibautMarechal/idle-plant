@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { SOILS, BASE_SLOTS, GARDEN_FIRST, GARDEN_INDEX, POT_SIZES, SLOT_COUNT, SLOTS_PER_ZONE, SPECIES_BY_ID, ZONES } from './data';
+import { TIER_FIRST, SOILS, BASE_SLOTS, GARDEN_FIRST, GARDEN_INDEX, POT_SIZES, SLOT_COUNT, SLOTS_PER_ZONE, SPECIES_BY_ID, ZONES } from './data';
 import { buildPlant, buildPot, mat, POT_TOP } from './plants3d';
 import { fitOf, slotOpen, zoneIndexOfSlot, stageOf, zoneClimate, zoneOfSlot } from './sim';
 import type { State } from './sim';
@@ -265,7 +265,14 @@ export class Scene3D {
     drip.visible = false;
     root.add(drip);
     let hanger: THREE.Group | null = null;
-    if (i >= BASE_SLOTS && i < GARDEN_FIRST) {
+    if (i >= TIER_FIRST) {
+      // Un gradin : un tabouret de bois sous le pot, posé sur le dallage.
+      hanger = new THREE.Group();
+      const h = Math.max(0.05, base.y);
+      hanger.add(box(0.8, h, 0.7, 0x9a6a44, 0, -h / 2, 0), box(0.86, 0.05, 0.76, 0x7a5236, 0, -0.025, 0, false));
+      hanger.visible = false;
+      root.add(hanger);
+    } else if (i >= BASE_SLOTS && i < GARDEN_FIRST) {
       hanger = new THREE.Group();
       hanger.add(box(0.95, 0.06, 0.6, 0xb98a5a, 0, -0.03, 0));
       for (const sx of [-0.42, 0.42]) hanger.add(box(0.025, 1.9, 0.025, 0xe8dcc0, sx, 0.95, 0, false));

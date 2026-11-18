@@ -331,6 +331,9 @@ export function shopHtml(ui: UI): string {
     ${s.stockCap < sim.STOCK_MAX ? item('📦', 'Réserve agrandie', `Deux places de plus (${s.stockCap} aujourd'hui).`, sim.PRICES.stock, 'upgrade', 'stock') : ''}
     <h3>Agrandir la serre</h3>
     ${ZONES.map((z, r) => item(z.icon, `Suspension · ${ui.zname(r)}`, s.zonesOpen[r] ? 'Un emplacement de plus, en hauteur.' : 'Aménage d\'abord cette zone.', sim.EXTRA_PRICES[r], 'extra', String(r), !!s.extra?.[r])).join('')}
+    <h3>Agrandir la verrière</h3>
+    <p class="sub">Un gradin devant l'établi : trois pots de plus dans la zone. Chaque gradin coûte plus cher que le précédent.</p>
+    ${ZONES.map((z, r) => item(z.icon, `Gradin · ${ui.zname(r)}`, s.zonesOpen[r] ? 'Trois emplacements de plus, au pied de l\'établi.' : 'Aménage d\'abord cette zone.', sim.tierPrice(s) ?? 0, 'tier', String(r), !!s.tiers?.[r])).join('')}
     <h3>Atelier</h3>
     ${item('🔥', 'Four à double foyer', 'Les pots cuisent deux fois plus vite.', sim.PRICES.fastKiln, 'upgrade', 'fastKiln', !!s.upgrades.fastKiln)}
     ${item('🧱', 'Grand bac d\'argile', 'Le bac contient deux fois plus d\'argile.', sim.PRICES.bigClay, 'upgrade', 'bigClay', !!s.upgrades.bigClay)}

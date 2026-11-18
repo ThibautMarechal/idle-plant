@@ -284,7 +284,7 @@ const at = (deg: number, lx: number, y: number, dist: number): V3 => {
   const a = (deg * Math.PI) / 180;
   return [lx * Math.cos(a) + dist * Math.sin(a), y, lx * Math.sin(a) - dist * Math.cos(a)];
 };
-const P = { A: 5.0, pots: 4.3, bench: 0.78, zoneDeg: [0, 90, 180, 270], showDeg: 315, out: 9.6 };
+const P = { A: 5.0, pots: 4.3, bench: 0.78, zoneDeg: [0, 90, 180, 270], showDeg: 315, out: 9.6, tier: 0.3, tierAt: 2.75 };
 
 /** Un point repéré depuis le milieu du jardin, là où l'on se tient une fois la porte passée. */
 const fromGarden = (deg: number, lx: number, y: number, dist: number): V3 => {
@@ -312,7 +312,7 @@ const pavillon: Theme = {
       { act: 'packets', label: '🎁 Sachets', at: at(135, 1.5, 1.35, 4.7), spot: 0, r: 0.5 },
       { act: 'trek', label: '🥾 Expédition', at: at(135, -1.3, 1.15, 4.6), spot: 0, r: 0.6 },
       { act: 'water', label: '💧 Arrosage', at: at(90, 0, 0.18, 3.2), spot: 0, r: 0.6 },
-      { act: 'cave', label: '🍄 Cave', at: at(270, 0, 0.1, 3.0), spot: 0, r: 0.6 },
+      { act: 'cave', label: '🍄 Cave', at: at(315, 0, 0.1, 3.0), spot: 0, r: 0.6 },
       { act: 'door', label: '🚪', at: at(135, 0, 1.7, 5.0), spot: -1, r: 0.9 },
       { act: 'gext1', label: '🔒 Potager', at: fromGarden(45, 0, 1.1, P.pots), spot: 1, r: 0.9 },
       { act: 'gext2', label: '🔒 Rocaille', at: fromGarden(225, 0, 1.1, P.pots), spot: 1, r: 0.9 },
@@ -322,7 +322,9 @@ const pavillon: Theme = {
     ...P.zoneDeg.map((d): V3 => at(d, 0, 2.95, P.pots + 0.25)),
     ...[-1.15, 0, 1.15].map((lx): V3 => at(135, lx, 0.7, P.out + P.pots - (lx ? 0.12 : 0))),
     // Parcelles du jardin : à gauche puis à droite de là où l'on se tient.
-    ...[45, 225].flatMap((d) => [-1.15, 0, 1.15].map((lx): V3 => fromGarden(d, lx, 0.7, P.pots - (lx ? 0.12 : 0))))],
+    ...[45, 225].flatMap((d) => [-1.15, 0, 1.15].map((lx): V3 => fromGarden(d, lx, 0.7, P.pots - (lx ? 0.12 : 0)))),
+    // Gradins, quand la verrière est agrandie : trois pots plus bas, devant chaque établi.
+    ...P.zoneDeg.flatMap((d) => [-0.95, 0, 0.95].map((lx): V3 => at(d, lx, P.tier, P.tierAt)))],
   shows: [-1.14, -0.38, 0.38, 1.14].map((lx): V3 => at(P.showDeg, lx, 1.05, 4.45)),
   bounds: [[-5.5, 0, -5.5], [5.5, 4, 5.5]],
   pot: [0xc9714a, 0xd9825a],
@@ -470,8 +472,8 @@ const pavillon: Theme = {
       ray.userData.sunray = true;
       wall(270, ray);
     }
-    // La trappe de la cave, dans le dallage devant la table.
-    wall(270, box(1.3, 0.04, 0.95, 0x7a5236, 0, 0.02, -3.0), box(1.3, 0.05, 0.08, 0x5a3c28, 0, 0.03, -2.7, false), box(1.3, 0.05, 0.08, 0x5a3c28, 0, 0.03, -3.3, false),
+    // La trappe de la cave, dans le dallage devant la vitrine.
+    wall(315, box(1.3, 0.04, 0.95, 0x7a5236, 0, 0.02, -3.0), box(1.3, 0.05, 0.08, 0x5a3c28, 0, 0.03, -2.7, false), box(1.3, 0.05, 0.08, 0x5a3c28, 0, 0.03, -3.3, false),
       box(0.2, 0.05, 0.05, 0xc9a24a, 0, 0.06, -2.62, false));
     const patch = box(3.7, 0.02, 1.0, 0xfff1a8, 0, P.bench + 0.005, -P.pots - 0.05, false);
     patch.userData.sunray = true;

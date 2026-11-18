@@ -559,7 +559,12 @@ export const GARDEN_SLOTS = GARDEN_BASE * (1 + GARDEN_EXT.length);
 export const GARDEN_FIRST = BASE_SLOTS + HANG_SLOTS;
 /** Climat du jardin au printemps, en été, en automne, en hiver. */
 export const GARDEN_CLIMATE = [{ light: 3, temp: 2, hum: 2 }, { light: 3, temp: 3, hum: 1 }, { light: 2, temp: 2, hum: 3 }, { light: 2, temp: 1, hum: 2 }];
-export const SLOT_COUNT = GARDEN_FIRST + GARDEN_SLOTS;
+/** Agrandissements de la verrière : un gradin de trois pots devant chaque établi, acheté zone par zone à la boutique. */
+export const TIER_FIRST = GARDEN_FIRST + GARDEN_SLOTS;
+export const TIER_SLOTS = ZONES.length * SLOTS_PER_ZONE;
+/** Prix du premier, du deuxième… gradin, quelle que soit la zone. */
+export const TIER_PRICES = [2500, 5000, 9000, 15000];
+export const SLOT_COUNT = TIER_FIRST + TIER_SLOTS;
 
 export const STAGES = ['Graine', 'Pousse', 'Végétatif', 'Boutons', 'Floraison'];
 export const LEVEL_WORDS = {
