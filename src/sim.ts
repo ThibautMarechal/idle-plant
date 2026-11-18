@@ -698,6 +698,21 @@ export function savePaint(s: State, where: 'slot' | 'shelf', k: number, glaze: n
   return true;
 }
 
+/**
+ * Bouturer à la main : la plante mère reste mais repart de plus bas, et les boutures réussies
+ * deviennent des graines (0 si la bouture est ratée, 1 si elle prend, 2 pour une coupe parfaite).
+ */
+export function takeCutting(s: State, i: number, score: number): number {
+  const p = s.slots[i].plant;
+  if (!p || p.prog < 1) return 0;
+  p.prog = 0.7;
+  const n = Math.max(0, Math.min(2, Math.round(score)));
+  if (n) {
+    s.seeds[p.sp] = (s.seeds[p.sp] ?? 0) + n;
+    s.stats.cuttings++;
+  }
+  return n;
+}
 /** Prélève des boutures : la plante part, deux graines de la même espèce reviennent. */
 export function harvestCutting(s: State, i: number): boolean {
   const p = s.slots[i].plant;

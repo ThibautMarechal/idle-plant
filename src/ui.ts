@@ -8,6 +8,7 @@ import { photo } from './icons';
 import { Pick, PICK_OF, PICK_TEXT } from './pick';
 import { Stall } from './stall';
 import { Cellar } from './cellar';
+import { Cutting } from './cutting';
 import { finish, STYLES } from './styles';
 import { themeOf } from './themes';
 import * as sim from './sim';
@@ -65,6 +66,7 @@ export class UI {
   private caveTip = '';
   private caveTipAt = 0;
   private cavePick = -1;
+  private cutGame: Cutting | null = null;
   private stallHtml = '';
   /** Outil tenu au doigt : arrosoir ou gant, promené au-dessus des plantes. */
   private tool = '';
@@ -510,6 +512,7 @@ export class UI {
         break;
       case 'gear': sim.toggleGear(s, arg as sim.ClimateGear); break;
       case 'pump': this.showPump(); break;
+      case 'cut-cancel': this.cutGame?.stop(); this.cutGame = null; $('modal').classList.remove('on'); break;
       case 'seedfilter': this.seedFilter = arg; this.refresh(true); break;
       case 'valve': sim.toggleValve(s, Number(arg)); play('tap'); break;
       case 'buytank': if (sim.buyTank(s)) { this.toast('Cuve agrandie et remplie !'); this.buzz(25); play('coin'); } break;
@@ -603,9 +606,7 @@ export class UI {
       case 'prune':
         if (sim.prune(s, this.arg)) { this.scene.pop(this.arg); this.float(this.arg, '✂️ Taillée !'); this.buzz(12); }
         break;
-      case 'cutting':
-        if (sim.harvestCutting(s, this.arg)) { this.float(this.arg, '✂️ +2 graines'); this.buzz(15); this.close(); }
-        break;
+      case 'cutting': this.showCutting(this.arg); break;
       case 'deliver': {
         const who = s.order?.who ?? '';
         const clay = s.order?.clay ?? 0;
@@ -1112,6 +1113,29 @@ export class UI {
   private flipped = 0;
 
   /** Ouverture façon paquet de cartes : on déchire, puis on retourne les graines une à une. */
+  /** Le bouturage à la main : couper sous un nœud, puis repiquer. La plante mère repart de plus bas. */
+  private showCutting(i: number): void {
+    const p = this.s.slots[i]?.plant;
+    if (!p || p.prog < 1) return;
+    const sp = SPECIES_BY_ID[p.sp];
+    this.close();
+    const m = $('modal');
+    m.innerHTML = `<div class="pk-card cut-card"><b>✂️ Bouturer ${esc(sp.name)}</b><canvas id="ctc"></canvas><p class="sub" id="ct-hint"></p><button class="btn small" data-act="cut-cancel">Laisser la plante</button></div>`;
+    m.classList.add('on');
+    const level = ['commun', 'rare', 'exotique', 'legendaire'].indexOf(sp.rarity);
+    const game = new Cutting($('ctc') as HTMLCanvasElement, sp, Math.max(0, level), (score) => {
+      this.cutGame = null;
+      const n = sim.takeCutting(this.s, i, score);
+      m.classList.remove('on');
+      if (n) { play('plant'); this.buzz(25); this.float(i, `✂️ +${n} graine${n > 1 ? 's' : ''}`); this.toast(n > 1 ? `Coupe parfaite : deux boutures de ${sp.name} prennent racine.` : `La bouture de ${sp.name} prend racine.`); }
+      else { play('tap'); this.buzz(60); this.toast('Bouture ratée : elle ne prendra pas. La plante mère, elle, repousse.'); }
+      this.refresh(true);
+    });
+    game.onNote((t) => { $('ct-hint').textContent = t; });
+    this.cutGame = game;
+    requestAnimationFrame(() => game.start());
+  }
+
   /** La pompe à bras : on abaisse le levier du doigt, chaque coup complet verse un arrosage dans la cuve. */
   private showPump(): void {
     const s = this.s;

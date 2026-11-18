@@ -269,7 +269,7 @@ export function harvestHtml(ui: UI): string {
     ${s.order && sim.orderFits(s, p) ? `<button class="btn gold wide" data-act="deliver">📦 Livrer à ${esc(s.order.who)} · ${fmt(sim.saleValue(s, p) + s.order.coins)} 🪙 +${s.order.clay} 🧱</button>` : ''}
     <div class="row"><button class="btn primary" data-act="sell">Vendre · ${fmt(sim.saleValue(s, p))} 🪙</button><button class="btn gold" data-act="show" ${freeShow ? '' : 'disabled'}>🏛️ ${freeShow ? 'Exposer' : 'Vitrine pleine'}</button></div>
     <p class="sub center">Cours ${FAMILIES[sp.family].name.toLowerCase()} <b class="${level(m.p)}">${mult(m.p)}</b>. ${marketHint(ui, m.p)}</p>
-    <div class="tiles">${tile('store', '📦', 'Réserve', { off: full, note: `${s.stock.length}/${s.stockCap}` })}${tile('cutting', '✂️', 'Bouturer', { note: '+2 graines' })}${sim.CROSS_FEE[sp.rarity] ? tile('cross', '🧬', 'Croiser', { note: `${sim.CROSS_FEE[sp.rarity]} 🪙` }) : ''}${tile('admire', '🔍', 'Admirer')}${tile('fiche', '📖', 'Fiche', { arg: sp.id })}</div></div>`;
+    <div class="tiles">${tile('store', '📦', 'Réserve', { off: full, note: `${s.stock.length}/${s.stockCap}` })}${tile('cutting', '✂️', 'Bouturer', { note: 'à la main' })}${sim.CROSS_FEE[sp.rarity] ? tile('cross', '🧬', 'Croiser', { note: `${sim.CROSS_FEE[sp.rarity]} 🪙` }) : ''}${tile('admire', '🔍', 'Admirer')}${tile('fiche', '📖', 'Fiche', { arg: sp.id })}</div></div>`;
 }
 
 export function packetsHtml(ui: UI): string {

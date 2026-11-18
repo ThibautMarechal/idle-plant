@@ -649,7 +649,7 @@ export class Scene3D {
     }
     // Étoiles et lune sont accrochées au ciel 3D : elles tournent avec le regard.
     // Guirlande et lucioles s'allument avec la nuit.
-    if (this.bulbs) this.bulbs.color.setHex(0x6a5a3a).lerp(BULB_ON, 1 - k);
+    if (this.bulbs) this.bulbs.color.setHex(0xf4efe0).lerp(BULB_ON, 1 - k);
     if (this.nightLamp) this.nightLamp.intensity = (1 - k) * 14;
     for (const f of this.flies) f.visible = k < 0.5;
     if (this.sky) {
@@ -666,16 +666,30 @@ export class Scene3D {
     this.flies = [];
     if (!this.theme.fp) { this.sky = null; return; }
     // Une guirlande d'ampoules court sous la charpente, tout autour de la serre.
-    const bm = new THREE.MeshBasicMaterial({ color: 0x6a5a3a });
+    const bm = new THREE.MeshBasicMaterial({ color: 0xf4efe0 });
     bm.userData.outlineParameters = { visible: false };
     this.bulbs = bm;
-    const bgeo = new THREE.SphereGeometry(0.07, 8, 6);
+    const bgeo = new THREE.SphereGeometry(0.07, 8, 6), cgeo = new THREE.CylinderGeometry(0.035, 0.035, 0.06, 6);
+    const cap = new THREE.MeshBasicMaterial({ color: 0x2b2118 });
+    cap.userData.outlineParameters = { visible: false };
+    // Le fil retombe en festons entre les points d'accroche ; une ampoule pend sous chaque point du fil.
+    const pts: THREE.Vector3[] = [];
+    for (let k = 0; k <= 192; k++) {
+      const a = (k / 192) * Math.PI * 2, r = 4.35;
+      pts.push(new THREE.Vector3(Math.sin(a) * r, 3.68 - Math.abs(Math.sin((k / 4) * Math.PI / 6)) * 0.25, Math.cos(a) * r));
+    }
+    const wire = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0x2b2118 }));
+    wire.userData.raw = true;
+    this.world.add(wire);
     for (let k = 0; k < 48; k++) {
-      const a = (k / 48) * Math.PI * 2, r = 4.35;
+      const w = pts[k * 4];
       const b = new THREE.Mesh(bgeo, bm);
-      b.position.set(Math.sin(a) * r, 3.55 - Math.abs(Math.sin(k * Math.PI / 6)) * 0.25, Math.cos(a) * r);
+      b.position.set(w.x, w.y - 0.12, w.z);
       b.userData.raw = true;
-      this.world.add(b);
+      const c = new THREE.Mesh(cgeo, cap);
+      c.position.set(w.x, w.y - 0.05, w.z);
+      c.userData.raw = true;
+      this.world.add(b, c);
     }
     const lamp = new THREE.PointLight(0xffc878, 0, 9, 1.2);
     lamp.position.set(0, 3.2, 0);
