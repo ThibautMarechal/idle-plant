@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { BASE_SLOTS, GARDEN_FIRST, GARDEN_INDEX, POT_SIZES, SLOT_COUNT, SLOTS_PER_ZONE, SPECIES_BY_ID, ZONES } from './data';
+import { SOILS, BASE_SLOTS, GARDEN_FIRST, GARDEN_INDEX, POT_SIZES, SLOT_COUNT, SLOTS_PER_ZONE, SPECIES_BY_ID, ZONES } from './data';
 import { buildPlant, buildPot, mat, POT_TOP } from './plants3d';
 import { fitOf, slotOpen, zoneIndexOfSlot, stageOf, zoneClimate, zoneOfSlot } from './sim';
 import type { State } from './sim';
@@ -489,12 +489,15 @@ export class Scene3D {
       // Le pot : taille, émail et motif viennent de l'atelier ; sans dessin, c'est le pot du décor.
       const pd = slot.pd;
       const scale = slot.pot ? POT_SIZES[(pd?.size ?? 1) - 1].scale : 1;
-      const potKey = slot.pot ? `${pd?.size ?? 1}|${pd?.glaze ?? -1}|${pd?.pat ?? 0}|${pd?.pv ?? 0}|${pd?.prof?.join(',') ?? ''}` : '';
+      const potKey = slot.pot ? `${pd?.size ?? 1}|${pd?.glaze ?? -1}|${pd?.pat ?? 0}|${pd?.pv ?? 0}|${pd?.prof?.join(',') ?? ''}|${slot.soil ?? ''}` : '';
       if (potKey !== v.potKey) {
         if (v.pot) v.root.remove(v.pot);
         v.pot = null;
         if (slot.pot) {
           v.pot = finish(potModel(pd, this.theme.pot));
+          // La terre du pot se voit : sable clair, écorce rousse, terreau noir…
+          const soilMat = mat(SOILS[slot.soil ?? 'universel'].color);
+          v.pot.traverse((o) => { if (o.userData.soil) (o as THREE.Mesh).material = soilMat; });
           v.pot.scale.setScalar(scale);
           v.root.add(v.pot);
           if (v.key !== '') v.pop = 1;

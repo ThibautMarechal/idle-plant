@@ -1,4 +1,4 @@
-import { GEAR, GEAR_IDS, BIOMES, LAND_BIOMES, LANDS, GARDEN_EXT, GARDEN_INDEX, SEASONS, FAMILIES, FAMILY_IDS, GLAZES, PAINTS, POT_SIZES, RARITIES, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, STAGES, ZONES } from './data';
+import { SOILS, GEAR, GEAR_IDS, BIOMES, LAND_BIOMES, LANDS, GARDEN_EXT, GARDEN_INDEX, SEASONS, FAMILIES, FAMILY_IDS, GLAZES, PAINTS, POT_SIZES, RARITIES, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, STAGES, ZONES } from './data';
 import type { Family } from './data';
 import type { Scene3D } from './scene';
 import { buildPlant } from './plants3d';
@@ -13,6 +13,7 @@ import * as sim from './sim';
 import { play, setMuted, unlock } from './sound';
 import type { State } from './sim';
 
+import type { SoilId } from './data';
 import { EMOJI, SheetKind, $, fmt, stars, vname, hex, clock, potLabel, esc, rarTag } from './uikit';
 import { sheetHtml, paintTarget } from './sheets';
 
@@ -337,7 +338,7 @@ export class UI {
     s.slots.forEach((slot, i) => {
       if (!slot.plant || near(i, 0.7, 0.8) === Infinity || now - (this.toolAt[i] ?? 0) < 280) return;
       let fx = '';
-      if (this.tool === 'can') { if (sim.water(s, i)) fx = '💧'; }
+      if (this.tool === 'can') { const wet = sim.drowns(s, i); if (sim.water(s, i)) fx = wet ? '💦 Trop d\'eau !' : '💧'; if (wet) this.drownWarn(i, true); }
       else if (this.tool === 'glove') { if (sim.squash(s, i)) fx = slot.plant.pests > 0 ? '🐛' : '✨ Propre !'; }
       else if (this.tool === 'shears') { if (sim.prune(s, i)) fx = '✂️ Taillée !'; }
       else if (slot.plant.prog >= 1) {
@@ -446,7 +447,7 @@ export class UI {
       return;
     }
     if (p.prog >= 1) return this.open('harvest', i);
-    if (p.water < 0.5 && !sim.dripOn(s, i)) {
+    if (p.water < 0.5 && !sim.dripOn(s, i) && !sim.drowns(s, i)) {
       sim.water(s, i);
       this.scene.pop(i);
       this.float(i, '💧');
@@ -637,7 +638,15 @@ export class UI {
       case 'buypot':
         if (sim.buyPot(s, this.arg)) { this.scene.pop(this.arg); this.buzz(20); this.open('seed', this.arg); }
         break;
+      case 'soil': this.open('soil', this.arg); break;
+      case 'setsoil': {
+        const k = arg as SoilId;
+        if (sim.setSoil(s, this.arg, k)) { play('plant'); this.buzz(15); this.scene.pop(this.arg); this.toast(`🟫 ${SOILS[k].name} dans ce pot.`); this.open(s.slots[this.arg].plant ? 'plant' : 'seed', this.arg); }
+        else this.toast('Pas assez de pièces.');
+        break;
+      }
       case 'water':
+        if (this.drownWarn(this.arg)) break;
         if (sim.water(s, this.arg)) { this.scene.pop(this.arg); this.float(this.arg, '💧'); }
         break;
       case 'sell': {
@@ -785,6 +794,18 @@ export class UI {
     c.width = src.width; c.height = src.height;
     c.getContext('2d')?.drawImage(src, 0, 0);
     box.replaceChildren(c);
+  }
+
+  /** Prévient avant d'arroser une plante qui craint l'excès d'eau. Avec l'arrosoir, le mal est fait : on l'explique. */
+  private drownAt = 0;
+  private drownWarn(i: number, done = false): boolean {
+    const p = this.s.slots[i].plant;
+    if (!p || !sim.drowns(this.s, i)) return false;
+    if (Date.now() - this.drownAt > 3000) {
+      this.drownAt = Date.now();
+      this.toast(done ? `💦 Trop d'eau ! ${SPECIES_BY_ID[p.sp].name} craint l'excès d'eau : attends que sa terre sèche.` : `${SPECIES_BY_ID[p.sp].name} boit peu : sa terre est encore humide, attends avant d'arroser.`);
+    }
+    return !done;
   }
 
   private trekHud(): void {

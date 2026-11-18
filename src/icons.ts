@@ -79,6 +79,7 @@ const ICONS: Record<string, string> = {
   knife: '<path d="M4 20l9-9" stroke-width="3.2"/><path d="M4 20l9-9" stroke="#8a5f3c" stroke-width="1.4"/><path d="M12 12L20 3.500c1 3-1 8-5.500 11.5z" fill="#cfd8dc"/>',
   pick: '<path d="M8 21L15.500 7" stroke-width="3.2"/><path d="M8 21L15.500 7" stroke="#b07a4f" stroke-width="1.4"/><path d="M5.500 7.500C9 3.500 16 2.500 21 5c-4 0-9 1-13.500 4.500z" fill="#9fb4c4"/>',
   compass: '<circle cx="12" cy="12" r="9" fill="#f4ead2"/><path d="M12 5.500l2.200 6.500L12 18.500 9.800 12z" fill="#e2574c"/><path d="M12 12l2.200 0L12 18.500 9.800 12z" fill="#fff"/><circle cx="12" cy="12" r="1" fill="#3b2a20"/>',
+  soil: '<path d="M3 13c2-4 16-4 18 0l-1.500 7h-15z" fill="#8a5f3c"/><path d="M5 13c3 2 11 2 14 0" stroke-width="1.2"/><circle cx="9" cy="16.500" r=".9" fill="#3b2a20"/><circle cx="14" cy="17" r=".9" fill="#3b2a20"/><path d="M12 11V5.500M12 8c-2-2-4-1.500-4.500 0 1.500 1 3 1 4.500 0zM12 7c2-2.500 4-2 4.500-.5-1.500 1-3 1-4.500.5z" fill="#6fbf6a"/>',
   pine: '<path d="M12 15v6.5" stroke-width="3"/><path d="M12 2l5 7h-2.500l4.5 6.500H5L9.5 9H7z" fill="#4f9d69"/>',
   lotus: '<path d="M3 17.500c3 3 15 3 18 0" stroke="#3f9d6b" stroke-width="2.2"/><path d="M4 9c4 0 7 3 8 7.5-4 0-8-2.5-8-7.500zM20 9c-4 0-7 3-8 7.5 4 0 8-2.5 8-7.500z" fill="#f7c2d6"/><path d="M12 5c3 3 3 8.5 0 11.5-3-3-3-8.5 0-11.500z" fill="#f3a8c4"/>',
   dunes: '<circle cx="17" cy="7" r="3.2" fill="#f8cf45"/><path d="M2 19.500c4-6.5 8-6.5 11-2 2-3 6-3 9 2z" fill="#ecd08f"/>',
@@ -108,7 +109,7 @@ const OF: Record<string, string> = {
   '🧤': 'glove', '🏡': 'house', '🌍': 'planet', '🏮': 'lantern', '🥇': 'gold', '🥈': 'silver', '🥉': 'bronze', '❔': 'question',
   '🔊': 'sound', '🔇': 'mute', '📅': 'calendar', '🧽': 'sponge', '⬇': 'down', '🎯': 'target', '🌫': 'fog', '💡': 'bulb', '♨': 'heat',
   '😴': 'sleep', '☀': 'sun', '🌡': 'thermo', '⚠': 'warn', '🌑': 'moon', '❄': 'snow', '🌲': 'pine', '🪷': 'lotus', '🏜': 'dunes',
-  '🌵': 'cactus', '🌿': 'herb', '🍃': 'fern', '🍂': 'autumn', '🌸': 'orchid', '🌼': 'flower', '💐': 'bouquet', '🌴': 'palm', '🔪': 'knife', '⛏': 'pick', '🧭': 'compass', '🌋': 'volcano', '🏔': 'peak',
+  '🌵': 'cactus', '🌿': 'herb', '🍃': 'fern', '🍂': 'autumn', '🌸': 'orchid', '🌼': 'flower', '💐': 'bouquet', '🌴': 'palm', '🟫': 'soil', '🔪': 'knife', '⛏': 'pick', '🧭': 'compass', '🌋': 'volcano', '🏔': 'peak',
   '🪰': 'flytrap', '🌳': 'tree', '🌱': 'sprout', '🌰': 'seed', '💚': 'hgreen', '💛': 'hgold', '🤍': 'hwhite',
 };
 

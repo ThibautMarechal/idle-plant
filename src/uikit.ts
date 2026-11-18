@@ -1,6 +1,6 @@
 /** Petites briques d'interface partagées : formats, pastilles, tuiles. */
-import { GLAZES, LEVEL_WORDS, PATTERNS, POT_SIZES, RARITIES } from './data';
-import type { Species } from './data';
+import { GLAZES, LEVEL_WORDS, PATTERNS, POT_SIZES, RARITIES, SOILS } from './data';
+import type { SoilId, Species } from './data';
 
 
 import * as sim from './sim';
@@ -11,7 +11,7 @@ import { SPECIES_MARK } from './icons';
 export const EMOJI: Record<string, string> = SPECIES_MARK;
 export const ZONE_SHORT = ['Ombre', 'Bassin', 'Porte', 'Plein sud'];
 
-export type SheetKind = 'trek' | 'season' | 'trophies' | 'atelier' | 'paint' | 'vitrine' | 'none' | 'seed' | 'buypot' | 'plant' | 'harvest' | 'packets' | 'market' | 'shop' | 'almanac' | 'fiche' | 'zone' | 'gext' | 'water';
+export type SheetKind = 'trek' | 'season' | 'trophies' | 'atelier' | 'paint' | 'vitrine' | 'none' | 'seed' | 'buypot' | 'plant' | 'harvest' | 'packets' | 'market' | 'shop' | 'almanac' | 'fiche' | 'zone' | 'gext' | 'water' | 'soil';
 
 export const $ = (id: string) => document.getElementById(id)!;
 export const fmt = (n: number) => Math.round(n).toLocaleString('fr-FR');
@@ -45,17 +45,22 @@ export function needsChips(sp: Species, c?: { light: number; temp: number; hum: 
 }
 
 /** Diagnostic en langage de jardinier : dit toujours pourquoi ça va bien ou mal. */
-export function conditions(sp: Species, c: { light: number; temp: number; hum: number }): string {
+export function conditions(sp: Species, c: { light: number; temp: number; hum: number }, soil?: SoilId): string {
   const line = (k: 'light' | 'temp' | 'hum', label: string, hi: string, lo: string) => {
     const d = c[k] - sp[k];
     if (d === 0) return `<div>✅ ${label} : ${LEVEL_WORDS[k][c[k]].toLowerCase()}, parfait</div>`;
     return `<div>⚠️ ${d > 0 ? hi : lo}</div>`;
   };
-  if (c.light === sp.light && c.temp === sp.temp && c.hum === sp.hum) return '<div class="cond ok">✅ Cet emplacement lui convient parfaitement.</div>';
+  const soilLine = soil === undefined ? '' : soil === sp.soil ? `<div>✅ Terre : ${SOILS[soil].name.toLowerCase()}, parfait</div>` : `<div>⚠️ ${soil === 'universel' ? `Le terreau universel lui va, sans plus : elle préfère la ${SOILS[sp.soil ?? 'universel'].name.toLowerCase()}.` : `Mauvaise terre : il lui faut de la ${SOILS[sp.soil ?? 'universel'].name.toLowerCase()}.`}</div>`;
+  if (c.light === sp.light && c.temp === sp.temp && c.hum === sp.hum) {
+    if (soil === undefined) return '<div class="cond ok">✅ Cet emplacement lui convient parfaitement.</div>';
+    if (soil === sp.soil) return '<div class="cond ok">✅ Cet emplacement et cette terre lui conviennent parfaitement.</div>';
+    return `<div class="cond"><div>✅ L'emplacement lui convient parfaitement.</div>${soilLine}</div>`;
+  }
   return `<div class="cond">${
     line('light', 'Lumière', 'Trop de soleil : ses feuilles frisent et jaunissent.', 'Pas assez de lumière : elle s\'étiole.')
   }${line('temp', 'Température', 'Trop chaud ici : elle flétrit.', 'Trop frais ici : elle pousse au ralenti.')
-  }${line('hum', 'Humidité', 'Air trop humide : gare à la moisissure.', 'Air trop sec : le bout des feuilles brunit.')}</div>`;
+  }${line('hum', 'Humidité', 'Air trop humide : gare à la moisissure.', 'Air trop sec : le bout des feuilles brunit.')}${soilLine}</div>`;
 }
 
 export function sparkline(hist: number[], color: string): string {

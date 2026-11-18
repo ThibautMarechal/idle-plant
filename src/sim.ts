@@ -1,9 +1,9 @@
-import { BASKETS, BIOMES, LANDS, LAND_BIOMES, DAY_LENGTH, TANKS, GARDEN_BASE, GARDEN_EXT, GEAR, TREK_TIME, GARDEN, GARDEN_CLIMATE, GARDEN_FIRST, GARDEN_INDEX, PROF_MAX, PROF_MIN, BASE_SLOTS, SEASONS, SEASON_LENGTH, CLIENTS, FAMILIES, FAMILY_IDS, GLAZES, NEWS, POT_SIZES, RARITIES, SLOT_COUNT, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, ZONES } from './data';
-import type { Family, GearId, Rarity, Species, Zone } from './data';
+import { SOILS, BASKETS, BIOMES, LANDS, LAND_BIOMES, DAY_LENGTH, TANKS, GARDEN_BASE, GARDEN_EXT, GEAR, TREK_TIME, GARDEN, GARDEN_CLIMATE, GARDEN_FIRST, GARDEN_INDEX, PROF_MAX, PROF_MIN, BASE_SLOTS, SEASONS, SEASON_LENGTH, CLIENTS, FAMILIES, FAMILY_IDS, GLAZES, NEWS, POT_SIZES, RARITIES, SLOT_COUNT, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, ZONES } from './data';
+import type { Family, GearId, Rarity, SoilId, Species, Zone } from './data';
 
 /** `vr` : variante, 0 normale, 1 panachée, 2 dorée. */
 /** `cut` : 1 = la plante demande une taille, 2 = taillée (elle pousse plus vite). */
-export interface Plant { sp: string; prog: number; water: number; pests: number; q: number; vr: number; cut?: number }
+export interface Plant { sp: string; prog: number; water: number; pests: number; q: number; vr: number; cut?: number; soggy?: number }
 /** Un pot façonné : taille 1..3, émail (index de GLAZES) et motif (index de PATTERNS). */
 /**
  * `prof` : forme modelée au tour (rayons de bas en haut). `paint` : dessin au pinceau, une lettre par case
@@ -11,7 +11,8 @@ export interface Plant { sp: string; prog: number; water: number; pests: number;
  */
 export interface PotDesign { size: number; glaze: number; pat: number; prof?: number[]; paint?: string; pv?: number }
 /** `pd` absent : petit pot de base en terre cuite. */
-export interface Slot { pot: boolean; pd?: PotDesign; plant: Plant | null }
+/** `soil` absent : terreau universel. */
+export interface Slot { pot: boolean; pd?: PotDesign; plant: Plant | null; soil?: SoilId }
 export interface Order { who: string; family: Family; minQ: number; coins: number; clay: number; left: number }
 export interface Harvest { sp: string; q: number; vr: number }
 export interface MarketLine { p: number; hist: number[]; drift: number; driftLeft: number }
@@ -210,6 +211,31 @@ export function zoneClimate(s: State, z: Zone): { light: number; temp: number; h
 }
 
 /** Adéquation 0..1 entre une espèce et un climat. */
+/** Accord entre la plante et la terre de son pot : 1 idéale, 0.8 terreau universel, 0.6 mauvaise terre. */
+export function soilFit(sp: Species, soil: SoilId = 'universel'): number {
+  const want = sp.soil ?? 'universel';
+  if (want === soil) return 1;
+  if (soil === 'universel') return 0.8;
+  if (want === 'universel') return 0.9;
+  return 0.6;
+}
+export function soilOf(slot: Slot): SoilId {
+  return slot.soil ?? 'universel';
+}
+/** Durée (s) pendant laquelle un arrosage tient, selon la soif de la plante. */
+export function waterLast(sp: Species): number {
+  return WATER_DURATION * [1.8, 1, 0.65][(sp.thirst ?? 2) - 1];
+}
+/** Change la terre d'un pot (vide ou planté). Payé en pièces, sauf le terreau universel. */
+export function setSoil(s: State, i: number, soil: SoilId): boolean {
+  const slot = s.slots[i];
+  if (!slot?.pot || soilOf(slot) === soil || s.coins < SOILS[soil].price) return false;
+  s.coins -= SOILS[soil].price;
+  slot.soil = soil;
+  // Un rempotage secoue un peu la plante.
+  if (slot.plant && slot.plant.prog < 1) slot.plant.q = Math.max(10, slot.plant.q - 3);
+  return true;
+}
 export function fitOf(sp: Species, c: { light: number; temp: number; hum: number }): number {
   const miss = Math.abs(sp.light - c.light) + Math.abs(sp.temp - c.temp) + Math.abs(sp.hum - c.hum);
   return [1, 0.8, 0.6, 0.45, 0.35, 0.3, 0.3][miss];
@@ -311,9 +337,9 @@ function stepPlants(s: State, dt: number, rng: Rng, offline: boolean): void {
     const p = slot.plant;
     if (!p) return;
     const sp = SPECIES_BY_ID[p.sp];
-    const fit = fitOf(sp, zoneClimate(s, zoneOfSlot(i)));
+    const fit = fitOf(sp, zoneClimate(s, zoneOfSlot(i))) * soilFit(sp, soilOf(slot));
     // La nuit, la terre sèche deux fois moins vite. Le goutte-à-goutte puise dans la cuve dès qu'un pot a soif.
-    p.water = Math.max(0, p.water - (dt / WATER_DURATION) * (night ? 0.5 : 1));
+    p.water = Math.max(0, p.water - (dt / waterLast(sp)) * (night ? 0.5 : 1));
     if (p.water < 0.2 && dripOn(s, i)) { p.water = 1; s.tank = tankOf(s) - 1; }
     const wet = p.water > 0;
     if (p.prog < 1) {
@@ -610,6 +636,7 @@ export function stowPot(s: State, i: number): boolean {
   s.shelf.push(slot.pd ?? { size: 1, glaze: 0, pat: 0 });
   slot.pot = false;
   delete slot.pd;
+  delete slot.soil;
   return true;
 }
 /** Peint un pot posé (`slot`) ou rangé sur l'étagère (`shelf`). */
@@ -920,8 +947,15 @@ export function plantSeed(s: State, i: number, id: string, rng: Rng = Math.rando
 export function water(s: State, i: number): boolean {
   const p = s.slots[i].plant;
   if (!p || p.water > 0.95) return false;
+  // Une plante qui craint l'eau souffre d'être arrosée alors que sa terre est encore humide.
+  if (drowns(s, i)) { p.q = Math.max(10, p.q - 8); p.soggy = (p.soggy ?? 0) + 1; }
   p.water = 1;
   return true;
+}
+/** Vrai si arroser maintenant ferait trop d'eau (plantes de soif 1, terre encore à moitié humide). */
+export function drowns(s: State, i: number): boolean {
+  const p = s.slots[i].plant;
+  return !!p && p.prog < 1 && SPECIES_BY_ID[p.sp].thirst === 1 && p.water > 0.5;
 }
 
 export const PRUNE_SPEED = 1.2;
@@ -1125,6 +1159,7 @@ export function buyPot(s: State, i: number): boolean {
   s.coins -= price;
   s.slots[i].pot = true;
   delete s.slots[i].pd;
+  delete s.slots[i].soil;
   return true;
 }
 

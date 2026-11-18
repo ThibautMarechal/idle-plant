@@ -2,6 +2,18 @@ export type Family = 'succulentes' | 'aromatiques' | 'fougeres' | 'orchidees' | 
 export type Rarity = 'commun' | 'rare' | 'exotique' | 'legendaire';
 export type Shape = 'rosette' | 'aloe' | 'bush' | 'fern' | 'orchid' | 'paradise' | 'cactus' | 'grass' | 'bigleaf' | 'coin' | 'trap' | 'pitcher' | 'stem' | 'nest' | 'tree' | 'shrub' | 'rose';
 
+export type SoilId = 'universel' | 'sableux' | 'humus' | 'ecorce' | 'acide' | 'franche';
+/** Les terres qu'on met dans un pot. Le terreau universel convient à peu près à tout, sans exceller. */
+export const SOILS: Record<SoilId, { name: string; color: number; price: number; text: string }> = {
+  universel: { name: 'Terreau universel', color: 0x4a3526, price: 0, text: 'Convient à peu près à tout.' },
+  sableux: { name: 'Terre sableuse', color: 0xb08a5a, price: 30, text: 'Drainante et pauvre : cactus, succulentes, herbes du Midi.' },
+  humus: { name: 'Terreau de feuilles', color: 0x2f2418, price: 40, text: 'Riche et fraîche : fougères et plantes tropicales.' },
+  ecorce: { name: 'Écorce de pin', color: 0x8a4f2f, price: 50, text: 'Aérée : orchidées et plantes qui vivent sur les arbres.' },
+  acide: { name: 'Terre de bruyère', color: 0x3a2f2f, price: 50, text: 'Acide : carnivores, camélias, hortensias, myrtilles.' },
+  franche: { name: 'Terre franche', color: 0x6b4a34, price: 35, text: 'Lourde et nourrissante : arbres, arbustes et grandes fleurs.' },
+};
+export const SOIL_IDS = Object.keys(SOILS) as SoilId[];
+
 export interface Species {
   id: string;
   name: string;
@@ -29,6 +41,10 @@ export interface Species {
   size?: number;
   /** Plante nocturne : elle pousse plus vite la nuit que le jour. */
   night?: boolean;
+  /** Terre qu'elle préfère (par défaut, selon sa famille). */
+  soil?: SoilId;
+  /** Soif : 1 arrosage rare (elle craint l'excès d'eau), 2 normal, 3 fréquent (par défaut, selon l'humidité). */
+  thirst?: number;
   /** Plante d'un autre continent : on ne la trouve qu'en expédition, dans ce milieu. */
   home?: string;
 }
@@ -352,6 +368,24 @@ export const SPECIES: Species[] = [
 ];
 const MEDIUM = ['monstera', 'strelitzia', 'tournesol', 'hibiscus', 'opuntia'];
 for (const sp of SPECIES) if (MEDIUM.includes(sp.id)) sp.size = 2;
+/** Terre préférée par famille, puis les exceptions. */
+const FAMILY_SOIL: Record<Family, SoilId> = { succulentes: 'sableux', aromatiques: 'sableux', fougeres: 'humus', orchidees: 'ecorce', fleurs: 'universel', tropicales: 'humus', carnivores: 'acide', arbustes: 'franche' };
+const SOIL_OF: Record<string, SoilId> = {
+  basilic: 'universel', menthe: 'humus', ciboulette: 'universel', paphiopedilum: 'humus', platycerium: 'ecorce', asplenium: 'ecorce',
+  hortensia: 'acide', camelia: 'acide', myrtille: 'acide', rhodo: 'acide', labrador: 'acide', bouleau: 'acide', sapin: 'acide', erable: 'acide',
+  lotus: 'franche', jacinthe: 'franche', rose: 'franche', pivoine: 'franche', dahlia: 'franche', tournesol: 'franche', protea: 'sableux',
+  edelweiss: 'sableux', gentiane: 'sableux', joubarbe: 'sableux', saxifrage: 'sableux', pavot: 'sableux', linaigrette: 'acide', meconopsis: 'humus',
+  epiphyllum: 'ecorce', vanille: 'ecorce', alocasia: 'humus', titan: 'humus', muguet: 'humus', bonsai: 'sableux', olivier: 'sableux', citronnier: 'franche',
+};
+/** Les plantes de soif 1 craignent l'excès d'eau ; celles de soif 3 boivent souvent. */
+const THIRST_OF: Record<string, number> = { menthe: 3, basilic: 3, lotus: 3, jacinthe: 3, hortensia: 3, nepenthes: 3, dionee: 3, sarracenia: 3, olivier: 1, lavande: 1, romarin: 1, thym: 1, bonsai: 2 };
+/** La croissance est plus longue qu'au début du jeu : une plante se cultive sur plusieurs journées. */
+export const GROW_SCALE = 1.8;
+for (const sp of SPECIES) {
+  sp.soil ??= SOIL_OF[sp.id] ?? FAMILY_SOIL[sp.family];
+  sp.thirst ??= THIRST_OF[sp.id] ?? (sp.hum === 1 ? 1 : sp.hum === 3 ? 3 : 2);
+  sp.grow = Math.round(sp.grow * GROW_SCALE);
+}
 export const SPECIES_BY_ID: Record<string, Species> = Object.fromEntries(SPECIES.map((s) => [s.id, s]));
 
 export interface Zone { id: string; name: string; icon: string; light: number; temp: number; hum: number; desc: string }

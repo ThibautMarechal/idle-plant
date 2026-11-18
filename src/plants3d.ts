@@ -704,6 +704,7 @@ export function buildPot(color = 0xc9714a, rimColor = 0xd9825a, pat = 0): THREE.
   const soil = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.03, 10), mat(0x4a3526));
   soil.position.y = 0.47;
   soil.receiveShadow = true;
+  soil.userData.soil = true;
   g.add(body, rim, soil);
   if (pat === 1) {
     for (const [y, r] of [[0.14, 0.305], [0.27, 0.338]]) {

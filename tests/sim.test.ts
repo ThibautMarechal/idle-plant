@@ -440,4 +440,24 @@ describe('jour, nuit et arrosage automatique', () => {
     s.coins = 10;
     expect(sim.buyTrekGear(s, 'lantern')).toBe(false);
   });
+
+  it('terre du pot et soif des plantes', () => {
+    const s = sim.newState(0);
+    const aloe = SPECIES_BY_ID['aloe'];
+    expect(aloe.soil).toBe('sableux');
+    expect(aloe.thirst).toBe(1);
+    expect(sim.soilFit(aloe, 'sableux')).toBe(1);
+    expect(sim.soilFit(aloe, 'universel')).toBeLessThan(1);
+    expect(sim.soilFit(aloe, 'humus')).toBeLessThan(sim.soilFit(aloe, 'universel'));
+    s.coins = 100;
+    const i = s.slots.findIndex((sl) => sl.pot);
+    expect(sim.setSoil(s, i, 'sableux')).toBe(true);
+    expect(s.coins).toBe(70);
+    expect(sim.setSoil(s, i, 'sableux')).toBe(false);
+    s.slots[i].plant = { sp: 'aloe', prog: 0.2, water: 0.8, pests: 0, q: 50, vr: 0 };
+    expect(sim.drowns(s, i)).toBe(true);
+    sim.water(s, i);
+    expect(s.slots[i].plant!.q).toBe(42);
+    expect(sim.waterLast(aloe)).toBeGreaterThan(sim.waterLast(SPECIES_BY_ID['menthe']));
+  });
 });

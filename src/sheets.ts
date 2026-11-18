@@ -1,5 +1,5 @@
 /** Le contenu de chaque panneau, un par fonction. `ui` donne l'état et le panneau ouvert. */
-import { BASKETS, LANDS, LAND_BIOMES, DAY_LENGTH, GARDEN_EXT, TANKS, GEAR, GEAR_IDS, BIOMES, GARDEN, GARDEN_FIRST, GARDEN_INDEX, SEASONS, FAMILIES, FAMILY_IDS, GLAZES, LEVEL_WORDS, POT_SIZES, RARITIES, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, STAGES, ZONES } from './data';
+import { SOILS, SOIL_IDS, BASKETS, LANDS, LAND_BIOMES, DAY_LENGTH, GARDEN_EXT, TANKS, GEAR, GEAR_IDS, BIOMES, GARDEN, GARDEN_FIRST, GARDEN_INDEX, SEASONS, FAMILIES, FAMILY_IDS, GLAZES, LEVEL_WORDS, POT_SIZES, RARITIES, SLOTS_PER_ZONE, SPECIES, SPECIES_BY_ID, STAGES, ZONES } from './data';
 import type { Species } from './data';
 import * as sim from './sim';
 
@@ -26,6 +26,7 @@ export function sheetHtml(ui: UI): string {
     case 'zone': return zoneHtml(ui);
     case 'gext': return gardenExtHtml(ui);
     case 'water': return waterHtml(ui);
+    case 'soil': return soilHtml(ui);
     case 'vitrine': return vitrineHtml(ui);
     case 'atelier': return atelierHtml(ui);
     case 'trophies': return trophiesHtml(ui);
@@ -168,15 +169,35 @@ export function seedHtml(ui: UI): string {
   const c = sim.zoneClimate(s, sim.zoneOfSlot(ui.arg));
   const ids = Object.keys(s.seeds).sort((a, b) => sim.fitOf(SPECIES_BY_ID[b], c) - sim.fitOf(SPECIES_BY_ID[a], c));
   const size = sim.potSize(s.slots[ui.arg]);
+  const potSoil = sim.soilOf(s.slots[ui.arg]);
   const list = ids.map((id) => {
     const sp = SPECIES_BY_ID[id];
     const small = sim.sizeOf(sp) > size;
-    return `<button class="card" data-act="plant" data-arg="${id}" ${small ? 'disabled style="opacity:.55"' : ''}><div class="ico">${EMOJI[id]}</div><div class="mid"><div class="nm">${esc(sp.name)} ${rarTag(sp)}</div>${sim.inSeason(s, sp) ? `<div class="ds">${SEASONS[sim.seasonOf(s).index].icon} De saison : pousse plus vite</div>` : ''}${small ? `<div class="ds">🏺 Il lui faut un ${POT_SIZES[sim.sizeOf(sp) - 1].name.toLowerCase()} : façonne-le à l'atelier.</div>` : needsChips(sp, c)}</div><div class="end">×${s.seeds[id]}</div></button>`;
+    return `<button class="card" data-act="plant" data-arg="${id}" ${small ? 'disabled style="opacity:.55"' : ''}><div class="ico">${EMOJI[id]}</div><div class="mid"><div class="nm">${esc(sp.name)} ${rarTag(sp)}</div>${sim.inSeason(s, sp) ? `<div class="ds">${SEASONS[sim.seasonOf(s).index].icon} De saison : pousse plus vite</div>` : ''}${small ? `<div class="ds">🏺 Il lui faut un ${POT_SIZES[sim.sizeOf(sp) - 1].name.toLowerCase()} : façonne-le à l'atelier.</div>` : needsChips(sp, c) + (sp.soil === potSoil ? '' : `<div class="ds">🟫 Préfère la ${SOILS[sp.soil ?? 'universel'].name.toLowerCase()}</div>`)}</div><div class="end">×${s.seeds[id]}</div></button>`;
   }).join('');
   const empty = `<p class="sub">Tu n'as plus de graines.</p>${s.packets > 0
     ? '<button class="btn gold wide" data-act="free">🎁 Ouvrir un sachet gratuit</button>'
     : `<button class="btn primary wide" data-act="buypacket" ${s.coins >= sim.PRICES.packet ? '' : 'disabled'}>Sachet mystère · ${sim.PRICES.packet} 🪙</button>`}`;
-  return head(ui, 'Que semer ici ?') + `<div class="sh-body">${zoneLine(ui, ui.arg)}${ids.length ? list : empty}<div class="kv"><span>Ce pot</span><b>${potLabel(s.slots[ui.arg].pd)}</b></div><div class="tiles">${tile('paintslot', '🎨', 'Peindre')}${tile('admire', '🔍', 'Admirer')}${tile('stow', '📥', 'Ranger')}</div></div>`;
+  return head(ui, 'Que semer ici ?') + `<div class="sh-body">${zoneLine(ui, ui.arg)}${ids.length ? list : empty}<div class="kv"><span>Ce pot</span><b>${potLabel(s.slots[ui.arg].pd)}</b></div><div class="kv"><span>Sa terre</span><b>${SOILS[potSoil].name}</b></div><div class="tiles">${tile('soil', '🟫', 'Terre')}${tile('paintslot', '🎨', 'Peindre')}${tile('admire', '🔍', 'Admirer')}${tile('stow', '📥', 'Ranger')}</div></div>`;
+}
+
+const THIRST = ['', '💧 boit peu', '💧 boit normalement', '💧 boit beaucoup'];
+const THIRST_LONG = ['', 'Rare : laisse sécher la terre, l\'excès d\'eau l\'abîme', 'Régulier', 'Fréquent : sa terre sèche vite'];
+
+/** Choisir la terre d'un pot : chacune a ses plantes de prédilection. */
+export function soilHtml(ui: UI): string {
+  const s = ui.s, slot = s.slots[ui.arg];
+  if (!slot?.pot) return head(ui, 'Terre') + '<div class="sh-body"></div>';
+  const cur = sim.soilOf(slot), p = slot.plant, sp = p ? SPECIES_BY_ID[p.sp] : null;
+  const rows = SOIL_IDS.map((k) => {
+    const d = SOILS[k], here = k === cur, can = s.coins >= d.price;
+    const best = sp && sp.soil === k ? ' <span class="chip ok">Idéale</span>' : '';
+    const end = here ? '<span class="chip ok">Dans ce pot</span>' : `<button class="btn ${can ? 'primary' : ''} small" data-act="setsoil" data-arg="${k}" ${can ? '' : 'disabled'}>${d.price ? `${fmt(d.price)} 🪙` : 'Gratuit'}</button>`;
+    return `<div class="card"><div class="ico"><i class="soilchip" style="background:#${d.color.toString(16).padStart(6, '0')}"></i></div><div class="mid"><div class="nm">${d.name}${best}</div><div class="ds">${d.text}</div></div>${end}</div>`;
+  }).join('');
+  return head(ui, sp ? `🟫 Rempoter ${esc(sp.name)}` : '🟫 Terre du pot') + `<div class="sh-body">
+    <p class="sub">${sp ? `${esc(sp.name)} pousse le mieux dans la ${SOILS[sp.soil ?? 'universel'].name.toLowerCase()}. Rempoter la secoue un peu.` : 'Chaque plante a sa terre préférée : dans la bonne, elle pousse plus vite et plus belle.'}</p>
+    ${rows}</div>`;
 }
 
 export function plantHtml(ui: UI): string {
@@ -185,7 +206,8 @@ export function plantHtml(ui: UI): string {
   if (!p) return head(ui, 'Pot vide') + '<div class="sh-body"></div>';
   const sp = SPECIES_BY_ID[p.sp];
   const c = sim.zoneClimate(s, sim.zoneOfSlot(ui.arg));
-  const fit = sim.fitOf(sp, c);
+  const slot0 = s.slots[ui.arg], soil = sim.soilOf(slot0);
+  const fit = sim.fitOf(sp, c) * sim.soilFit(sp, soil);
   const left = ((1 - p.prog) * sp.grow) / (fit * (p.water > 0 ? 1 : 0.25) * (p.pests > 0 ? 0.5 : 1));
   const eta = left < 60 ? `${Math.ceil(left)} s` : `${Math.ceil(left / 60)} min`;
   const vr = sim.stageOf(p.prog) >= 2 ? p.vr : 0;
@@ -193,9 +215,9 @@ export function plantHtml(ui: UI): string {
   return head(ui, `${EMOJI[sp.id]} ${esc(vname(sp, vr))}`) + `<div class="sh-body">
     <div class="kv"><span>${STAGES[sim.stageOf(p.prog)]}</span><b>${p.prog >= 1 ? 'Prête' : 'encore ' + eta}</b></div>
     <div class="prog"><i style="width:${Math.round(p.prog * 100)}%"></i></div>
-    <div class="facts"><span class="chip">⭐ ${sim.qualityWord(p.q)}</span><span class="chip ${p.water > 0 ? '' : 'ko'}">💧 ${sim.dripOn(s, ui.arg) ? 'auto' : p.water > 0 ? Math.round(p.water * 100) + ' %' : 'à sec'}</span>${p.pests > 0 ? '<span class="chip ko">🐛 chenilles</span>' : ''}${sim.harmony(slot) ? '<span class="chip ok">💚 pot accordé</span>' : ''}${sim.inSeason(s, sp) ? '<span class="chip ok">de saison</span>' : ''}</div>
-    ${conditions(sp, c)}
-    <div class="tiles">${sim.dripOn(s, ui.arg) ? '' : tile('water', '💧', 'Arroser', { off: p.water > 0.95, hot: p.water < 0.5 })}${tile('fert', '🧪', 'Engrais', { off: !(s.fert > 0 && p.prog < 1), note: '×' + s.fert })}${p.cut === 1 && p.prog < 1 ? tile('prune', '✂️', 'Tailler', { hot: true }) : ''}${tile('paintslot', '🎨', 'Peindre')}${tile('admire', '🔍', 'Admirer')}${tile('fiche', '📖', 'Fiche', { arg: sp.id })}</div></div>`;
+    <div class="facts"><span class="chip">⭐ ${sim.qualityWord(p.q)}</span><span class="chip ${p.water > 0 ? '' : 'ko'}">💧 ${sim.dripOn(s, ui.arg) ? 'auto' : p.water > 0 ? Math.round(p.water * 100) + ' %' : 'à sec'}</span>${p.pests > 0 ? '<span class="chip ko">🐛 chenilles</span>' : ''}${sim.harmony(slot) ? '<span class="chip ok">💚 pot accordé</span>' : ''}${sim.inSeason(s, sp) ? '<span class="chip ok">de saison</span>' : ''}<span class="chip">${THIRST[sp.thirst ?? 2]}</span></div>
+    ${conditions(sp, c, soil)}
+    <div class="tiles">${sim.dripOn(s, ui.arg) ? '' : tile('water', '💧', 'Arroser', { off: p.water > 0.95, hot: p.water < 0.5 })}${tile('fert', '🧪', 'Engrais', { off: !(s.fert > 0 && p.prog < 1), note: '×' + s.fert })}${p.cut === 1 && p.prog < 1 ? tile('prune', '✂️', 'Tailler', { hot: true }) : ''}${p.prog < 1 ? tile('soil', '🟫', 'Rempoter', { hot: soil !== sp.soil }) : ''}${tile('paintslot', '🎨', 'Peindre')}${tile('admire', '🔍', 'Admirer')}${tile('fiche', '📖', 'Fiche', { arg: sp.id })}</div></div>`;
 }
 
 export function marketHint(ui: UI, p: number): string {
@@ -421,6 +443,8 @@ export function ficheHtml(ui: UI, sp: Species): string {
     <p class="sub">Idéal : ${zones.join(', ') || 'aucun coin parfait pour l\'instant, cherche le moins mauvais ou équipe la serre'}.</p>
     ${kv('Saison favorite', season.join(' et ') || 'Aucune')}
     ${kv('Rythme', sp.night ? 'Pousse surtout la nuit' : 'Pousse surtout le jour')}
+    ${kv('Terre', SOILS[sp.soil ?? 'universel'].name)}
+    ${kv('Arrosage', THIRST_LONG[sp.thirst ?? 2])}
     ${kv('Pot nécessaire', POT_SIZES[sim.sizeOf(sp) - 1].name + (sim.sizeOf(sp) > 1 ? ' ou plus grand' : ''))}
     ${kv('Émail préféré', GLAZES[FAMILIES[sp.family].glaze].name)}
     <h3>Où la trouver</h3>
