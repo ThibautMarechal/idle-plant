@@ -556,7 +556,7 @@ const tier = (id: string, icon: string, name: string, text: (n: number) => strin
 export const TROPHIES: Trophy[] = [
   ...tier('bloom', '🌼', 'Botaniste', (n) => `Fais fleurir ${n} espèces différentes`, [[10, 80], [25, 300], [SPECIES.length, 1500]], (s) => collection(s).bloomed),
   ...tier('stars', '⭐', 'Perfectionniste', (n) => `Cumule ${n} étoiles`, [[30, 120], [75, 400], [SPECIES.length * 3, 2000]], (s) => collection(s).stars),
-  ...tier('vars', '✨', 'Chasseur de variantes', (n) => `Obtiens ${n} variantes panachées ou dorées`, [[3, 100], [12, 400], [40, 1500]], (s) => collection(s).variants),
+  ...tier('vars', '✨', 'Chasseur de variantes', (n) => `Obtiens ${n} variantes rares`, [[3, 100], [12, 400], [40, 1500]], (s) => collection(s).variants),
   ...tier('sold', '🧺', 'Pépiniériste', (n) => `Vends ${n} plantes`, [[10, 40], [60, 200], [250, 800]], (s) => s.stats.sold),
   ...tier('rich', '🪙', 'Bonne affaire', (n) => `Gagne ${n.toLocaleString('fr-FR')} pièces au total`, [[1000, 80], [10000, 400], [100000, 2000]], (s) => s.stats.earned),
   ...tier('pots', '🏺', 'Potier', (n) => `Façonne ${n} pots`, [[3, 60], [12, 250], [40, 900]], (s) => s.stats.crafted),
