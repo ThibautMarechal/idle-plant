@@ -99,7 +99,7 @@ export class Cellar {
   private mist: { m: THREE.Mesh; life: number; v: THREE.Vector3 }[] = [];
   private raf = 0;
   private last = 0;
-  private down: { x: number; y: number; t: number; bed: number } | null = null;
+  private down: { x: number; y: number; t: number; bed: number; cut: Set<number> } | null = null;
   private sky: THREE.MeshBasicMaterial | null = null;
   private bulb: THREE.PointLight | null = null;
   private moon: THREE.PointLight | null = null;
@@ -304,10 +304,10 @@ export class Cellar {
     let best = -1, bestD = Infinity;
     for (let i = 0; i < SPOTS.length; i++) {
       const [x, y, z] = SPOTS[i];
-      const c = this.screen(new THREE.Vector3(x, y + 0.2, z)), e = this.screen(new THREE.Vector3(x + 0.5, y + 0.2, z));
+      const c = this.screen(new THREE.Vector3(x, y + 0.3, z)), e = this.screen(new THREE.Vector3(x + 0.5, y + 0.3, z));
       const r = Math.abs(e.x - c.x);
       const d = Math.hypot((p.x - c.x) / r, (p.y - c.y) / (r * 0.8));
-      if (d < 1.05 && d < bestD) { bestD = d; best = i; }
+      if (d < 1.2 && d < bestD) { bestD = d; best = i; }
     }
     return best < n ? best : best >= 0 ? -2 - best : -1;
   }
@@ -316,7 +316,7 @@ export class Cellar {
     if (!this.active) return;
     this.canvas.setPointerCapture(e.pointerId);
     const p = this.at(e);
-    this.down = { ...p, t: performance.now(), bed: this.bedAt(p) };
+    this.down = { ...p, t: performance.now(), bed: this.bedAt(p), cut: new Set() };
     this.held = this.down.bed;
     this.mode = '';
   }
@@ -325,19 +325,13 @@ export class Cellar {
     const d = this.down;
     if (!d || !this.active) return;
     const p = this.at(e);
-    const s = this.state(), b = d.bed >= 0 ? s.cave?.beds[d.bed] : null;
-    // Un geste qui balaie un bac mûr, c'est la cueillette, d'un coup de lame.
-    if (b && b.prog >= 1 && this.mode !== 'cut' && Math.abs(p.x - d.x) > 42) {
-      this.mode = 'cut';
-      this.harvest(d.bed);
-    }
-    const over = this.bedAt(p);
-    if (this.mode === 'cut' && over >= 0 && over !== d.bed) {
-      // On peut enchaîner plusieurs bacs d'un seul geste.
-      const ob = s.cave?.beds[over];
-      if (ob && ob.prog >= 1 && !sim.mushRotten(ob)) { d.bed = over; this.harvest(over); }
-    }
-    if (Math.hypot(p.x - d.x, p.y - d.y) > 14 && this.mode === '') this.mode = 'cut';
+    const s = this.state(), beds = s.cave?.beds ?? [];
+    const far = Math.hypot(p.x - d.x, p.y - d.y);
+    if (far > 14 && this.mode === '') this.mode = 'cut';
+    // Un geste qui balaie un bac mûr, c'est la cueillette ; on peut enchaîner plusieurs bacs d'un seul geste.
+    if (this.mode === 'mist' || far < 24) return;
+    const ripe = (i: number) => i >= 0 && !d.cut.has(i) && !!beds[i] && beds[i]!.prog >= 1 && !sim.mushRotten(beds[i]!);
+    for (const i of [d.bed, this.bedAt(p)]) if (ripe(i)) { d.cut.add(i); this.harvest(i); }
   }
 
   private onUp(_e: PointerEvent): void {
@@ -391,7 +385,7 @@ export class Cellar {
     const light = sim.daylight(s);
     // Garder le doigt posé sur un bac le brumise.
     const d = this.down;
-    if (d && d.bed >= 0 && c.beds[d.bed] && this.mode === '' && now - d.t > 220) this.mode = 'mist';
+    if (d && d.bed >= 0 && c.beds[d.bed] && c.beds[d.bed]!.prog < 1 && this.mode === '' && now - d.t > 220) this.mode = 'mist';
     if (this.mode === 'mist' && d && d.bed >= 0 && c.beds[d.bed]) {
       sim.mistBed(s, d.bed, dt * 0.45);
       if (Math.random() < dt * 40) this.puff(d.bed);
